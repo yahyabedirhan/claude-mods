@@ -3,7 +3,15 @@
 
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On, ToolCallArgs, ToolCallInput, ToolSpec, UiPane } from 'claude-code'
+import type {
+  ModelCompleteRequest,
+  On,
+  SessionMessage,
+  ToolCallArgs,
+  ToolCallInput,
+  ToolSpec,
+  UiPane,
+} from 'claude-code'
 
 export const PLUGIN = 'session-status'
 export const SESSION_ID = 'session-a'
@@ -34,6 +42,26 @@ export type World = {
   switchSession: (sessionId: string) => void
   /** The argv of each command the mod ran through `$.process.run`, in order. None runs for real. */
   runs: string[][]
+  /** The main conversation `$.session.messages()` returns; a test sets it. */
+  messages: SessionMessage[]
+  /** Every `$.model.complete` request the mod made, oldest first. */
+  modelCalls: ModelCompleteRequest[]
+  /**
+   * Makes the fake model reply to each request with the text `reply` gives,
+   * or with none when it gives undefined. The default reply is no findings.
+   */
+  model: (reply: ModelReply) => void
+}
+
+/** The fake model's reply to a request: its text, or undefined for none. */
+export type ModelReply = (request: ModelCompleteRequest) => string | undefined | Promise<string | undefined>
+
+/** What the fake model's every call cost. */
+export const MODEL_USAGE = {
+  input_tokens: 3000,
+  output_tokens: 100,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0,
 }
 
 /** The engine's own system prompt beneath the mod: one shared section. */
@@ -63,6 +91,9 @@ export function world(
   const tools = new Map<string, ToolSpec>()
   const answers = new Map<string, (e: ToolCallInput) => unknown>()
   const runs: string[][] = []
+  const messages: SessionMessage[] = []
+  const modelCalls: ModelCompleteRequest[] = []
+  let reply: ModelReply = () => '{"findings":[]}'
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
@@ -117,6 +148,19 @@ export function world(
 
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
+  on('session.messages', () => ({ value: messages }) as never)
+  on('model.complete', async (_$, e) => {
+    modelCalls.push(e)
+    const text = await reply(e)
+
+    return {
+      value:
+        text === undefined
+          ? { isAnswered: false, reason: 'empty-reply', usage: MODEL_USAGE }
+          : { isAnswered: true, text, usage: MODEL_USAGE },
+    } as never
+  })
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
 
   return {
     clock,
@@ -131,7 +175,27 @@ export function world(
     switchSession: id => {
       sessionId = id
     },
+    messages,
+    modelCalls,
+    model: next => {
+      reply = next
+    },
   }
+}
+
+/** Ends one main-loop turn as the query loop does; resolves to its result. */
+export function endTurn($: Engine, answer = 'Done.') {
+  return $.turn.complete({ answer, durationMs: 1000, isAborted: false, turnId: 'turn', reason: 'answer' })
+}
+
+/** A subagent finishing, as the classic SubagentStop event says it. */
+export function subagentStop($: Engine, agentId: string) {
+  return $.classic.SubagentStop({
+    agent_id: agentId,
+    agent_type: 'general-purpose',
+    agent_transcript_path: '',
+    stop_hook_active: false,
+  })
 }
 
 /** Starts the session as the REPL does. */

@@ -128,6 +128,7 @@ test('/clear starts a new status that keeps only the open decisions', async ($, 
     links: [],
     subagents: { running: [], finished: [] },
     endListPostedAt: null,
+    observer: { checks: 0, seen: [] },
     updatedAt: START,
   })
   for (const surface of SURFACES) {

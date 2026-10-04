@@ -8,6 +8,7 @@ const LIMIT = 2
 
 /**
  * Surprises: the newest two, each with what it changed, then "+N more".
+ * The observer agent's findings carry an "observer" tag.
  * Drawn only when there is one.
  */
 export const surprisesSection: Section = ({ ui, status }) => {
@@ -24,7 +25,8 @@ export const surprisesSection: Section = ({ ui, status }) => {
       {shown.map(surprise => (
         <Box key={`surprise-${surprise.id}`} flexDirection="column">
           <Text>
-            {surprise.id} · {surprise.occurred}
+            {surprise.id} · {surprise.source === 'observer' ? <Text color="cyan">[observer] </Text> : null}
+            {surprise.occurred}
           </Text>
           <Box paddingLeft={2}>
             <Text dimColor>Changed: {surprise.changed}</Text>

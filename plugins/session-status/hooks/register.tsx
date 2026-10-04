@@ -9,6 +9,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
 import { INSTRUCTIONS } from './instructions'
+import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
+import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
 import { blockedPing, endListPing, withdrawPing } from './pings'
 import {
@@ -46,6 +48,9 @@ const statusAtom = atom({ plugin: 'session-status', key: 'status' } as const, nu
 
 /** Moved by the age timer; the pane reads it only to draw again when it moves. */
 const tickAtom = atom({ plugin: 'session-status', key: 'tick' } as const, 0)
+
+/** Main-loop turns that ended with the pane open since the observer's last check. */
+const observerTurnsAtom = atom({ plugin: 'session-status', key: 'observerTurns' } as const, 0)
 
 // The status store: the status in `$.state`, every change saved to
 // `$.store` with the session id as the key.
@@ -137,6 +142,49 @@ async function togglePane($: EngineInterface): Promise<'opened' | 'closed'> {
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 
   return 'opened'
+}
+
+// The observer agent: a small model's check on the recent work, shown as
+// surprises tagged `observer`. It adds nothing to the main agent's context.
+
+/** True while a check runs, so a second trigger does not start another. */
+let isObserving = false
+
+/**
+ * Counts a main-loop turn toward the observer's interval and runs one check
+ * when it is due: the pane open, no check running, under the cap, and the
+ * turn interval reached or a subagent finished. The hooks start it without
+ * waiting, so a check never holds up the session.
+ */
+async function observe($: EngineInterface, trigger: Trigger): Promise<void> {
+  if (!(await isPaneOpen($))) {
+    return
+  }
+  const turns = trigger === 'turn' ? await update($, observerTurnsAtom, n => n + 1) : 0
+  const status = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
+  // No await between the test and the set: a second trigger sees the flag.
+  if (isObserving || !isCheckDue(status, turns, trigger)) {
+    return
+  }
+  isObserving = true
+  try {
+    await update($, observerTurnsAtom, () => 0)
+    const request = observerRequest(status, await $.session.messages())
+    // A refused request (a blocked model) counts as a check that found nothing.
+    const reply = await $.model.complete(request).catch(() => null)
+    const findings = reply?.isAnswered === true ? parseFindings(reply.text) : []
+    const now = await $.clock.now()
+    await changeStatus($, current => recordCheck(current, findings, now))
+  } finally {
+    isObserving = false
+  }
+}
+
+/** Starts `observe` without waiting for it; a failure goes to the debug log. */
+function startObserver($: EngineInterface, trigger: Trigger): void {
+  observe($, trigger).catch((error: unknown) => {
+    $.ui.log(`session-status observer: ${String(error)}`, { to: 'debug' })
+  })
 }
 
 /** This module load's age timer; a reload starts the module, and this, over. */
@@ -296,6 +344,16 @@ export const register: Register = on => {
 
   on('classic.SubagentStop', async ($, e, next) => {
     await changeStatus($, status => subagentStopped(status, e.agent_id))
+    startObserver($, 'subagent')
+
+    return next(e)
+  })
+
+  // Only the main loop's turns count toward the observer's interval.
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      startObserver($, 'turn')
+    }
 
     return next(e)
   })

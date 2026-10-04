@@ -17,6 +17,7 @@ test('the status store saves the status to $.store with the session id as the ke
     links: [],
     subagents: { running: [], finished: [] },
     endListPostedAt: null,
+    observer: { checks: 0, seen: [] },
     updatedAt: START,
   })
 })

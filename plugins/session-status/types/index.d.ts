@@ -54,6 +54,8 @@ export type Surprise = {
   recordedAt: number
   /** The subagent's id when a subagent recorded it; absent on the main loop. */
   agentId?: string
+  /** `observer` when the observer agent found it; absent when the agent recorded it. */
+  source?: 'observer'
   /** When the user dismissed it; absent while the surprise is open. */
   resolvedAt?: number
 }
@@ -107,6 +109,17 @@ export type Subagents = {
   finished: string[]
 }
 
+/**
+ * The observer agent's record for the session: how many checks it made, and
+ * a key for every finding it showed, so it never shows one twice.
+ */
+export type ObserverRecord = {
+  /** Checks made this session; the observer stops at its cap. */
+  checks: number
+  /** The normalized key of every finding shown, oldest first. */
+  seen: string[]
+}
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
@@ -128,6 +141,8 @@ export type SessionStatus = {
    * decisions; null before it posts one.
    */
   endListPostedAt: number | null
+  /** The observer agent's checks and the findings it showed. */
+  observer: ObserverRecord
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }
@@ -139,6 +154,8 @@ declare module 'claude-code' {
       status: SessionStatus | null
       /** The age timer's last reading: the pane reads it only to draw again. */
       tick: number
+      /** Main-loop turns that ended with the pane open since the observer's last check. */
+      observerTurns: number
     }
   }
 }

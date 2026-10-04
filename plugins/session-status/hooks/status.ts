@@ -104,6 +104,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     links: [],
     subagents: { running: [], finished: [] },
     endListPostedAt: null,
+    observer: { checks: 0, seen: [] },
     updatedAt: null,
   }
 }
