@@ -7,7 +7,7 @@ import { doingNowSection } from './doing-now'
 import { effortSection } from './effort'
 import { historySection } from './history'
 import { lastUpdateSection } from './last-update'
-import { linksSection } from './links'
+import { placesSection } from './places'
 import { reviewLaterSection } from './review-later'
 import { sessionSection } from './session'
 import type { Section } from './section'
@@ -19,7 +19,7 @@ export const SECTIONS: readonly Section[] = [
   reviewLaterSection,
   sessionSection,
   effortSection,
-  linksSection,
+  placesSection,
   surprisesSection,
   countersSection,
   historySection,

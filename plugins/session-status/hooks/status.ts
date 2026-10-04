@@ -109,6 +109,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     tickets: null,
     ticketReports: [],
     place: null,
+    places: [],
     updatedAt: null,
   }
 }
@@ -257,11 +258,14 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, reported tickets, and closed items of each kind. The oldest
- * drop first (reported tickets by their last change); an open item never
- * drops.
+ * ids, links, reported tickets, the files of each place, and closed items of
+ * each kind. The oldest drop first (reported tickets and files by their last
+ * change); an open item never drops.
  */
 export const CAP = 200
+
+/** How many places a status keeps; the one changed longest ago drops first. */
+export const PLACES_KEPT = 50
 
 /**
  * The status within its bounds (see CAP). The newest closed item of each
@@ -278,6 +282,8 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     status.subagents.finished.length > CAP ||
     status.links.length > CAP ||
     status.ticketReports.length > CAP ||
+    status.places.length > PLACES_KEPT ||
+    status.places.some(place => place.files.length > CAP) ||
     closedCount.decision > CAP ||
     closedCount.surprise > CAP
   if (!isOver) {
@@ -298,16 +304,17 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     items,
     links: status.links.slice(-CAP),
     ticketReports: newestByChange(status.ticketReports, CAP),
+    places: newestByChange(status.places, PLACES_KEPT).map(place => ({ ...place, files: place.files.slice(-CAP) })),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
   }
 }
 
 /**
- * The `limit` reports that changed last, in their order. A ticket that
+ * The `limit` entries that changed last, in their order. A ticket that
  * landed long ago drops before one started since, so past the cap the
  * Session count holds the run's recent tickets.
  */
-function newestByChange(reports: readonly TicketReport[], limit: number): TicketReport[] {
+function newestByChange<T extends { at: number }>(reports: readonly T[], limit: number): T[] {
   if (reports.length <= limit) {
     return [...reports]
   }

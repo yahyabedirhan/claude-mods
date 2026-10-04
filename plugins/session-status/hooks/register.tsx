@@ -23,7 +23,9 @@ import { isCheckDue, observerRequest, parseFindings, recordCheck } from './obser
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
 import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
-import { changesBranch, githubRepo, withPlace } from './place'
+import { changesBranch, githubRepo, repoOf, withPlace } from './place'
+import { commandTargets, editedFile, folderOf, withChange } from './places'
+import type { ChangedRepo } from './places'
 import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
@@ -522,6 +524,9 @@ export const register: Register = on => {
     const change = toolResultChange(e, answer, await $.clock.now())
     await changeStatus($, change ?? (status => status))
     await countTicketsIfDue($, e)
+    if (answer.deny === undefined && answer.isError !== true) {
+      countPlaces($, e)
+    }
     if (changesBranch(e)) {
       readPlace($)
     }
@@ -781,6 +786,41 @@ function readPlace($: EngineInterface): void {
     }
     const [branch, repo] = await Promise.all([readBranch($), githubRepoOf($, root)])
     await changeStatus($, status => withPlace(status, { root, branch, repo }), { save: false })
+  })
+}
+
+/** The repository that holds `dir`, with its GitHub repository; null outside one. */
+async function changedRepoAt($: EngineInterface, dir: string): Promise<ChangedRepo | null> {
+  const root = await repoRootOf($, dir)
+
+  return root === null ? null : { root, repo: await githubRepoOf($, root) }
+}
+
+/**
+ * Counts what a finished tool call changed in its repository, in the
+ * background: the file an edit or a write touched, and each step of a
+ * shell command that changes something (see CHANGING_COMMANDS).
+ */
+function countPlaces($: EngineInterface, call: { tool: string }): void {
+  const file = editedFile(call)
+  const command = call.tool === 'Bash' ? (call as unknown as { command?: unknown }).command : undefined
+  if (file === null && typeof command !== 'string') {
+    return
+  }
+  inBackground($, 'place count', async () => {
+    const at = await $.clock.now()
+    const where = file === null ? null : await changedRepoAt($, folderOf(file))
+    if (file !== null && where !== null) {
+      await changeStatus($, status => withChange(status, where, { file }, at))
+    }
+    const targets = typeof command === 'string' ? commandTargets(command, await $.session.cwd()) : []
+    for (const target of targets) {
+      const repo: ChangedRepo | null =
+        'slug' in target ? { root: null, repo: repoOf(target.slug) } : await changedRepoAt($, target.dir)
+      if (repo !== null) {
+        await changeStatus($, status => withChange(status, repo, { command: true }, at))
+      }
+    }
   })
 }
 

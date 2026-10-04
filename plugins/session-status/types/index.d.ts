@@ -199,6 +199,25 @@ export type SessionPlace = {
   repo: GitHubRepo | null
 }
 
+/**
+ * A repository the session changed: its pull requests and issues are the
+ * links of its GitHub repository; this counts the rest.
+ */
+export type Place = {
+  /** The repository's top folder, absolute; `github:<owner>/<name>` for one only `gh` named. */
+  key: string
+  /** The repository folder's name, or the GitHub name for one only `gh` named. */
+  name: string
+  /** The repository on GitHub, when known. */
+  repo: GitHubRepo | null
+  /** The files edited or written there, absolute, each once, the last touched last. */
+  files: string[]
+  /** How many commands that change something ran there. */
+  commands: number
+  /** When it last changed, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
@@ -233,6 +252,8 @@ export type SessionStatus = {
   ticketReports: TicketReport[]
   /** Where the session works; null before git answers, and outside a repository. */
   place: SessionPlace | null
+  /** The repositories the session changed, the first changed first; the Places section shows the others. */
+  places: Place[]
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

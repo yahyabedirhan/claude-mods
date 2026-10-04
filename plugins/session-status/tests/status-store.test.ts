@@ -24,6 +24,7 @@ test('the status store saves the status to $.store with the session id as the ke
     tickets: null,
     ticketReports: [],
     place: null,
+    places: [],
     updatedAt: START,
   })
 })
