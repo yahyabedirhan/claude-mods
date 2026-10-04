@@ -4,6 +4,7 @@
 import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { SessionStatus } from '../types'
+import { shownProgress } from './effort-progress'
 import { isOpen } from './status'
 
 /** The counts the band shows; resolved items are left out. */
@@ -15,16 +16,17 @@ export type BandCounts = {
   surprises: number
 }
 
-/** The open items of each kind, and the tasks done of the total. */
+/** The open items of each kind, and the tickets or tasks done of the total. */
 export function bandCounts(status: SessionStatus | null): BandCounts {
   const open = (status?.items ?? []).filter(isOpen)
+  const progress = shownProgress(status)
   const decisions = open.filter(item => item.kind === 'decision')
 
   return {
     blocked: decisions.filter(item => item.urgency === 'blocked').length,
     review: decisions.filter(item => item.urgency === 'review_later').length,
-    done: status?.progress?.done ?? 0,
-    total: status?.progress?.total ?? 0,
+    done: progress?.done ?? 0,
+    total: progress?.total ?? 0,
     surprises: open.filter(item => item.kind === 'surprise').length,
   }
 }

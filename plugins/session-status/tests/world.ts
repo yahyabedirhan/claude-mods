@@ -56,6 +56,24 @@ export type World = {
    * or with none when it gives undefined. The default reply is no findings.
    */
   model: (reply: ModelReply) => void
+  /**
+   * Sets the issues `gh issue list` answers from now on, as its `--json`
+   * output; undefined makes `gh` fail.
+   */
+  issues: (list: GhIssue[] | undefined) => void
+  /**
+   * Holds every `gh issue list` answer from now on until the returned
+   * function is called, as a slow network does.
+   */
+  holdIssues: () => () => void
+}
+
+/** One issue as `gh issue list --json number,title,state,labels` prints it. */
+export type GhIssue = { number: number; title: string; state: 'OPEN' | 'CLOSED'; labels: { name: string }[] }
+
+/** An effort's issue: open unless `state` says otherwise, labelled `effort:<effort>`. */
+export function ghIssue(number: number, title: string, state: 'OPEN' | 'CLOSED' = 'OPEN', effort = 'session-status'): GhIssue {
+  return { number, title, state, labels: [{ name: `effort:${effort}` }] }
 }
 
 /** The fake model's reply to a request: its text, or undefined for none. */
@@ -98,6 +116,8 @@ export function world(
     branch?: string
     /** Makes every Agent tool spawn refused, so no subagent starts. */
     denySpawns?: boolean
+    /** What `gh issue list` answers, as its `--json` output; `gh` fails when absent. */
+    issues?: GhIssue[]
   } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
@@ -111,6 +131,8 @@ export function world(
   const messages: SessionMessage[] = []
   const modelCalls: ModelCompleteRequest[] = []
   let reply: ModelReply = () => '{"findings":[]}'
+  let issues = options.issues
+  let issueGate: Promise<void> | null = null
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
@@ -158,7 +180,7 @@ export function world(
     return { value: undefined }
   })
   on('ui.panes', () => ({ value: [...panes.values()] }))
-  on('process.run', (_$, e) => {
+  on('process.run', async (_$, e) => {
     runs.push([...e.argv])
     if (options.failRuns === true) {
       throw new Error(`${e.argv[0]}: command not found`)
@@ -167,6 +189,12 @@ export function world(
       return options.branch === undefined
         ? { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository', ...FULL } }
         : { value: { exitCode: 0, stdout: `${options.branch}\n`, stderr: '', ...FULL } }
+    }
+    if (e.argv.slice(0, 3).join(' ') === 'gh issue list') {
+      await issueGate
+      return issues === undefined
+        ? { value: { exitCode: 1, stdout: '', stderr: 'gh: not logged in', ...FULL } }
+        : { value: { exitCode: 0, stdout: JSON.stringify(issues), stderr: '', ...FULL } }
     }
 
     return { value: { exitCode: 0, stdout: '', stderr: '', ...FULL } }
@@ -231,6 +259,20 @@ export function world(
     modelCalls,
     model: next => {
       reply = next
+    },
+    issues: list => {
+      issues = list
+    },
+    holdIssues: () => {
+      let release = () => {}
+      issueGate = new Promise<void>(resolve => {
+        release = resolve
+      })
+
+      return () => {
+        issueGate = null
+        release()
+      }
     },
   }
 }

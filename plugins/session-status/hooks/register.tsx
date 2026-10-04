@@ -11,6 +11,7 @@ import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
 import { branchEffortName, effortSighting, withEffort } from './effort'
+import { TICKET_TIMEOUT_MS, isTicketReadDue, parseTicketList, ticketListArgv, withTickets } from './effort-progress'
 import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
@@ -403,6 +404,7 @@ export const register: Register = on => {
     if (change !== null) {
       await changeStatus($, change)
     }
+    await countTicketsIfDue($, e)
 
     return answer
   })
@@ -508,6 +510,76 @@ async function effortSeen($: EngineInterface, name: string | null): Promise<void
   }
   // A run whose name is still unknown opens the pane too.
   await autoOpenPane($)
+}
+
+// Effort progress: during an effort, progress counts the effort's tickets.
+
+/** The effort and time of the last ticket read started; null before the first. */
+let lastTicketRead: { effort: string; at: number } | null = null
+
+/** True while a ticket read is queued or runs, so a second one does not start. */
+let isCountingTickets = false
+
+/** The effort of a read that fell due while one ran: it runs once when that one ends. */
+let waitingTicketRead: string | null = null
+
+/**
+ * Starts a read of the effort's tickets when one is due after a tool call
+ * (see `isTicketReadDue`). One read runs at a time: a read due meanwhile
+ * runs once after it. The read runs on a timer, so it never holds the tool
+ * call; a failed read keeps the last good count.
+ */
+async function countTicketsIfDue($: EngineInterface, call: { tool: string }): Promise<void> {
+  const status = withDefaults(await read($, statusAtom))
+  const now = await $.clock.now()
+  const effort = status?.effort?.name
+  if (effort === undefined || !isTicketReadDue(status, lastTicketRead, call, now)) {
+    return
+  }
+  lastTicketRead = { effort, at: now }
+  // No await between the test and the set: a second call sees the flag.
+  if (isCountingTickets) {
+    waitingTicketRead = effort
+
+    return
+  }
+  isCountingTickets = true
+  startTicketRead($, effort)
+}
+
+/** Queues one ticket read, and the waiting one after it; clears the flag at the end. */
+function startTicketRead($: EngineInterface, effort: string): void {
+  const finish = async () => {
+    await countTickets($, effort)
+    const waiting = waitingTicketRead
+    if (waiting !== null) {
+      waitingTicketRead = null
+      await countTickets($, waiting)
+    }
+  }
+  try {
+    $.clock.after(0, () => {
+      void finish().finally(() => {
+        isCountingTickets = false
+      })
+    })
+  } catch {
+    isCountingTickets = false
+  }
+}
+
+/** Reads the effort's tickets with `gh` and keeps the count; swallows every failure. */
+async function countTickets($: EngineInterface, effort: string): Promise<void> {
+  try {
+    const { exitCode, stdout } = await $.process.run(ticketListArgv(effort), { timeoutMs: TICKET_TIMEOUT_MS })
+    const count = exitCode === 0 ? parseTicketList(stdout) : null
+    if (count !== null) {
+      const at = await $.clock.now()
+      await changeStatus($, status => withTickets(status, { effort, ...count, at }))
+    }
+  } catch {
+    // No gh, no network, a timeout: the last good count holds.
+  }
 }
 
 /** The session's git branch, or null when git gives none. */

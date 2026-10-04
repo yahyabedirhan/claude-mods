@@ -106,6 +106,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     endListPostedAt: null,
     observer: { checks: 0, seen: [] },
     effort: null,
+    tickets: null,
     updatedAt: null,
   }
 }

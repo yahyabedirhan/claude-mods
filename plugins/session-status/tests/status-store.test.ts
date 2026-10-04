@@ -19,6 +19,7 @@ test('the status store saves the status to $.store with the session id as the ke
     endListPostedAt: null,
     observer: { checks: 0, seen: [] },
     effort: null,
+    tickets: null,
     updatedAt: START,
   })
 })

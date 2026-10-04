@@ -47,7 +47,7 @@ test('the progress section shows tasks done, the total, a bar and the current ta
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'progress')) ?? ''
-    expect(text).toContain('1/3 done')
+    expect(text).toContain('Tasks 1/3 done')
     expect(text).toMatch(/█+░+/)
     expect(text).toContain('Current: Wire the hooks')
   }

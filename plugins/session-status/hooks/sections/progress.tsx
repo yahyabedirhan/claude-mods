@@ -1,23 +1,27 @@
+import { shownProgress } from '../effort-progress'
 import type { Section } from './section'
 
 /** The bar's widest, in cells. */
 const BAR_CELLS = 20
 
-/** Tasks done, the total, a bar and the task that runs now. */
+/**
+ * Tickets (during an effort) or tasks done, the total, a bar and the task
+ * that runs now. The line names its source: `Tickets 3/9` or `Tasks 3/9`.
+ */
 export const progressSection: Section = ({ ui, status, columns }) => {
   const { Box, Text } = ui
-  const progress = status?.progress ?? null
+  const progress = shownProgress(status)
   if (progress === null) {
     return null
   }
-  const { done, total, current } = progress
+  const { source, done, total, current } = progress
   const cells = Math.max(5, Math.min(BAR_CELLS, columns - 14))
 
   return (
     <Box key="progress" flexDirection="column">
       <Text bold>Progress</Text>
       <Text>
-        {`${done}/${total} done `}
+        {`${source === 'tickets' ? 'Tickets' : 'Tasks'} ${done}/${total} done `}
         <Text color="green">{progressBar(done, total, cells)}</Text>
       </Text>
       {current === null ? null : <Text wrap="truncate-end">{`Current: ${current}`}</Text>}

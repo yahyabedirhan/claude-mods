@@ -80,7 +80,7 @@ export type Task = {
 
 /**
  * How far the work is: tasks done, the total and the task that runs now.
- * Taken from the task list; an effort can give it from its tickets instead.
+ * Taken from the task list; during an effort the pane shows the tickets instead.
  */
 export type Progress = {
   done: number
@@ -137,6 +137,18 @@ export type Effort = {
  */
 export type PaneState = 'unopened' | 'open' | 'closed'
 
+/** The effort's tickets, as `gh issue list` last counted them. */
+export type TicketCount = {
+  /** The effort counted: a count for another effort is not shown. */
+  effort: string
+  /** Tickets closed. */
+  done: number
+  /** All tickets, open and closed; the spec issue is not one. */
+  total: number
+  /** When it was counted, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
@@ -148,7 +160,7 @@ export type SessionStatus = {
   items: StatusItem[]
   /** The task list, in the order the tasks were created. */
   tasks: Task[]
-  /** How far the work is; null before the first task. */
+  /** How far the task list is; null before the first task. See `shownProgress`. */
   progress: Progress | null
   /** The pull requests and issues created, oldest first. */
   links: CreatedLink[]
@@ -162,6 +174,8 @@ export type SessionStatus = {
   observer: ObserverRecord
   /** The effort the session runs; null when it runs none. */
   effort: Effort | null
+  /** The effort's tickets last counted; null before the first count. Progress shows it during the effort. */
+  tickets: TicketCount | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }
