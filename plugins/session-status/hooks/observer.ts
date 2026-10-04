@@ -9,6 +9,7 @@ import type { ModelCompleteRequest, SessionMessage } from 'claude-code'
 
 import type { SessionStatus, Surprise } from '../types'
 import { recordItem } from './status'
+import { CONCISE_RULE } from './status-tool'
 
 /** The small, cheap model the observer asks: an alias the engine resolves. */
 export const OBSERVER_MODEL = 'haiku'
@@ -116,6 +117,7 @@ Find only these problems:
 - time sinks: steps that take far more turns or time than they are worth;
 - steps that do not agree with the effort phase or the task list.
 Ordinary errors that the agent fixed itself are not findings.
+${CONCISE_RULE}
 Do not repeat a finding that was already shown, even in other words.
 When you find nothing, give no findings. Most checks find nothing.
 Answer with strict JSON only, no other text, in this shape:

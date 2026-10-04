@@ -4,38 +4,44 @@
 import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { SessionStatus } from '../types'
-import { shownProgress } from './effort-progress'
+import { effortProgress } from './effort-progress'
+import { COLOR } from './palette'
+import { sessionProgress } from './session-progress'
 import { isOpen } from './status'
 
-/** The counts the band shows; resolved items are left out. */
-export type BandCounts = {
-  blocked: number
-  review: number
-  done: number
-  total: number
-  surprises: number
-}
-
-/** The open items of each kind, and the tickets or tasks done of the total. */
-export function bandCounts(status: SessionStatus | null): BandCounts {
+/** The open decisions of each urgency and the open surprises; resolved items are left out. */
+function openCounts(status: SessionStatus | null): { blocked: number; review: number; surprises: number } {
   const open = (status?.items ?? []).filter(isOpen)
-  const progress = shownProgress(status)
   const decisions = open.filter(item => item.kind === 'decision')
 
   return {
     blocked: decisions.filter(item => item.urgency === 'blocked').length,
     review: decisions.filter(item => item.urgency === 'review_later').length,
-    done: progress?.done ?? 0,
-    total: progress?.total ?? 0,
     surprises: open.filter(item => item.kind === 'surprise').length,
   }
 }
 
-/** `<n> blocked · <n> review · <done>/<total> done · <n> surprise`. */
+/**
+ * `<n> blocked · <n> review · <session> · <effort> · <n> surprise`. The
+ * session figure is `landed 4/9` once the orchestrator reports tickets, else
+ * the tasks' `<done>/<total> done`; the effort figure, `closed 1/13`, shows
+ * only while the tracker counts the effort's tickets.
+ */
 export function bandText(status: SessionStatus | null): string {
-  const { blocked, review, done, total, surprises } = bandCounts(status)
+  const { blocked, review, surprises } = openCounts(status)
+  const session = sessionProgress(status)
+  const effort = effortProgress(status)
+  const parts = [
+    `${blocked} blocked`,
+    `${review} review`,
+    session?.source === 'tickets'
+      ? `landed ${session.done}/${session.total}`
+      : `${session?.done ?? 0}/${session?.total ?? 0} done`,
+    ...(effort === null ? [] : [`closed ${effort.closed}/${effort.total}`]),
+    `${surprises} surprise`,
+  ]
 
-  return `${blocked} blocked · ${review} review · ${done}/${total} done · ${surprises} surprise`
+  return parts.join(' · ')
 }
 
 /** The band's tree: one line in a Box keyed `session-status-band`. */
@@ -44,12 +50,12 @@ export function drawBand(
   status: SessionStatus | null,
 ): RenderElement {
   const { Box, Text } = ui
-  const isBlocked = bandCounts(status).blocked > 0
+  const isBlocked = openCounts(status).blocked > 0
 
   return (
     <Box key="session-status-band">
       {isBlocked ? (
-        <Text wrap="truncate-end" color="yellow">
+        <Text wrap="truncate-end" color={COLOR.attention}>
           {bandText(status)}
         </Text>
       ) : (

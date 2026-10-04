@@ -6,7 +6,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { SessionStatus, StatusItem } from '../types'
+import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
+import { afterTurn, settles } from './activity'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
@@ -17,6 +18,10 @@ import { isCheckDue, observerRequest, parseFindings, recordCheck } from './obser
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
 import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
+import { changesBranch, githubRepo, repoOf, withPlace } from './place'
+import { commandTargets, editedFile, folderOf, withChange } from './places'
+import type { ChangedRepo } from './places'
+import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
@@ -24,6 +29,7 @@ import {
   endListText,
   readStatusToolInput,
   recordedText,
+  ticketText,
 } from './status-tool'
 import {
   CARRY_KEY,
@@ -45,6 +51,7 @@ import {
 import type { ClearCarry } from './status'
 import { isRunningSubagent, subagentStarted, subagentStopped } from './subagents'
 import { taskCreated, taskUpdated } from './tasks'
+import { reportTicket } from './ticket-reports'
 import { toolResultChange } from './tool-results'
 
 const COMMAND = 'session-status'
@@ -104,7 +111,7 @@ async function holdSession(
   const saved = savedStatus(await $.store.get(sessionId), sessionId)
   const now = await $.clock.now()
   const status = await update($, statusAtom, current => {
-    const kept = statusForSession(current, sessionId, saved, now, clear !== null)
+    const kept = statusForSession(withDefaults(current), sessionId, saved, now, clear !== null)
 
     return carry === null ? kept : withCarry(kept ?? { ...emptyStatus(sessionId), updatedAt: now }, carry)
   })
@@ -347,6 +354,7 @@ export const register: Register = on => {
     if ((await read($, paneAtom)) === 'open' && !(await isPaneOpen($))) {
       await $.ui.open({ id: PANE_ID, title: PANE_TITLE, columns: PANE_COLUMNS })
     }
+    readPlace($)
 
     return next(e)
   })
@@ -383,6 +391,15 @@ export const register: Register = on => {
       clearedFrom = null
       await holdSession($, e.session_id)
     }
+    if (e.source !== 'compact') {
+      readPlace($)
+    }
+
+    return next(e)
+  })
+
+  on('classic.CwdChanged', async ($, e, next) => {
+    readPlace($)
 
     return next(e)
   })
@@ -400,8 +417,8 @@ export const register: Register = on => {
   })
 
   // The status tool: the model records a decision or a surprise, closes one,
-  // or marks the end-of-work list posted. The matcher spells STATUS_TOOL
-  // out, so `claude plugin validate` can read it.
+  // marks the end-of-work list posted, or reports a ticket's state. The
+  // matcher spells STATUS_TOOL out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
     if ('error' in input) {
@@ -438,6 +455,27 @@ export const register: Register = on => {
       sendPing($, endListPing(posted.sessionId, listed.map(item => item.id)))
 
       return { result: endListText(listed) }
+    }
+
+    if ('ticket' in input) {
+      const request = input.ticket
+      // The reply comes from the change the status took, not from a check
+      // made before it: another change can land in between.
+      let outcome: ReturnType<typeof reportTicket> | undefined
+      const reported = await changeStatus($, status => {
+        outcome = reportTicket(status, request, now)
+
+        return 'error' in outcome ? status : outcome.status
+      })
+      if (outcome === undefined || 'error' in outcome) {
+        return { deny: outcome?.error ?? 'The ticket was not reported.' }
+      }
+      // A ticket report shows an effort run, as a call to an effort skill does.
+      // One without an `effort` field names it after the branch while it has none.
+      await effortSeen($, null)
+      await countTicketsIfDue($, e)
+
+      return { result: ticketText(request, outcome, sessionProgress(reported)) }
     }
 
     let recorded: StatusItem | undefined
@@ -477,10 +515,19 @@ export const register: Register = on => {
     if (sighting !== null) {
       await effortSeen($, sighting.name)
     }
+    if (settles(e as { tool: string; skill?: unknown })) {
+      await changeStatus($, status => ({ ...status, activity: 'settling' }))
+    }
     const answer = await next(e)
     const change = toolResultChange(e, answer, await $.clock.now())
     await changeStatus($, change ?? (status => status))
     await countTicketsIfDue($, e)
+    if (answer.deny === undefined && answer.isError !== true) {
+      countPlaces($, e)
+    }
+    if (changesBranch(e)) {
+      readPlace($)
+    }
 
     return answer
   })
@@ -530,9 +577,19 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Only the main loop's turns count toward the observer's interval.
+  // A turn that starts puts the session in progress, a settled one too.
+  on('turn.start', async ($, e, next) => {
+    await changeStatus($, status => (status.activity === 'working' ? status : { ...status, activity: 'working' }))
+
+    return next(e)
+  })
+
+  // The main loop's turn ends: the session waits for a reply, or is settled
+  // when a settle skill ran in it. Only these turns count toward the
+  // observer's interval.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
+      await changeStatus($, status => ({ ...status, activity: afterTurn(status.activity) }))
       startObserver($, 'turn')
     }
 
@@ -656,35 +713,140 @@ async function countTickets($: EngineInterface, effort: string): Promise<void> {
 }
 
 /**
- * Names the effort after the session's git branch, on a timer so `git` never
- * holds the tool call. A label found meanwhile wins (see `withEffort`).
+ * Runs `work` on a timer, so it never holds the hook that starts it; a
+ * failure goes to the debug log, and the status stays as it was.
+ */
+function inBackground($: EngineInterface, what: string, work: () => Promise<void>): void {
+  try {
+    $.clock.after(0, () => {
+      work().catch((error: unknown) => {
+        $.ui.log(`session-status ${what}: ${String(error)}`, { to: 'debug' })
+      })
+    })
+  } catch {
+    // The status stays as it was until the next read.
+  }
+}
+
+/**
+ * Names the effort after the session's git branch, in the background. A
+ * label or a report found meanwhile wins (see `withEffort`).
  */
 function nameEffortFromBranch($: EngineInterface): void {
-  const name = async () => {
+  inBackground($, 'branch read', async () => {
     const branch = await readBranch($)
     if (branch !== null) {
       await changeStatus($, status => withEffort(status, { name: branch, from: 'branch' }))
     }
-  }
-  try {
-    $.clock.after(0, () => {
-      name().catch((error: unknown) => {
-        $.ui.log(`session-status branch read: ${String(error)}`, { to: 'debug' })
-      })
-    })
-  } catch {
-    // The effort stays unnamed until a label names it.
-  }
+  })
 }
 
 /** The session's git branch, or null when git gives none. */
 async function readBranch($: EngineInterface): Promise<string | null> {
-  try {
-    const { exitCode, stdout } = await $.process.run(['git', 'branch', '--show-current'], {
-      timeoutMs: 5_000,
-    })
+  const branch = await gitLine($, ['git', 'branch', '--show-current'])
 
-    return exitCode === 0 ? branchEffortName(stdout) : null
+  return branch === null ? null : branchEffortName(branch)
+}
+
+// Where the session works: its repository, branch and worktree, read from
+// git in the background and cached per folder, so a tool call never waits.
+
+/**
+ * Each folder's repository top folder, as git answered it. Only an answer is
+ * kept: a folder outside a repository, or not made yet, is asked again.
+ */
+const repoRoots = new Map<string, Promise<string | null>>()
+
+/** Each repository's GitHub repository, from its `origin` remote; null when it has none there. */
+const githubRepos = new Map<string, Promise<GitHubRepo | null>>()
+
+/** The top folder of the repository that holds `dir`, asked of git once per folder. */
+function repoRootOf($: EngineInterface, dir: string): Promise<string | null> {
+  let root = repoRoots.get(dir)
+  if (root === undefined) {
+    root = gitLine($, ['git', '-C', dir, 'rev-parse', '--show-toplevel'])
+    repoRoots.set(dir, root)
+    void root.then(found => {
+      if (found === null) {
+        repoRoots.delete(dir)
+      }
+    })
+  }
+
+  return root
+}
+
+/** The GitHub repository of the repository at `root`, asked of git once per repository. */
+function githubRepoOf($: EngineInterface, root: string): Promise<GitHubRepo | null> {
+  let repo = githubRepos.get(root)
+  if (repo === undefined) {
+    repo = gitLine($, ['git', '-C', root, 'remote', 'get-url', 'origin']).then(url =>
+      url === null ? null : githubRepo(url),
+    )
+    githubRepos.set(root, repo)
+  }
+
+  return repo
+}
+
+/**
+ * Reads where the session works, in the background, into the status: in
+ * `$.state` alone, so a session that does nothing saves nothing; the next
+ * change saves it. Outside a repository the status keeps what it had.
+ */
+function readPlace($: EngineInterface): void {
+  inBackground($, 'place read', async () => {
+    const root = await repoRootOf($, await $.session.cwd())
+    if (root === null) {
+      return
+    }
+    const [branch, repo] = await Promise.all([readBranch($), githubRepoOf($, root)])
+    await changeStatus($, status => withPlace(status, { root, branch, repo }), { save: false })
+  })
+}
+
+/** The repository that holds `dir`, with its GitHub repository; null outside one. */
+async function changedRepoAt($: EngineInterface, dir: string): Promise<ChangedRepo | null> {
+  const root = await repoRootOf($, dir)
+
+  return root === null ? null : { root, repo: await githubRepoOf($, root) }
+}
+
+/**
+ * Counts what a finished tool call changed in its repository, in the
+ * background: the file an edit or a write touched, and each step of a
+ * shell command that changes something (see CHANGING_COMMANDS).
+ */
+function countPlaces($: EngineInterface, call: { tool: string }): void {
+  const file = editedFile(call)
+  const command = call.tool === 'Bash' ? (call as unknown as { command?: unknown }).command : undefined
+  if (file === null && typeof command !== 'string') {
+    return
+  }
+  inBackground($, 'place count', async () => {
+    const at = await $.clock.now()
+    const where = file === null ? null : await changedRepoAt($, folderOf(file))
+    if (file !== null && where !== null) {
+      await changeStatus($, status => withChange(status, where, { file }, at))
+    }
+    const targets = typeof command === 'string' ? commandTargets(command, await $.session.cwd()) : []
+    for (const target of targets) {
+      const repo: ChangedRepo | null =
+        'slug' in target ? { root: null, repo: repoOf(target.slug) } : await changedRepoAt($, target.dir)
+      if (repo !== null) {
+        await changeStatus($, status => withChange(status, repo, { command: true }, at))
+      }
+    }
+  })
+}
+
+/** What a git command prints, trimmed; null when it fails or prints nothing. */
+async function gitLine($: EngineInterface, argv: string[]): Promise<string | null> {
+  try {
+    const { exitCode, stdout } = await $.process.run(argv, { timeoutMs: 5_000 })
+    const line = stdout.trim()
+
+    return exitCode === 0 && line !== '' ? line : null
   } catch {
     return null
   }

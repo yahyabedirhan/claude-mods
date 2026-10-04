@@ -9,14 +9,14 @@ export const doingNowSection: Section = ({ ui, status }) => {
 
   return (
     <Box key="doing-now" flexDirection="column">
-      <Text bold>Doing now</Text>
+      <Text bold>Now</Text>
       {task !== null ? (
         <Text wrap="truncate-end">{`Task: ${task.activeForm ?? task.subject}`}</Text>
       ) : doing === null ? (
         <Text dimColor>Nothing yet.</Text>
       ) : (
         <Text wrap="truncate-end">
-          {doing.agentId === undefined ? '' : 'subagent · '}
+          {doing.agentId === undefined ? null : <Text dimColor>subagent · </Text>}
           {doing.text === '' ? doing.tool : `${doing.tool}: ${doing.text}`}
         </Text>
       )}

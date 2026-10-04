@@ -35,7 +35,7 @@ function setStatus($: Engine, taskId: string, status: 'in_progress' | 'completed
   return $.tool.call({ tool: 'TaskUpdate', taskId, status })
 }
 
-test('the progress section shows tasks done, the total, a bar and the current task', async ($, on) => {
+test('the Session section shows tasks done, the total and a bar', async ($, on) => {
   const w = world(on)
   taskTools(w)
   await start($)
@@ -46,10 +46,9 @@ test('the progress section shows tasks done, the total, a bar and the current ta
   await setStatus($, '3', 'in_progress')
 
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'progress')) ?? ''
-    expect(text).toContain('Tasks 1/3 done')
+    const text = (await sectionText($, surface, 'session')) ?? ''
+    expect(text).toContain('Tasks 1/3')
     expect(text).toMatch(/█+░+/)
-    expect(text).toContain('Current: Wire the hooks')
   }
 })
 
@@ -63,20 +62,19 @@ test('the bar fills as tasks finish', async ($, on) => {
   await setStatus($, '2', 'completed')
 
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'progress')) ?? ''
-    expect(text).toContain('2/2 done')
+    const text = (await sectionText($, surface, 'session')) ?? ''
+    expect(text).toContain('Tasks 2/2')
     expect(text).not.toContain('░')
-    expect(text).not.toContain('Current:')
   }
 })
 
-test('the progress section stays out of the pane before the first task', async ($, on) => {
+test('the Session section stays out of the pane before the first task', async ($, on) => {
   world(on)
   await start($)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'progress')).toBeUndefined()
+    expect(await sectionText($, surface, 'session')).toBeUndefined()
   }
 })
 

@@ -85,7 +85,7 @@ test('resume restores the saved status of the resumed session', async ($, on) =>
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
     expect(await sectionText($, surface, 'surprises')).toContain('The API has no batch endpoint')
-    expect(await sectionText($, surface, 'links')).toContain('repo#7')
+    expect(await sectionText($, surface, 'created')).toContain('repo#7')
     expect(await sectionText($, surface, 'counters')).toContain('1 finished')
   }
 })
@@ -134,12 +134,16 @@ test('/clear starts a new status that keeps only the open decisions', async ($, 
     observer: { checks: 0, seen: [] },
     effort: null,
     tickets: null,
+    ticketReports: [],
+    place: null,
+    places: [],
+    activity: null,
     updatedAt: START,
   })
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
     expect(await sectionText($, surface, 'surprises')).toBeUndefined()
-    expect(await sectionText($, surface, 'links')).toBeUndefined()
+    expect(await sectionText($, surface, 'session')).toBeUndefined()
   }
 })
 
@@ -345,7 +349,7 @@ test('/compact keeps all status', async ($, on) => {
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
     expect(await sectionText($, surface, 'surprises')).toContain('The API has no batch endpoint')
-    expect(await sectionText($, surface, 'progress')).toContain('0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
   }
 })
 

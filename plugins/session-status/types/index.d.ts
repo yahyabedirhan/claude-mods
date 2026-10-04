@@ -84,8 +84,9 @@ export type Task = {
 }
 
 /**
- * How far the work is: tasks done, the total and the task that runs now.
- * Taken from the task list; during an effort the pane shows the tickets instead.
+ * How far the task list is: tasks done, the total and the task that runs
+ * now. During an effort the Session section counts the reported tickets
+ * instead, once the orchestrator reports one.
  */
 export type Progress = {
   done: number
@@ -130,10 +131,11 @@ export type Effort = {
   /** The effort's name, as its `effort:<name>` label writes it. */
   name: string
   /**
-   * Where the name came from: an `effort:<name>` label, or the session's git
-   * branch when an effort skill ran before any label showed.
+   * Where the name came from: a ticket report's `effort`, an `effort:<name>`
+   * label, or the session's git branch when an effort skill ran before any
+   * label showed. A report's name always wins; a label's wins over a branch's.
    */
-  from?: 'label' | 'branch'
+  from?: 'report' | 'label' | 'branch'
 }
 
 /**
@@ -154,7 +156,76 @@ export type TicketCount = {
   at: number
 }
 
+/**
+ * A ticket the orchestrator reported with the status tool: `started` while a
+ * delegate builds it, `landed` once its commit is on the effort branch,
+ * whether or not its issue is closed.
+ */
+export type TicketReport = {
+  /** The ticket's issue number; absent for a ticket that has none (a local tracker). */
+  number?: number
+  /** The ticket's title. */
+  title: string
+  state: 'started' | 'landed'
+  /** When it reached this state, in `$.clock.now()` milliseconds. */
+  at: number
+  /**
+   * The effort the ticket belongs to; absent on a report made before any
+   * effort was named, which belongs to the effort that runs now.
+   */
+  effort?: string
+  /**
+   * When a started ticket first landed: it is rework, and a `stopped` takes
+   * it back to landed at this time. Absent on a ticket that never landed.
+   */
+  landedAt?: number
+}
+
+/** A repository on GitHub. */
+export type GitHubRepo = {
+  /** `<owner>/<name>`. */
+  slug: string
+  /** Its page: `https://github.com/<owner>/<name>`. */
+  url: string
+}
+
+/** Where the session works: its repository, read from git in its directory. */
+export type SessionPlace = {
+  /** The repository's top folder, absolute: kept for the record, never shown. */
+  root: string
+  /** The branch checked out; null on a detached head. */
+  branch: string | null
+  /** The repository on GitHub, from its `origin` remote; null when it has none there. */
+  repo: GitHubRepo | null
+}
+
+/**
+ * A repository the session changed: its pull requests and issues are the
+ * links of its GitHub repository; this counts the rest.
+ */
+export type Place = {
+  /** The repository's top folder, absolute; `github:<owner>/<name>` for one only `gh` named. */
+  key: string
+  /** The repository folder's name, or the GitHub name for one only `gh` named. */
+  name: string
+  /** The repository on GitHub, when known. */
+  repo: GitHubRepo | null
+  /** The files edited or written there, absolute, each once, the last touched last. */
+  files: string[]
+  /** How many commands that change something ran there. */
+  commands: number
+  /** When it last changed, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
+/**
+ * What the session does: a turn runs (`working`), a turn that ran a settle
+ * skill runs (`settling`), the last turn ended (`waiting`), or it ended after
+ * a settle skill (`settled`).
+ */
+export type Activity = 'working' | 'settling' | 'waiting' | 'settled'
+
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
   version: 1
@@ -165,7 +236,7 @@ export type SessionStatus = {
   items: StatusItem[]
   /** The task list, in the order the tasks were created. */
   tasks: Task[]
-  /** How far the task list is; null before the first task. See `shownProgress`. */
+  /** How far the task list is; null before the first task. See `sessionProgress`. */
   progress: Progress | null
   /** The pull requests and issues created, oldest first. */
   links: CreatedLink[]
@@ -179,8 +250,19 @@ export type SessionStatus = {
   observer: ObserverRecord
   /** The effort the session runs; null when it runs none. */
   effort: Effort | null
-  /** The effort's tickets last counted; null before the first count. Progress shows it during the effort. */
+  /** The effort's tickets last counted; null before the first count. The Effort section shows it. */
   tickets: TicketCount | null
+  /**
+   * The tickets the orchestrator reported, in the order it first named them.
+   * The Session section counts the current effort's: landed of all reported.
+   */
+  ticketReports: TicketReport[]
+  /** Where the session works; null before git answers, and outside a repository. */
+  place: SessionPlace | null
+  /** The repositories the session changed, the first changed first; the Places section shows the others. */
+  places: Place[]
+  /** What the session does: null before its first turn. */
+  activity: Activity | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

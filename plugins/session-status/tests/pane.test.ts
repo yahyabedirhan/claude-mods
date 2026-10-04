@@ -101,12 +101,13 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
   await spawnSubagent($, 'agent-1')
 
   const order = [
+    'state',
     'doing-now',
     'blocked',
-    'review-later',
-    'progress',
-    'links',
+    'session',
+    'created',
     'surprises',
+    'review-later',
     'counters',
     'last-update',
   ]

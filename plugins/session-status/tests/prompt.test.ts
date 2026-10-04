@@ -74,6 +74,20 @@ test('the section tells the agent to post one numbered end-of-work list and call
   expect(text).toContain('post_end_list')
 })
 
+test('the section tells an orchestrator to report each ticket started and landed', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(/orchestrate an effort's tickets/i)
+  expect(text).toMatch(/`ticket`/)
+  expect(text).toMatch(/`started` when you delegate/i)
+  expect(text).toMatch(/`landed` when the ticket's commit is on the effort branch/i)
+  expect(text).toMatch(/do not wait for the issue to close/i)
+  expect(text).toMatch(/`effort`/)
+})
+
 test('the section tells the agent to resolve answered decisions and dismiss surprises the user asks to', async ($, on) => {
   world(on)
   await start($)
@@ -84,4 +98,30 @@ test('the section tells the agent to resolve answered decisions and dismiss surp
   expect(text).toMatch(/answers? .*in the chat/i)
   expect(text).toMatch(/`dismiss`/)
   expect(text).toMatch(/read-only/i)
+})
+
+/** The concise-item rule, as the prompt, the tool and the observer each say it. */
+const CONCISE = /one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is
+
+test('the section tells the agent to keep each item short in plain technical style, with no character limit', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(CONCISE)
+  expect(text).not.toMatch(/\d+ characters/)
+})
+
+test('the status tool tells a subagent the same rule, field by field', async ($, on) => {
+  const { tools } = world(on)
+  await start($)
+
+  const tool = tools.get(STATUS_TOOL)
+  const fields = (tool?.inputSchema as { properties: Record<string, { description: string }> }).properties
+
+  expect(tool?.description).toMatch(CONCISE)
+  for (const field of ['question', 'default', 'unblocks', 'occurred', 'changed']) {
+    expect(fields[field]?.description).toMatch(/one short sentence/i)
+  }
 })

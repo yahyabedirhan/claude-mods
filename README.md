@@ -34,8 +34,8 @@ Long sessions, especially ones that run many subagents, hide their state in the 
 
 ```text
 opens        by itself on the first subagent, task list, effort or recorded item; /session-status toggles it
-pane         doing now · blocked on you · review later · progress · links · surprises · counters · last update
-narrow       a one-line band above the prompt: 2 blocked · 1 review · 3/9 done · 1 surprise
+pane         state · now · blocked on you · session · effort · created · places · surprises · review later · counters · last update
+narrow       a one-line band above the prompt: 2 blocked · 1 review · landed 4/9 · closed 1/13 · 1 surprise
 you answer   in the chat; the agent resolves the decision, and the pane moves it to the history
 end of work  one numbered list of open review-later decisions, highlighted in the pane
 pings        a shipyard ping for each blocked decision, withdrawn once it's answered (optional)

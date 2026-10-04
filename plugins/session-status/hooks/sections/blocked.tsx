@@ -1,4 +1,5 @@
 import type { Decision } from '../../types'
+import { COLOR } from '../palette'
 import { isOpen } from '../status'
 import type { Section } from './section'
 
@@ -17,15 +18,24 @@ export const blockedSection: Section = ({ ui, status }) => {
 
   return (
     <Box key="blocked" flexDirection="column">
-      <Text bold>Blocked on you ({blocked.length})</Text>
+      <Text bold color={COLOR.attention}>
+        Blocked on you ({blocked.length})
+      </Text>
       {blocked.map(decision => (
         <Box key={`blocked-${decision.id}`} flexDirection="column">
           <Text>
-            {decision.id} · {decision.question}
+            <Text color={COLOR.attention}>{decision.id}</Text>
+            {` · ${decision.question}`}
           </Text>
           <Box flexDirection="column" paddingLeft={2}>
-            <Text>Unblocks: {decision.unblocks}</Text>
-            <Text>Recommended: {decision.default}</Text>
+            <Text>
+              <Text dimColor>Unblocks: </Text>
+              {decision.unblocks}
+            </Text>
+            <Text>
+              <Text dimColor>Recommended: </Text>
+              {decision.default}
+            </Text>
             <Text dimColor>Options: {decision.options.join(' / ')}</Text>
           </Box>
         </Box>

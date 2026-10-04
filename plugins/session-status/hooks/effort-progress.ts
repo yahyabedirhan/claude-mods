@@ -1,7 +1,9 @@
-// Effort progress as data: during an effort, progress counts the effort's
-// tickets (its `effort:<name>` issues) instead of the task list. This module
-// builds the `gh` command, reads its output and says when to read again;
-// register.tsx runs the command and keeps the count in the status.
+// Effort progress as data: the tracker's count of the effort's tickets,
+// closed of all its `effort:<name>` issues. It never mixes in what the
+// orchestrator reported: that is the session's progress (see
+// session-progress.ts). This module builds the `gh` command, reads its output
+// and says when to read again; register.tsx runs the command and keeps the
+// count in the status.
 
 import type { SessionStatus, TicketCount } from '../types'
 
@@ -44,10 +46,10 @@ export function ticketListArgv(effort: string): string[] {
 }
 
 /**
- * The tickets done and the total from `gh issue list --json` output; null
+ * The tickets closed and the total from `gh issue list --json` output; null
  * when the output is not such a list, so the last good count holds.
  */
-export function parseTicketList(stdout: string): { done: number; total: number } | null {
+export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'total'> | null {
   let issues: unknown
   try {
     issues = JSON.parse(stdout)
@@ -61,11 +63,9 @@ export function parseTicketList(stdout: string): { done: number; total: number }
     (issue): issue is { title?: unknown; state?: unknown } =>
       typeof issue === 'object' && issue !== null && !(typeof issue.title === 'string' && SPEC_TITLE.test(issue.title)),
   )
+  const closed = tickets.filter(issue => typeof issue.state === 'string' && issue.state.toUpperCase() === 'CLOSED')
 
-  return {
-    done: tickets.filter(issue => typeof issue.state === 'string' && issue.state.toUpperCase() === 'CLOSED').length,
-    total: tickets.length,
-  }
+  return { done: closed.length, total: tickets.length }
 }
 
 /** Whether a tool call likely changed the effort's tickets. */
@@ -99,31 +99,19 @@ export function isTicketReadDue(
   return now - lastRead.at >= (isCounted ? TICKET_REFRESH_MS : TICKET_RETRY_MS)
 }
 
-/** The progress the status shows, and where it comes from. */
-export type ShownProgress = {
-  source: 'tickets' | 'tasks'
-  done: number
-  total: number
-  /** The task that runs now; null when none runs. */
-  current: string | null
-}
-
 /**
- * The progress to show: the effort's tickets while the status runs an
- * effort and holds a count for it, with the running task as the current
- * one; else the task list's progress; null when neither has any.
+ * The effort's tickets closed and the total, as the tracker last counted
+ * them: null outside an effort, before the first count for it, and while the
+ * effort has no tickets.
  */
-export function shownProgress(status: SessionStatus | null): ShownProgress | null {
-  if (status === null) {
+export function effortProgress(status: SessionStatus | null): { closed: number; total: number } | null {
+  const effort = status?.effort?.name
+  const count = status?.tickets ?? null
+  if (effort === undefined || count === null || count.effort !== effort || count.total === 0) {
     return null
   }
-  const tickets = status.tickets ?? null
-  const current = status.progress?.current ?? null
-  if (status.effort !== null && tickets !== null && tickets.effort === status.effort.name) {
-    return { source: 'tickets', done: tickets.done, total: tickets.total, current }
-  }
 
-  return status.progress === null ? null : { source: 'tasks', ...status.progress }
+  return { closed: count.done, total: count.total }
 }
 
 /** The status with a new ticket count. */
