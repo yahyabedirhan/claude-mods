@@ -3,7 +3,7 @@
 // register.tsx, because the engine follows `$` and the state library's
 // sources only within the hooks module's own file.
 
-import type { Decision, SessionStatus, StatusItem } from '../types'
+import type { Decision, Effort, SessionStatus, StatusItem } from '../types'
 
 /** An item before it is recorded: `recordItem` adds its id and its time. */
 export type ItemDraft = StatusItem extends infer I
@@ -128,6 +128,79 @@ export function carryOver(previous: SessionStatus, sessionId: string): SessionSt
   const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
 
   return { ...emptyStatus(sessionId), items: open, effort: withDefaults(previous)?.effort ?? null }
+}
+
+/**
+ * The `$.store` key that holds what a `/clear` carries over, written when the
+ * old session ends. It does not rely on `$.state`, which a `/clear` can empty.
+ */
+export const CARRY_KEY = 'clear-carry'
+
+/**
+ * How long a carry stays fresh. The new session's SessionStart follows the
+ * old one's end at once; an older carry is one whose `/clear` never got that
+ * far (the process stopped), and no later session takes it.
+ */
+export const CARRY_WINDOW_MS = 60_000
+
+/** What a `/clear` carries over: the ended session's open decisions and effort. */
+export type ClearCarry = {
+  kind: 'clear-carry'
+  /** The session that ended. */
+  from: string
+  /** When it ended, in `$.clock.now()` milliseconds. */
+  at: number
+  items: Decision[]
+  effort: Effort | null
+}
+
+/** What a session that ends by `/clear` carries over; null when nothing is open. */
+export function clearCarry(status: SessionStatus, now: number): ClearCarry | null {
+  const { items, effort } = carryOver(status, status.sessionId)
+  const decisions = items.filter((item): item is Decision => item.kind === 'decision')
+  if (decisions.length === 0 && effort === null) {
+    return null
+  }
+
+  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort }
+}
+
+/**
+ * A value read from `$.store` as a carry `sessionId` may take at `now`, or
+ * null: not a carry, written by `sessionId` itself, or no longer fresh.
+ */
+export function readCarry(value: unknown, sessionId: string, now: number): ClearCarry | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const carry = value as Partial<ClearCarry>
+  const isCarry =
+    carry.kind === 'clear-carry' &&
+    typeof carry.from === 'string' &&
+    typeof carry.at === 'number' &&
+    Array.isArray(carry.items)
+  if (!isCarry || carry.from === sessionId || Math.abs(now - (carry.at ?? 0)) > CARRY_WINDOW_MS) {
+    return null
+  }
+
+  return { ...(carry as ClearCarry), effort: carry.effort ?? null }
+}
+
+/**
+ * The status with a carry's decisions added before its own items, each id
+ * once, and the carry's effort while the status has none. A status that the
+ * carried state already reached (`$.state` kept across the `/clear`) stays as
+ * it is.
+ */
+export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStatus {
+  const ids = new Set(status.items.map(item => item.id))
+  const carried = carry.items.filter(item => !ids.has(item.id))
+  const effort = status.effort ?? carry.effort
+  if (carried.length === 0 && effort === status.effort) {
+    return status
+  }
+
+  return { ...status, items: [...carried, ...status.items], effort }
 }
 
 /**

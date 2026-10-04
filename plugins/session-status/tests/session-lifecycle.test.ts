@@ -10,12 +10,14 @@ import {
   SURFACES,
   blockedDecision,
   callStatusTool,
+  endSession,
   reviewLaterDecision,
   sectionText,
   start,
   surprise,
   world,
 } from './world'
+import type { World } from './world'
 
 const NEW_SESSION = 'session-new'
 
@@ -160,6 +162,118 @@ test('/clear carries the effort over to the new session', async ($, on) => {
   await sessionStart($, 'clear', NEW_SESSION)
 
   expect(saved[NEW_SESSION]).toMatchObject({ effort: { name: 'session-status', from: 'label' } })
+})
+
+/**
+ * Records D1 (blocked), D2 (review later, then resolved) and S1 under the
+ * first session, then runs a `/clear` that empties `$.state`: the old
+ * session ends, the process moves to NEW_SESSION.
+ */
+async function clearWithEmptyState($: Engine, w: World) {
+  await callStatusTool($, blockedDecision())
+  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, surprise())
+  await callStatusTool($, { action: 'resolve', id: 'D2' })
+  await endSession($, SESSION_ID)
+  w.switchSession(NEW_SESSION)
+  w.forgetState()
+}
+
+test('/clear carries the open decisions when $.state comes through empty', async ($, on) => {
+  const w = world(on)
+  const { saved, panes } = w
+  await start($)
+  await clearWithEmptyState($, w)
+  panes.clear()
+
+  await sessionStart($, 'clear', NEW_SESSION)
+
+  expect(saved[NEW_SESSION]).toMatchObject({
+    sessionId: NEW_SESSION,
+    items: [{ kind: 'decision', id: 'D1', urgency: 'blocked' }],
+  })
+  expect((saved[NEW_SESSION] as { items: unknown[] }).items).toHaveLength(1)
+  expect(saved['clear-carry']).toBeUndefined()
+  // The carried decision opens the pane again.
+  expect(panes.has(PLUGIN)).toBe(true)
+  for (const surface of SURFACES) {
+    expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
+    expect(await sectionText($, surface, 'surprises')).toBeUndefined()
+  }
+})
+
+test('/clear carries the effort when $.state comes through empty', async ($, on) => {
+  const w = world(on)
+  const { saved } = w
+  await start($)
+  await $.tool.call({ tool: 'Bash', command: 'gh issue list --label effort:session-status' })
+  await clearWithEmptyState($, w)
+
+  await sessionStart($, 'clear', NEW_SESSION)
+
+  expect(saved[NEW_SESSION]).toMatchObject({ effort: { name: 'session-status' } })
+})
+
+test('a change before the SessionStart of a /clear still gets the carry', async ($, on) => {
+  const w = world(on)
+  const { saved } = w
+  await start($)
+  await clearWithEmptyState($, w)
+  await $.tool.call({ tool: 'Bash', command: 'git diff' })
+
+  await sessionStart($, 'clear', NEW_SESSION)
+
+  expect(saved[NEW_SESSION]).toMatchObject({
+    items: [{ kind: 'decision', id: 'D1' }],
+    doingNow: { text: 'git diff' },
+  })
+})
+
+test('a startup never takes the carry a /clear left', async ($, on) => {
+  const w = world(on)
+  const { saved } = w
+  await start($)
+  await clearWithEmptyState($, w)
+
+  await sessionStart($, 'startup', NEW_SESSION)
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+
+  expect(saved[NEW_SESSION]).toMatchObject({ items: [] })
+})
+
+test('a carry older than a minute is not taken', async ($, on) => {
+  const w = world(on)
+  const { clock, saved } = w
+  await start($)
+  await clearWithEmptyState($, w)
+  await clock.advance(61_000)
+
+  await sessionStart($, 'clear', NEW_SESSION)
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+
+  expect(saved[NEW_SESSION]).toMatchObject({ items: [] })
+  expect(saved['clear-carry']).toBeUndefined()
+})
+
+test('a /clear with nothing open leaves no carry behind', async ($, on) => {
+  const w = world(on)
+  const { saved } = w
+  await start($)
+  await clearWithEmptyState($, w)
+  // The new session ends by /clear too before it takes the carry: it has nothing open.
+  await endSession($, NEW_SESSION)
+
+  expect(saved['clear-carry']).toBeUndefined()
+})
+
+test('an exit leaves no carry', async ($, on) => {
+  const { saved } = world(on)
+  await start($)
+  await callStatusTool($, blockedDecision())
+
+  await endSession($, SESSION_ID, 'prompt_input_exit')
+
+  expect(saved['clear-carry']).toBeUndefined()
 })
 
 test('/clear leaves the old session saved as it was', async ($, on) => {

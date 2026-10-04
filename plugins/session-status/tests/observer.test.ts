@@ -9,7 +9,9 @@ import {
   callStatusTool,
   endTurn,
   mountPane,
+  internalAgent,
   runCommand,
+  spawnSubagent,
   start,
   subagentStop,
   surprise,
@@ -36,6 +38,7 @@ function session($: Engine, w: World) {
       }
     },
     stop: async (agentId: string) => {
+      await spawnSubagent($, agentId)
       await subagentStop($, agentId)
       await w.clock.settle()
     },
@@ -100,6 +103,16 @@ test('the observer checks when a subagent finishes, only while the pane is open'
   expect(w.modelCalls).toHaveLength(1)
   await s.stop('agent-3')
   expect(w.modelCalls).toHaveLength(2)
+})
+
+test("Claude Code's own agents do not start a check", async ($, on) => {
+  const w = world(on)
+  await start($)
+  await runCommand($)
+  await internalAgent($, 'compact-1')
+  await w.clock.settle()
+
+  expect(w.modelCalls).toHaveLength(0)
 })
 
 test('a subagent check starts the turn interval again', async ($, on) => {
@@ -327,6 +340,7 @@ test('the observer adds no context for the main agent', async ($, on) => {
   await s.turns(4)
   expect((await endTurn($, 'All done.')).text).toBe('All done.')
   await w.clock.settle()
+  await spawnSubagent($, 'agent-1')
   expect(await subagentStop($, 'agent-1')).toEqual({})
   await w.clock.settle()
   expect(w.modelCalls).toHaveLength(2)

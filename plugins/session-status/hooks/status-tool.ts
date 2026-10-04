@@ -167,6 +167,11 @@ export function readStatusToolInput(
   }
 }
 
+// The texts the model reads back are plain facts about the status, with no
+// instruction in them: an imperative in a tool result reads to the model
+// like a prompt injection. What to do with a decision is in the tool's
+// description and the prompt section.
+
 /** What the model reads after a recorded item. */
 export function recordedText(item: StatusItem): string {
   if (item.kind === 'surprise') {
@@ -174,22 +179,22 @@ export function recordedText(item: StatusItem): string {
   }
 
   return item.urgency === 'blocked'
-    ? `Recorded decision ${item.id}: blocked on the user. Stop the work that needs it.`
-    : `Recorded decision ${item.id} for review later. Continue with the default: ${item.default}.`
+    ? `Recorded decision ${item.id} (blocked on the user).`
+    : `Recorded decision ${item.id} (review later). Default: ${item.default}.`
 }
 
 /** What the model reads after it closed an item. */
 export function closedText(item: StatusItem): string {
   return item.kind === 'decision'
-    ? `Resolved decision ${item.id}. It moved to the answered history.`
-    : `Dismissed surprise ${item.id}. It moved to the answered history.`
+    ? `Resolved decision ${item.id}. It is in the answered history now.`
+    : `Dismissed surprise ${item.id}. It is in the answered history now.`
 }
 
 /** What the model reads after `post_end_list`, given the decisions the list holds. */
 export function endListText(listed: readonly Decision[]): string {
   return listed.length === 0
-    ? 'No open review-later decisions: there is no end-of-work list to post.'
-    : `End-of-work list marked as posted. The pane highlights ${listed.map(d => d.id).join(', ')} until each is resolved.`
+    ? 'No open review-later decisions. No end-of-work list was marked as posted.'
+    : `End-of-work list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
 }
 
 /** A trimmed, non-empty string, or null. */

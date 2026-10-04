@@ -5,7 +5,9 @@ import {
   SESSION_ID,
   blockedDecision,
   callStatusTool,
+  internalAgent,
   runCommand,
+  spawnSubagent,
   start,
   subagentToolCall,
   surprise,
@@ -17,9 +19,18 @@ test('the first subagent start opens the pane', async ($, on) => {
   await start($)
   expect(panes.has(PLUGIN)).toBe(false)
 
-  await $.classic.SubagentStart({ agent_id: 'agent-1', agent_type: 'general-purpose' })
+  await spawnSubagent($, 'agent-1')
 
   expect(panes.has(PLUGIN)).toBe(true)
+})
+
+test("Claude Code's own agents do not open the pane", async ($, on) => {
+  const { panes } = world(on)
+  await start($)
+
+  await internalAgent($, 'compact-1')
+
+  expect(panes.has(PLUGIN)).toBe(false)
 })
 
 test('the first TaskCreated opens the pane', async ($, on) => {
@@ -141,7 +152,7 @@ test('the pane stays open after later triggers and events', async ($, on) => {
   const { panes } = world(on)
   await start($)
 
-  await $.classic.SubagentStart({ agent_id: 'agent-1', agent_type: 'general-purpose' })
+  await spawnSubagent($, 'agent-1')
   await $.classic.SubagentStop({
     agent_id: 'agent-1',
     agent_type: 'general-purpose',
@@ -174,7 +185,7 @@ test('a pane the person closed stays closed when a trigger comes', async ($, on)
   expect(panes.has(PLUGIN)).toBe(false)
 
   await callStatusTool($, surprise())
-  await $.classic.SubagentStart({ agent_id: 'agent-2', agent_type: 'general-purpose' })
+  await spawnSubagent($, 'agent-2')
 
   expect(panes.has(PLUGIN)).toBe(false)
 })

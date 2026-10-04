@@ -38,6 +38,11 @@ export type World = {
    * as the tool's record (`{ stdout }` for Bash). Other tools answer `ok`.
    */
   answer: (tool: string, result: (e: ToolCallInput) => unknown) => void
+  /**
+   * Empties the mod's values in `$.state`, as a `/clear` does: each reads as
+   * never written until the mod writes it again.
+   */
+  forgetState: () => void
   /** Moves the process on to another session id, as /clear and /resume do. */
   switchSession: (sessionId: string) => void
   /** The argv of each command the mod ran through `$.process.run`, in order. None runs for real. */
@@ -91,6 +96,8 @@ export function world(
     isNarrow?: boolean
     /** What `git branch --show-current` prints; git fails when absent. */
     branch?: string
+    /** Makes every Agent tool spawn refused, so no subagent starts. */
+    denySpawns?: boolean
   } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
@@ -166,6 +173,27 @@ export function world(
   })
   on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
   on('classic.*', () => ({}))
+  // An Agent tool call's spawn answers the started subagent's id: the call's `name`.
+  on('agent.spawn', (_$, e) =>
+    options.denySpawns === true ? { deny: 'Spawns are off.' } : { model: 'claude-test', agentId: e.name ?? 'agent' },
+  )
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  // `$.state` as a /clear leaves it: each value reads as never written, at
+  // the version it stood at then, until the mod writes it again.
+  let isForgotten = false
+  const forgottenAt = new Map<string, number>()
+  on('state.get', async (_$, e, next) => {
+    const answer = await next(e)
+    if (!isForgotten || answer.deny !== undefined) {
+      return answer
+    }
+    const { version } = answer.value
+    if (!forgottenAt.has(e.key)) {
+      forgottenAt.set(e.key, version)
+    }
+
+    return forgottenAt.get(e.key) === version ? { value: { version, value: undefined } } : answer
+  })
   on('session.messages', () => ({ value: messages }) as never)
   on('model.complete', async (_$, e) => {
     modelCalls.push(e)
@@ -192,6 +220,10 @@ export function world(
     answer: (tool, result) => {
       answers.set(tool, result)
     },
+    forgetState: () => {
+      isForgotten = true
+      forgottenAt.clear()
+    },
     switchSession: id => {
       sessionId = id
     },
@@ -206,6 +238,39 @@ export function world(
 /** Ends one main-loop turn as the query loop does; resolves to its result. */
 export function endTurn($: Engine, answer = 'Done.') {
   return $.turn.complete({ answer, durationMs: 1000, isAborted: false, turnId: 'turn', reason: 'answer' })
+}
+
+/**
+ * A subagent an Agent tool call starts, with `agentId` as its id: its classic
+ * SubagentStart fires while the spawn starts it, then the spawn answers.
+ */
+export async function spawnSubagent($: Engine, agentId: string) {
+  await $.classic.SubagentStart({ agent_id: agentId, agent_type: 'general-purpose' })
+  await $.agent.spawn({
+    tool_use_id: `toolu-${agentId}`,
+    prompt: 'Do the work',
+    description: 'Work',
+    subagentType: 'general-purpose',
+    provider: { plugin: 'engine', tier: 'core' },
+    parentModel: 'claude-test',
+    background: false,
+    fork: false,
+    name: agentId,
+  })
+}
+
+/**
+ * One of Claude Code's own agents (compaction and the like): it fires the
+ * classic SubagentStart and SubagentStop, but no Agent tool call spawned it.
+ */
+export async function internalAgent($: Engine, agentId: string) {
+  await $.classic.SubagentStart({ agent_id: agentId, agent_type: '' })
+  await subagentStop($, agentId)
+}
+
+/** Ends the session `sessionId` as a `/clear` or an exit does. */
+export function endSession($: Engine, sessionId: string, reason: 'clear' | 'prompt_input_exit' = 'clear') {
+  return $.session.end({ reason, sessionId, resume: { id: sessionId } })
 }
 
 /** A subagent finishing, as the classic SubagentStop event says it. */

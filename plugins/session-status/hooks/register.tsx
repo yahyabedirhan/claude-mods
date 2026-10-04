@@ -25,19 +25,24 @@ import {
   recordedText,
 } from './status-tool'
 import {
+  CARRY_KEY,
   KEPT_SESSIONS,
   applyChange,
+  clearCarry,
   closeItem,
   emptyStatus,
   keysToPrune,
   onEndList,
   openReviewLater,
+  readCarry,
   recordItem,
   savedStatus,
   statusForSession,
+  withCarry,
   withDefaults,
 } from './status'
-import { subagentStarted, subagentStopped } from './subagents'
+import type { ClearCarry } from './status'
+import { isRunningSubagent, subagentStarted, subagentStopped } from './subagents'
 import { taskCreated, taskUpdated } from './tasks'
 import { toolResultChange } from './tool-results'
 
@@ -69,17 +74,27 @@ const observerTurnsAtom = atom({ plugin: 'session-status', key: 'observerTurns' 
  * session's or none: the saved one on a resume, else the open decisions
  * carried over from the one held (a `/clear`), saved at once. A new session
  * also drops the oldest saved sessions beyond KEPT_SESSIONS.
+ *
+ * `carry` is what the session a `/clear` ended left in the store: its open
+ * decisions join the status even when `$.state` came through the `/clear`
+ * empty, or an earlier event already started the new session's status.
  */
-async function holdSession($: EngineInterface, sessionId: string): Promise<void> {
+async function holdSession(
+  $: EngineInterface,
+  sessionId: string,
+  carry: ClearCarry | null = null,
+): Promise<void> {
   const held = await read($, statusAtom)
-  if (held?.sessionId === sessionId) {
+  if (held?.sessionId === sessionId && carry === null) {
     return
   }
   const saved = savedStatus(await $.store.get(sessionId), sessionId)
   const now = await $.clock.now()
-  const status = await update($, statusAtom, current =>
-    statusForSession(current, sessionId, saved, now),
-  )
+  const status = await update($, statusAtom, current => {
+    const kept = statusForSession(current, sessionId, saved, now)
+
+    return carry === null ? kept : withCarry(kept ?? { ...emptyStatus(sessionId), updatedAt: now }, carry)
+  })
   // A restored status is saved as it was; a carried one is saved for the first time.
   if (status !== null) {
     await $.store.set(sessionId, status)
@@ -274,9 +289,29 @@ export const register: Register = on => {
   // Resume, /clear and fork move the process to another session id; the
   // status follows it (see holdSession). /compact keeps the session and its
   // status, so `compact` changes nothing, and no hook here touches the
-  // status on PreCompact, PostCompact or session.end.
+  // status on PreCompact or PostCompact.
+  //
+  // A /clear can empty `$.state`, so the session it ends saves what it carries
+  // over to the store, and the new session's SessionStart (source `clear`)
+  // takes it once. Only that SessionStart takes it, and only within
+  // CARRY_WINDOW_MS: a startup, a resume or another process never does.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') {
+      const ended = savedStatus(await $.store.get(e.sessionId), e.sessionId)
+      const carry = ended === null ? null : clearCarry(ended, await $.clock.now())
+      // No carry leaves no older one behind for this /clear's new session.
+      await (carry === null ? $.store.delete(CARRY_KEY) : $.store.set(CARRY_KEY, carry))
+    }
+
+    return next(e)
+  })
+
   on('classic.SessionStart', async ($, e, next) => {
-    if (e.source !== 'compact') {
+    if (e.source === 'clear') {
+      const carry = readCarry(await $.store.get(CARRY_KEY), e.session_id, await $.clock.now())
+      await $.store.delete(CARRY_KEY)
+      await holdSession($, e.session_id, carry)
+    } else if (e.source !== 'compact') {
       await holdSession($, e.session_id)
     }
 
@@ -390,15 +425,29 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('classic.SubagentStart', async ($, e, next) => {
-    await changeStatus($, status => subagentStarted(status, e.agent_id))
+  // The subagent counters count only the subagents an Agent tool call
+  // started: `agent.spawn` fires for those alone and answers the started
+  // agent's id. Claude Code's own agents (compaction and the like) fire the
+  // classic SubagentStart and SubagentStop too, but no `agent.spawn`, so
+  // SubagentStart moves nothing and a SubagentStop counts only an agent the
+  // counters hold as running.
+  on('agent.spawn', async ($, e, next) => {
+    const answer = await next(e)
+    const agentId = answer.deny === undefined ? answer.agentId : undefined
+    if (agentId !== undefined) {
+      await changeStatus($, status => subagentStarted(status, agentId))
+    }
 
-    return next(e)
+    return answer
   })
 
   on('classic.SubagentStop', async ($, e, next) => {
-    await changeStatus($, status => subagentStopped(status, e.agent_id))
-    startObserver($, 'subagent')
+    const sessionId = await $.session.id()
+    const held = withDefaults(await read($, statusAtom))
+    if (held?.sessionId === sessionId && isRunningSubagent(held, e.agent_id)) {
+      await changeStatus($, status => subagentStopped(status, e.agent_id))
+      startObserver($, 'subagent')
+    }
 
     return next(e)
   })

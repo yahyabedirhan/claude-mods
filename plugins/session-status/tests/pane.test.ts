@@ -7,6 +7,7 @@ import {
   mountPane,
   reviewLaterDecision,
   runCommand,
+  spawnSubagent,
   start,
   surprise,
   world,
@@ -97,7 +98,7 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
 
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
   await $.tool.call({ tool: 'Bash', command: 'gh pr create --fill' })
-  await $.classic.SubagentStart({ agent_id: 'agent-1', agent_type: 'general-purpose' })
+  await spawnSubagent($, 'agent-1')
 
   const order = [
     'doing-now',
