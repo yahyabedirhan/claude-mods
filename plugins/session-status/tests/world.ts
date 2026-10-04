@@ -32,6 +32,8 @@ export type World = {
   answer: (tool: string, result: (e: ToolCallInput) => unknown) => void
   /** Moves the process on to another session id, as /clear and /resume do. */
   switchSession: (sessionId: string) => void
+  /** The argv of each command the mod ran through `$.process.run`, in order. None runs for real. */
+  runs: string[][]
 }
 
 /** The engine's own system prompt beneath the mod: one shared section. */
@@ -46,7 +48,12 @@ export const BASE_SECTIONS = [{ id: 'intro', text: 'You are Claude Code.', scope
  */
 export function world(
   on: On,
-  options: { sessionId?: string; saved?: Record<string, unknown> } = {},
+  options: {
+    sessionId?: string
+    saved?: Record<string, unknown>
+    /** Makes every `$.process.run` fail as a missing command does, after it is recorded. */
+    failRuns?: boolean
+  } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
   const saved: Record<string, unknown> = { ...options.saved }
@@ -55,6 +62,7 @@ export function world(
   const commands: string[] = []
   const tools = new Map<string, ToolSpec>()
   const answers = new Map<string, (e: ToolCallInput) => unknown>()
+  const runs: string[][] = []
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
@@ -101,6 +109,14 @@ export function world(
   on('ui.panes', () => ({ value: [...panes.values()] }))
   on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
   on('classic.*', () => ({}))
+  on('process.run', (_$, e) => {
+    runs.push([...e.argv])
+    if (options.failRuns === true) {
+      throw new Error(`${e.argv[0]}: command not found`)
+    }
+
+    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
 
   return {
     clock,
@@ -108,6 +124,7 @@ export function world(
     panes,
     commands,
     tools,
+    runs,
     answer: (tool, result) => {
       answers.set(tool, result)
     },

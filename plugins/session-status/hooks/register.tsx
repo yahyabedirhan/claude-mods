@@ -10,6 +10,7 @@ import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
 import { INSTRUCTIONS } from './instructions'
 import { AGE_TICK_MS, drawPane } from './pane'
+import { blockedPing, endListPing, withdrawPing } from './pings'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
@@ -100,6 +101,24 @@ async function changeStatus(
   await $.store.set(stamp.sessionId, status)
 
   return status
+}
+
+// Shipyard pings.
+
+/**
+ * Runs a `shipyard ping` command and forgets it: queued on a timer so it
+ * never holds the status call, every failure (no shipyard, an error, a
+ * timeout) swallowed. The child inherits Claude Code's environment, so
+ * `--herdr` finds `$HERDR_PANE_ID` when Claude Code runs in Herdr.
+ */
+function sendPing($: EngineInterface, argv: string[]): void {
+  try {
+    $.clock.after(0, () => {
+      void $.process.run(argv, { timeoutMs: 10_000 }).catch(() => undefined)
+    })
+  } catch {
+    // A ping is a courtesy: the status call goes on without it.
+  }
 }
 
 // The pane.
@@ -199,7 +218,9 @@ export const register: Register = on => {
 
         return 'error' in closed ? status : closed.status
       })
-      // Ticket #7: withdraw a resolved blocking decision's ping here.
+      if (checked.item.kind === 'decision' && checked.item.urgency === 'blocked') {
+        sendPing($, withdrawPing(await $.session.id(), checked.item.id))
+      }
 
       return { result: closedText(checked.item) }
     }
@@ -210,9 +231,10 @@ export const register: Register = on => {
         return { result: endListText([]) }
       }
       const posted = await changeStatus($, status => ({ ...status, endListPostedAt: now }))
-      // Ticket #7: send the end-of-work ping with the count of open decisions here.
+      const listed = onEndList(posted)
+      sendPing($, endListPing(posted.sessionId, listed.map(item => item.id)))
 
-      return { result: endListText(onEndList(posted)) }
+      return { result: endListText(listed) }
     }
 
     let recorded: StatusItem | undefined
@@ -222,6 +244,10 @@ export const register: Register = on => {
 
       return next
     })
+
+    if (recorded?.kind === 'decision' && recorded.urgency === 'blocked') {
+      sendPing($, blockedPing(await $.session.id(), recorded))
+    }
 
     return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
   })
