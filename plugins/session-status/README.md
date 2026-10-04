@@ -13,54 +13,66 @@ claude plugin install session-status@claude-mods
 Sections, top to bottom. An empty section is not drawn.
 
 ```text
-Doing now        the current task, else the last tool call
+● In progress    the session's state: Blocked, In progress, Waiting for reply or Settled
+Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
-Review later     the newest 3, then "+N more"
-Session          Effort    video-review-v1       during an effort
-                 Branch    pane-width
+Session          Branch    pane-width
                  Worktree  claude-mods-8ec7ac/1
                  Landed 4/9 ████████░░░░          Tasks 2/5 outside an effort
                  Building: #3, #5
-                 PR claude-mods#14 · issue claude-mods#15
-Effort           Closed 1/13 █░░░░░░░░░░░         during an effort
-Places (2)       skills  PR skills#88 · 3 files · 2 commands
+Effort           video-review-v1                  during an effort
+                 Closed 1/13 █░░░░░░░░░░░         once the tracker counted it
+Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
+Places (2)       skills  3 files · 2 commands
                  docs  1 command
 Surprises        the newest 2, then "+N more"
+Review later     the newest 3, then "+N more"
 Subagents        running · finished
 Answered (N) · Last update
 ```
 
-1. **Doing now**: the current task, or the last tool call (its description,
-   file name or programs).
-2. **Blocked on you**: decisions that stop the work until you answer.
-3. **Review later**: decisions the agent made with a safe default, each with
-   that default.
+1. **State**: one word for the whole session, by priority.
+   - **Blocked** while a blocked decision is open.
+   - **In progress** while a turn or a subagent runs.
+   - **Waiting for reply** once the turn ended.
+   - **Settled** once a turn that ran `settle-session` or `settle-effort`
+     ended; the next turn clears it.
+2. **Now**: the current task, or the last tool call (its description, file
+   name or programs).
+3. **Blocked on you**: decisions that stop the work until you answer.
 4. **Session**: this session's own work, in every session.
-   - **Effort** (during an effort), **Branch** and **Worktree** (the two
-     folders above the repository folder). The full path stays in the status.
+   - **Branch** and **Worktree** (the two folders above the repository
+     folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
+     The full path stays in the status.
    - **Landed** during an effort: the tickets the orchestrator reported
      landed, of all it reported in this session. **Tasks** outside an
      effort: the task list's tasks done.
    - **Building**: the tickets the orchestrator builds now.
-   - The pull requests and issues created in this repository.
-5. **Effort**: the tracker's count, during an effort: closed tickets of all
-   the effort's issues. It never mixes in the orchestrator's reports.
-6. **Places**: the other repositories the session changed (see
+5. **Effort**, during an effort: its name, then the tracker's count once it
+   has one: closed tickets of all the effort's issues. It never mixes in the
+   orchestrator's reports.
+6. **Created**: the pull requests and issues the session made, in every
+   repository, newest 5 first, then "+N more".
+7. **Places**: the other repositories the session changed (see
    [Places](#places)).
-7. **Surprises**: unexpected things and what they changed. Observer findings
+8. **Surprises**: unexpected things and what they changed. Observer findings
    carry an `[observer]` tag.
-8. **Subagents**: running and finished.
-9. **Answered**: how many decisions were resolved and surprises dismissed.
-10. **Last update**: its time and age.
+9. **Review later**: decisions the agent made with a safe default, each with
+   that default.
+10. **Subagents**: running and finished.
+11. **Answered**: how many decisions were resolved and surprises dismissed.
+12. **Last update**: its time and age.
 
 Links go to GitHub when the repository's `origin` remote is there: the effort
 links its issues list (`label:effort:<name>`), the branch its tree, each
 ticket being built its issue, and each pull request, issue and place its page.
 
 Colour carries meaning, from Claude Code's theme, so it reads in light and
-dark themes: headings are bold and labels dim; blocked decisions and the
-end-of-work list take the warning colour, the bars the success colour, and
-item ids and the tickets being built the accent colour.
+dark themes: headings are bold and labels dim; the state line takes the
+warning colour when blocked, the success colour in progress, the accent
+colour waiting for a reply, and is dim when settled; blocked decisions and
+the end-of-work list take the warning colour, the bars the success colour,
+and item ids and the tickets being built the accent colour.
 
 When the terminal is too narrow for the pane, a one-line band above the
 prompt shows the counts instead:
@@ -132,14 +144,18 @@ The orchestrator reports each ticket with the `ticket` action:
 ## Places
 
 Places is the blast radius: every repository other than the session's own
-that the session, or one of its subagents, changed. Each line counts:
+that the session, or one of its subagents, changed files or ran changing
+commands in. Each line counts:
 
-- the pull requests and issues created there;
 - the files edited or written there (`Edit`, `Write`, `NotebookEdit`), each
   once;
 - the commands that changed something there: `git commit`, `push`, `merge`,
-  `rebase`, `tag`; `gh pr create`, `edit`, `merge`, `close`; `gh issue
-  create`, `edit`, `close`, `comment`; `mv`, `rm`, `cp`.
+  `rebase`, `tag`; `gh pr edit`, `merge`, `close`; `gh issue edit`, `close`,
+  `comment`; `mv`, `rm`, `cp`.
+
+The pull requests and issues made there show in **Created**, so `gh pr
+create` and `gh issue create` are not counted here. With one place its line
+shows alone; with two or more the heading `Places (N)` leads them.
 
 Reads never count. A file's repository comes from `git rev-parse
 --show-toplevel` in its folder, read once per folder in the background. A

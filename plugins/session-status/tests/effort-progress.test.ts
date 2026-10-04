@@ -127,7 +127,7 @@ test("during an effort the Effort section counts the effort's closed tickets, ap
   expect(ticketReads(w.runs)).toEqual([ticketListArgv('session-status')])
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { effort: 'session-status', done: 2, total: 3 } })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s*Closed 2\/3 █+░+$/)
+    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+session-status\s*Closed 2\/3 █+░+$/)
     expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
   }
 })
@@ -225,4 +225,14 @@ test('a read due while one runs waits for it, then runs once', async ($, on) => 
   await settle(w.clock)
   expect(ticketReads(w.runs)).toHaveLength(2)
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { done: 1, total: 1 } })
+})
+
+test('the Effort section names the effort before the tracker has counted it', async ($, on) => {
+  world(on)
+  await start($)
+  await bash($, LABEL)
+
+  for (const surface of SURFACES) {
+    expect(await sectionText($, surface, 'effort')).toBe('Effort  session-status')
+  }
 })

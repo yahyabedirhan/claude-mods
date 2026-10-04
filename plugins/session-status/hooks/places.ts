@@ -4,16 +4,18 @@
 // there. Reads never count. register.tsx asks git which repository holds a
 // folder; nothing here calls `$`.
 
-import type { CreatedLink, GitHubRepo, Place, SessionStatus } from '../types'
-import { isSameRepo, repoOf } from './place'
+import type { GitHubRepo, Place, SessionStatus } from '../types'
+import { isSameRepo } from './place'
 
 /**
  * The commands that change something, in one place: the git and gh
  * subcommands that commit, publish or edit, and the shell's file moves.
+ * `gh pr create` and `gh issue create` are left out: what they make shows in
+ * the Created section.
  */
 export const CHANGING_COMMANDS = {
   git: ['commit', 'push', 'merge', 'rebase', 'tag'],
-  gh: ['pr create', 'pr edit', 'pr merge', 'pr close', 'issue create', 'issue edit', 'issue close', 'issue comment'],
+  gh: ['pr edit', 'pr merge', 'pr close', 'issue edit', 'issue close', 'issue comment'],
   files: ['mv', 'rm', 'cp'],
 } as const
 
@@ -177,8 +179,6 @@ export type ShownPlace = {
   name: string
   /** The repository's GitHub page; null when it has none known. */
   url: string | null
-  /** The pull requests and issues created there, oldest first. */
-  links: CreatedLink[]
   files: number
   commands: number
 }
@@ -186,8 +186,8 @@ export type ShownPlace = {
 /**
  * The other repositories the session changed, in the order it first changed
  * them: every place but the session's own repository, one per GitHub
- * repository, with the pages created there. The session's own pages show in
- * the Session section instead.
+ * repository, each with files or commands to count. The pages created
+ * anywhere show in the Created section.
  */
 export function shownPlaces(status: SessionStatus): ShownPlace[] {
   const own = status.place
@@ -204,25 +204,11 @@ export function shownPlaces(status: SessionStatus): ShownPlace[] {
     shown.set(group, {
       name: seen?.name ?? place.name,
       url: seen?.url ?? place.repo?.url ?? null,
-      links: [],
       files: (seen?.files ?? 0) + place.files.length,
       commands: (seen?.commands ?? 0) + place.commands,
     })
   }
-  if (own === null) {
-    // The session's repository is unknown: its pages all show in the Session section.
-    return [...shown.values()]
-  }
-  for (const link of status.links) {
-    if (isOwnRepo(link.repo)) {
-      continue
-    }
-    const group = groupOf(link.repo, link.repo)
-    const seen = shown.get(group) ?? { name: repoName(link.repo), url: repoOf(link.repo).url, links: [], files: 0, commands: 0 }
-    shown.set(group, { ...seen, url: seen.url ?? repoOf(link.repo).url, links: [...seen.links, link] })
-  }
-
-  return [...shown.values()]
+  return [...shown.values()].filter(place => place.files + place.commands > 0)
 }
 
 /** A repository's name without its owner. */

@@ -9,7 +9,7 @@ export const doingNowSection: Section = ({ ui, status }) => {
 
   return (
     <Box key="doing-now" flexDirection="column">
-      <Text bold>Doing now</Text>
+      <Text bold>Now</Text>
       {task !== null ? (
         <Text wrap="truncate-end">{`Task: ${task.activeForm ?? task.subject}`}</Text>
       ) : doing === null ? (

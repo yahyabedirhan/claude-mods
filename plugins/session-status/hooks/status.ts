@@ -110,6 +110,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     ticketReports: [],
     place: null,
     places: [],
+    activity: null,
     updatedAt: null,
   }
 }

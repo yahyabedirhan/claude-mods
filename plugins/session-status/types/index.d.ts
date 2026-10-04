@@ -219,6 +219,13 @@ export type Place = {
 }
 
 /** One session's status, as held in `$.state` and saved to `$.store`. */
+/**
+ * What the session does: a turn runs (`working`), a turn that ran a settle
+ * skill runs (`settling`), the last turn ended (`waiting`), or it ended after
+ * a settle skill (`settled`).
+ */
+export type Activity = 'working' | 'settling' | 'waiting' | 'settled'
+
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
   version: 1
@@ -254,6 +261,8 @@ export type SessionStatus = {
   place: SessionPlace | null
   /** The repositories the session changed, the first changed first; the Places section shows the others. */
   places: Place[]
+  /** What the session does: null before its first turn. */
+  activity: Activity | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

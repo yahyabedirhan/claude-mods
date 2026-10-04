@@ -276,6 +276,7 @@ export function world(
           : { isAnswered: true, text, usage: MODEL_USAGE },
     } as never
   })
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   // The engine's own band beneath the mod: nothing above the prompt.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => h($.ui.resolve(e).Box, { key: 'engine-band' }) as never)
@@ -364,6 +365,11 @@ function gitAnswer(repos: readonly GitRepo[], argv: readonly string[]) {
 }
 
 /** Ends one main-loop turn as the query loop does; resolves to its result. */
+/** Starts a main-loop turn, as the person's prompt does. */
+export function startTurn($: Engine, text = 'Go on.') {
+  return $.turn.start({ text, turnId: 'turn' })
+}
+
 export function endTurn($: Engine, answer = 'Done.') {
   return $.turn.complete({ answer, durationMs: 1000, isAborted: false, turnId: 'turn', reason: 'answer' })
 }

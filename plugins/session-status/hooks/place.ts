@@ -3,7 +3,7 @@
 // nothing here calls `$`. Links are external `https://github.com` pages
 // only, never `file://`.
 
-import type { CreatedLink, GitHubRepo, SessionPlace, SessionStatus } from '../types'
+import type { GitHubRepo, SessionPlace, SessionStatus } from '../types'
 
 /**
  * The GitHub repository a remote URL names: `git@github.com:o/r.git`,
@@ -84,14 +84,4 @@ export function withPlace(status: SessionStatus, place: SessionPlace): SessionSt
     known.repo?.slug === place.repo?.slug
 
   return isSame ? status : { ...status, place }
-}
-
-/**
- * Whether a created page belongs to the session's own repository. With that
- * repository unknown, every page does: the Session section shows them all.
- */
-export function isSessionLink(status: SessionStatus, link: Pick<CreatedLink, 'repo'>): boolean {
-  const repo = status.place?.repo
-
-  return repo == null || isSameRepo(repo.slug, link.repo)
 }

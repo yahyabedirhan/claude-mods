@@ -7,6 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
+import { afterTurn, settles } from './activity'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
@@ -514,6 +515,9 @@ export const register: Register = on => {
     if (sighting !== null) {
       await effortSeen($, sighting.name)
     }
+    if (settles(e as { tool: string; skill?: unknown })) {
+      await changeStatus($, status => ({ ...status, activity: 'settling' }))
+    }
     const answer = await next(e)
     const change = toolResultChange(e, answer, await $.clock.now())
     await changeStatus($, change ?? (status => status))
@@ -573,9 +577,19 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Only the main loop's turns count toward the observer's interval.
+  // A turn that starts puts the session in progress, a settled one too.
+  on('turn.start', async ($, e, next) => {
+    await changeStatus($, status => (status.activity === 'working' ? status : { ...status, activity: 'working' }))
+
+    return next(e)
+  })
+
+  // The main loop's turn ends: the session waits for a reply, or is settled
+  // when a settle skill ran in it. Only these turns count toward the
+  // observer's interval.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
+      await changeStatus($, status => ({ ...status, activity: afterTurn(status.activity) }))
       startObserver($, 'turn')
     }
 

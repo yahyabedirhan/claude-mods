@@ -1,14 +1,14 @@
-import { linkLabel } from '../links'
 import { shownPlaces } from '../places'
 import type { ShownPlace } from '../places'
 import type { Section, Ui } from './section'
 
 /**
- * The blast radius: the other repositories the session changed, one line
- * each, `skills  PR skills#88 · 3 files · 2 commands`, a part left out when
- * it is zero. The repository's name links to its page, each pull request and
- * issue to its own. With two or more the heading `Places (N)` leads them;
- * one place is its line alone. Drawn only when there is one.
+ * The blast radius: the other repositories the session changed files in or
+ * ran changing commands in, one line each, `skills  3 files · 2 commands`, a
+ * part left out when it is zero. The repository's name links to its page;
+ * the pull requests and issues made there are the Created section's. With
+ * two or more the heading `Places (N)` leads them; one place is its line
+ * alone. Drawn only when there is one.
  */
 export const placesSection: Section = ({ ui, status }) => {
   const { Box, Text } = ui
@@ -35,14 +35,7 @@ function placeLine(ui: Ui, place: ShownPlace) {
   return (
     <Text key={`place-${place.name}-${place.url ?? ''}`}>
       {place.url === null ? place.name : <Link href={place.url} label={place.name} />}
-      {'  '}
-      {place.links.map((link, index) => (
-        <Text key={link.url}>
-          {`${index === 0 ? '' : ' · '}${link.kind === 'pr' ? 'PR' : 'issue'} `}
-          <Link href={link.url} label={linkLabel(link)} />
-        </Text>
-      ))}
-      {`${place.links.length > 0 && counts.length > 0 ? ' · ' : ''}${counts.join(' · ')}`}
+      <Text dimColor>{`  ${counts.join(' · ')}`}</Text>
     </Text>
   )
 }

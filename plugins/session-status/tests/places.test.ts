@@ -57,7 +57,7 @@ test('files edited or written in another repository count once each; reads and t
   })
 })
 
-test('commands that change something count where they ran, with the pages created there', async ($, on) => {
+test('commands that change something count where they ran; the pages made there are in Created', async ($, on) => {
   const w = twoRepos(on)
   w.answer('Bash', e =>
     (e as unknown as { command: string }).command.startsWith('gh pr create')
@@ -75,7 +75,8 @@ test('commands that change something count where they ran, with the pages create
   await settle(w)
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'places')).toBe('skills  PR skills#88 · 5 commands')
+    expect(await sectionText($, surface, 'places')).toBe('skills  4 commands')
+    expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88')
     const ui = await mountPane($, surface)
     const links = (await ui.findAll({ type: 'Link' })).map(link => [link.text, link.props.href])
     await ui.unmount()
@@ -119,7 +120,8 @@ test('a command names where each changing step runs', () => {
   ])
   expect(commandTargets('git -C /x/repo -c a=b merge main', '/w')).toEqual([{ dir: '/x/repo' }])
   expect(commandTargets('gh pr merge 3 -R octo/skills --squash', '/w')).toEqual([{ slug: 'octo/skills' }])
-  expect(commandTargets('gh issue create --repo=octo/docs --title x', '/w')).toEqual([{ slug: 'octo/docs' }])
+  expect(commandTargets('gh issue edit 3 --repo=octo/docs --title x', '/w')).toEqual([{ slug: 'octo/docs' }])
+  expect(commandTargets('gh issue create --repo=octo/docs --title x', '/w')).toEqual([])
   expect(commandTargets('gh pr view 3 --repo octo/skills', '/w')).toEqual([])
   expect(commandTargets('gh issue close 4', '/w')).toEqual([{ dir: '/w' }])
   expect(commandTargets('mv -f a/b.md /x/c.md', '/w')).toEqual([{ dir: '/w/a' }])
@@ -143,4 +145,18 @@ test('the status keeps the places that changed last, and each place the files to
   expect(kept.some(p => p.key === '/r/1')).toBe(false)
   expect(kept[0]?.files).toHaveLength(CAP)
   expect(kept[0]?.files[0]).toBe('/r/0/1')
+})
+
+test('a repository where the session only made a pull request is in Created, not in Places', async ($, on) => {
+  const w = twoRepos(on)
+  w.answer('Bash', () => ({ stdout: `${SKILLS_URL}/pull/88\n`, stderr: '' }))
+  await start($)
+  await settle(w)
+  await bash($, 'gh pr create --repo octo/skills --fill')
+  await settle(w)
+
+  for (const surface of SURFACES) {
+    expect(await sectionText($, surface, 'places')).toBeUndefined()
+    expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88')
+  }
 })

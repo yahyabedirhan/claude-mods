@@ -51,7 +51,7 @@ test('outside an effort the Session section shows the branch and the worktree, w
   }
 })
 
-test('during an effort the Session section links the effort and the tickets being built', async ($, on) => {
+test('during an effort the Effort section links the effort and Session the tickets being built', async ($, on) => {
   const w = inWorktree(on)
   await start($)
   await settle(w)
@@ -59,17 +59,18 @@ test('during an effort the Session section links the effort and the tickets bein
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toMatch(/^Session\s*Effort\s+video-review-v1\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Landed 0\/1/)
+    expect(text).toMatch(/^Session\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Landed 0\/1/)
+    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+video-review-v1$/)
     expect(text).toContain('Building: #3')
     expect(await paneLinks($, surface)).toEqual([
-      ['video-review-v1', `${REPO_URL}/issues?q=label%3Aeffort%3Avideo-review-v1`],
       ['pane-width', `${REPO_URL}/tree/pane-width`],
       ['#3', `${REPO_URL}/issues/3`],
+      ['video-review-v1', `${REPO_URL}/issues?q=label%3Aeffort%3Avideo-review-v1`],
     ])
   }
 })
 
-test("the Session section lists this repository's created pages; another repository's stay out", async ($, on) => {
+test('the Created section lists the pages made in every repository, newest first', async ($, on) => {
   const w = inWorktree(on)
   const printed: Record<string, string> = {
     'gh pr create --fill': `${REPO_URL}/pull/14\n`,
@@ -84,9 +85,8 @@ test("the Session section lists this repository's created pages; another reposit
   }
 
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('PR claude-mods#14 · issue claude-mods#15')
-    expect(text).not.toContain('skills')
+    expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88 · issue claude-mods#15 · PR claude-mods#14')
+    expect(await sectionText($, surface, 'session')).not.toContain('#14')
     expect(await paneLinks($, surface)).toContainEqual(['claude-mods#14', `${REPO_URL}/pull/14`])
   }
 })

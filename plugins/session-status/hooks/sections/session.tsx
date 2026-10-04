@@ -1,10 +1,9 @@
 import type { RenderNode } from 'claude-code'
 
 import type { TicketReport } from '../../types'
-import { linkLabel } from '../links'
 import { first } from '../lists'
 import { COLOR } from '../palette'
-import { branchUrl, effortUrl, isSessionLink, issueUrl, worktreeLabel } from '../place'
+import { branchUrl, issueUrl, worktreeLabel } from '../place'
 import { sessionProgress } from '../session-progress'
 import { ticketShortName } from '../ticket-reports'
 import { barCells, progressBar } from './bar'
@@ -17,26 +16,21 @@ const BUILDING_SHOWN = 4
 const LABEL_CELLS = 9
 
 /**
- * This session's own work, in every session: the effort (during one), the
- * branch and the worktree; during an effort, the tickets the orchestrator
- * reported landed of all it reported and the ones it builds now, else the
- * task list's tasks done; and the pull requests and issues created in this
- * repository. Never the tracker's count: that is the Effort section's.
- * Drawn once any of it is known.
+ * This session's own work, in every session: the branch and the worktree;
+ * during an effort, the tickets the orchestrator reported landed of all it
+ * reported and the ones it builds now, else the task list's tasks done.
+ * The effort's name and the tracker's count are the Effort section's, the
+ * created pages the Created section's. Drawn once any of it is known.
  */
 export const sessionSection: Section = ({ ui, status, columns }) => {
-  const { Box, Link, Text } = ui
+  const { Box, Text } = ui
   if (status === null) {
     return null
   }
-  const { effort, place } = status
+  const { place } = status
   const repo = place?.repo ?? null
   const progress = sessionProgress(status)
-  const links = status.links.filter(link => isSessionLink(status, link))
   const lines: RenderNode[] = []
-  if (effort !== null) {
-    lines.push(labelled(ui, 'Effort', effort.name, repo === null ? null : effortUrl(repo, effort.name)))
-  }
   if (place !== null && place.branch !== null) {
     lines.push(labelled(ui, 'Branch', place.branch, repo === null ? null : branchUrl(repo, place.branch)))
   }
@@ -54,18 +48,6 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
   }
   if (progress?.source === 'tickets' && progress.building.length > 0) {
     lines.push(building(ui, progress.building, repo === null ? null : number => issueUrl(repo, number)))
-  }
-  if (links.length > 0) {
-    lines.push(
-      <Text key="session-links">
-        {links.map((link, index) => (
-          <Text key={link.url}>
-            {`${index === 0 ? '' : ' · '}${link.kind === 'pr' ? 'PR' : 'issue'} `}
-            <Link href={link.url} label={linkLabel(link)} />
-          </Text>
-        ))}
-      </Text>,
-    )
   }
   if (lines.length === 0) {
     return null
