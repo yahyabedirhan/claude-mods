@@ -140,5 +140,6 @@ test('a remote URL names its GitHub repository; other hosts name none', () => {
 
 test('the worktree is named by the two folders above the repository folder', () => {
   expect(worktreeLabel(ROOT)).toBe('claude-mods-8ec7ac/1')
+  expect(worktreeLabel('/x/claude-mods/.claude/worktrees/agent-x')).toBe('worktrees/agent-x')
   expect(worktreeLabel('/repo')).toBe('')
 })

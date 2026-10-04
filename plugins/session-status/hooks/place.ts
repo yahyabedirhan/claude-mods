@@ -35,10 +35,16 @@ export function isSameRepo(a: string, b: string): boolean {
 /**
  * The worktree as the pane names it: the two folders above the repository
  * folder, `claude-mods-8ec7ac/1` for `/x/.treehouse/claude-mods-8ec7ac/1/claude-mods`.
+ * A worktree kept in a `worktrees` folder is named by its own folder instead,
+ * `worktrees/agent-x` for `/x/claude-mods/.claude/worktrees/agent-x`.
  * The full path stays in the status and is never shown.
  */
 export function worktreeLabel(root: string): string {
   const folders = root.split(/[\\/]/).filter(folder => folder !== '')
+
+  if (folders.at(-2) === 'worktrees') {
+    return folders.slice(-2).join('/')
+  }
 
   return folders.slice(-3, -1).join('/')
 }

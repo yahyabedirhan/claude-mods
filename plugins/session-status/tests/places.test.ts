@@ -47,7 +47,7 @@ test('files edited or written in another repository count once each; reads and t
   await settle(w)
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'places')).toBe('Placesskills  2 files')
+    expect(await sectionText($, surface, 'places')).toBe('skills  2 files')
   }
   expect(w.saved[SESSION_ID]).toMatchObject({
     places: [
@@ -75,7 +75,7 @@ test('commands that change something count where they ran, with the pages create
   await settle(w)
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'places')).toBe('Placesskills  PR skills#88 · 5 commands')
+    expect(await sectionText($, surface, 'places')).toBe('skills  PR skills#88 · 5 commands')
     const ui = await mountPane($, surface)
     const links = (await ui.findAll({ type: 'Link' })).map(link => [link.text, link.props.href])
     await ui.unmount()
