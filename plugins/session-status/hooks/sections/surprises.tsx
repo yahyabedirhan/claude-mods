@@ -1,6 +1,6 @@
 import type { Surprise } from '../../types'
 import { isOpen } from '../status'
-import { newest } from './section'
+import { newest } from '../lists'
 import type { Section } from './section'
 
 /** How many surprises the pane shows; the rest are "+N more". */

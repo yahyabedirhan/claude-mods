@@ -60,12 +60,16 @@ export function branchEffortName(stdout: string): string | null {
 }
 
 /**
- * The status with the effort it runs: the first name found holds, except
- * that a name from a label replaces one taken from the branch.
+ * The status with the effort it runs. A ticket report's name always wins: a
+ * report for another effort switches the session to it. Otherwise the first
+ * name found holds, except that a label's name replaces a branch's.
  */
 export function withEffort(status: SessionStatus, found: Effort): SessionStatus {
   const known = status.effort
-  if (known !== null && (known.from === 'label' || found.from !== 'label')) {
+  if (found.from === 'report') {
+    return known?.name === found.name ? status : { ...status, effort: found }
+  }
+  if (known !== null && (known.from === 'label' || known.from === 'report' || found.from !== 'label')) {
     return status
   }
 

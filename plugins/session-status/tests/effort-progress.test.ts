@@ -5,9 +5,9 @@ import {
   TICKET_REFRESH_MS,
   TICKET_RETRY_MS,
   changesTickets,
+  effortProgress,
   isTicketReadDue,
   parseTicketList,
-  shownProgress,
   ticketListArgv,
 } from '../hooks/effort-progress'
 import { emptyStatus } from '../hooks/status'
@@ -60,8 +60,8 @@ test('the count is closed tickets of all tickets, without the spec issue', () =>
     ghIssue(4, 'Effort progress from tickets'),
     ghIssue(5, 'SPEC: an older spec', 'CLOSED'),
   ]
-  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3, closed: [2, 3], open: [4] })
-  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0, closed: [], open: [] })
+  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3 })
+  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0 })
   expect(parseTicketList('not json')).toBeNull()
   expect(parseTicketList('{"number":1}')).toBeNull()
 })
@@ -100,23 +100,17 @@ test('without a count for the effort, a read is due again after thirty seconds',
   expect(isTicketReadDue(status, last, { tool: 'Read' }, 1000 + TICKET_RETRY_MS)).toBe(true)
 })
 
-test('tickets show only for the effort they were counted for', () => {
-  const tasks = { done: 1, total: 4, current: 'Write tests' }
-  const base = { ...emptyStatus(SESSION_ID), progress: tasks }
+test('the effort count shows only for the effort it was counted for, and only with tickets', () => {
+  const base = emptyStatus(SESSION_ID)
   const tickets = { effort: 'e', done: 3, total: 9, at: 0 }
-  expect(shownProgress({ ...base, effort: { name: 'e' }, tickets })).toEqual({
-    source: 'tickets',
-    done: 3,
-    total: 9,
-    current: 'Write tests',
-    building: [],
-  })
-  expect(shownProgress({ ...base, effort: { name: 'f' }, tickets })).toEqual({ source: 'tasks', ...tasks, building: [] })
-  expect(shownProgress({ ...base, tickets })).toEqual({ source: 'tasks', ...tasks, building: [] })
-  expect(shownProgress(emptyStatus(SESSION_ID))).toBeNull()
+  expect(effortProgress({ ...base, effort: { name: 'e' }, tickets })).toEqual({ closed: 3, total: 9 })
+  expect(effortProgress({ ...base, effort: { name: 'f' }, tickets })).toBeNull()
+  expect(effortProgress({ ...base, tickets })).toBeNull()
+  expect(effortProgress({ ...base, effort: { name: 'e' }, tickets: { ...tickets, done: 0, total: 0 } })).toBeNull()
+  expect(effortProgress(base)).toBeNull()
 })
 
-test("during an effort the progress section counts the effort's tickets", async ($, on) => {
+test("during an effort the Effort section counts the effort's closed tickets, apart from the session's tasks", async ($, on) => {
   const w = world(on, {
     issues: [
       ghIssue(1, 'Spec: session status'),
@@ -133,9 +127,8 @@ test("during an effort the progress section counts the effort's tickets", async 
   expect(ticketReads(w.runs)).toEqual([ticketListArgv('session-status')])
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { effort: 'session-status', done: 2, total: 3 } })
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'progress')) ?? ''
-    expect(text).toContain('Tickets 2/3 done')
-    expect(text).toContain('Current: Build ticket 4')
+    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s*Closed 2\/3 █+░+$/)
+    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
   }
 })
 
@@ -151,9 +144,8 @@ test('outside an effort progress comes from the task list and gh never runs', as
 
   expect(ticketReads(w.runs)).toEqual([])
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'progress')) ?? ''
-    expect(text).toContain('Tasks 0/2 done')
-    expect(text).toContain('Current: Write the parser')
+    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/2')
+    expect(await sectionText($, surface, 'effort')).toBeUndefined()
   }
 })
 
@@ -199,7 +191,7 @@ test('a failed read keeps the last good count and never fails the tool call', as
   expect(ticketReads(w.runs)).toHaveLength(2)
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { done: 1, total: 2 } })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'progress')).toContain('Tickets 1/2 done')
+    expect(await sectionText($, surface, 'effort')).toContain('Closed 1/2')
   }
 })
 

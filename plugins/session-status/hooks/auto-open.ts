@@ -15,7 +15,7 @@ export function meetsAutoOpenTrigger(status: SessionStatus): boolean {
     subagents.running.length + subagents.finished.length > 0 ||
     status.tasks.length > 0 ||
     status.effort !== null ||
-    (status.ticketReports ?? []).length > 0 ||
+    status.ticketReports.length > 0 ||
     status.items.length > 0
   )
 }

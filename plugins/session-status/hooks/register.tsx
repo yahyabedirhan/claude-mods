@@ -15,7 +15,6 @@ import {
   TICKET_TIMEOUT_MS,
   isTicketReadDue,
   parseTicketList,
-  shownProgress,
   ticketListArgv,
   withTickets,
 } from './effort-progress'
@@ -24,6 +23,7 @@ import { isCheckDue, observerRequest, parseFindings, recordCheck } from './obser
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
 import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
+import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
@@ -113,7 +113,7 @@ async function holdSession(
   const saved = savedStatus(await $.store.get(sessionId), sessionId)
   const now = await $.clock.now()
   const status = await update($, statusAtom, current => {
-    const kept = statusForSession(current, sessionId, saved, now, clear !== null)
+    const kept = statusForSession(withDefaults(current), sessionId, saved, now, clear !== null)
 
     return carry === null ? kept : withCarry(kept ?? { ...emptyStatus(sessionId), updatedAt: now }, carry)
   })
@@ -409,8 +409,8 @@ export const register: Register = on => {
   })
 
   // The status tool: the model records a decision or a surprise, closes one,
-  // marks the end-of-work list posted, or reports a ticket's state. The matcher spells STATUS_TOOL
-  // out, so `claude plugin validate` can read it.
+  // marks the end-of-work list posted, or reports a ticket's state. The
+  // matcher spells STATUS_TOOL out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
     if ('error' in input) {
@@ -451,22 +451,23 @@ export const register: Register = on => {
 
     if ('ticket' in input) {
       const request = input.ticket
-      const checked = reportTicket(await currentStatus($), request, now)
-      if ('error' in checked) {
-        return { deny: checked.error }
-      }
+      // The reply comes from the change the status took, not from a check
+      // made before it: another change can land in between.
+      let outcome: ReturnType<typeof reportTicket> | undefined
       const reported = await changeStatus($, status => {
-        const next = reportTicket(status, request, now)
+        outcome = reportTicket(status, request, now)
 
-        return 'error' in next ? status : next.status
+        return 'error' in outcome ? status : outcome.status
       })
-      // A ticket report shows an effort run, as a call to an effort skill does:
-      // it names the effort from its `effort` field or, failing that, the branch.
-      await effortSeen($, request.effort ?? null)
+      if (outcome === undefined || 'error' in outcome) {
+        return { deny: outcome?.error ?? 'The ticket was not reported.' }
+      }
+      // A ticket report shows an effort run, as a call to an effort skill does.
+      // One without an `effort` field names it after the branch while it has none.
+      await effortSeen($, null)
       await countTicketsIfDue($, e)
-      const shown = shownProgress(withDefaults(await read($, statusAtom)) ?? reported)
 
-      return { result: ticketText(checked.ticket, request.state, checked.changed, shown) }
+      return { result: ticketText(request, outcome, sessionProgress(reported)) }
     }
 
     let recorded: StatusItem | undefined

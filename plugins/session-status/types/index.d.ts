@@ -84,9 +84,9 @@ export type Task = {
 }
 
 /**
- * How far the work is: tasks done, the total and the task that runs now.
- * Taken from the task list; during an effort, or once the orchestrator reports
- * a ticket, the pane shows the tickets instead.
+ * How far the task list is: tasks done, the total and the task that runs
+ * now. During an effort the Session section counts the reported tickets
+ * instead, once the orchestrator reports one.
  */
 export type Progress = {
   done: number
@@ -131,10 +131,11 @@ export type Effort = {
   /** The effort's name, as its `effort:<name>` label writes it. */
   name: string
   /**
-   * Where the name came from: an `effort:<name>` label, or the session's git
-   * branch when an effort skill ran before any label showed.
+   * Where the name came from: a ticket report's `effort`, an `effort:<name>`
+   * label, or the session's git branch when an effort skill ran before any
+   * label showed. A report's name always wins; a label's wins over a branch's.
    */
-  from?: 'label' | 'branch'
+  from?: 'report' | 'label' | 'branch'
 }
 
 /**
@@ -151,10 +152,6 @@ export type TicketCount = {
   done: number
   /** All tickets, open and closed; the spec issue is not one. */
   total: number
-  /** The issue numbers of the closed tickets; absent on a count saved before reports. */
-  closed?: number[]
-  /** The issue numbers of the open tickets; absent on a count saved before reports. */
-  open?: number[]
   /** When it was counted, in `$.clock.now()` milliseconds. */
   at: number
 }
@@ -172,6 +169,16 @@ export type TicketReport = {
   state: 'started' | 'landed'
   /** When it reached this state, in `$.clock.now()` milliseconds. */
   at: number
+  /**
+   * The effort the ticket belongs to; absent on a report made before any
+   * effort was named, which belongs to the effort that runs now.
+   */
+  effort?: string
+  /**
+   * When a started ticket first landed: it is rework, and a `stopped` takes
+   * it back to landed at this time. Absent on a ticket that never landed.
+   */
+  landedAt?: number
 }
 
 /** One session's status, as held in `$.state` and saved to `$.store`. */
@@ -185,7 +192,7 @@ export type SessionStatus = {
   items: StatusItem[]
   /** The task list, in the order the tasks were created. */
   tasks: Task[]
-  /** How far the task list is; null before the first task. See `shownProgress`. */
+  /** How far the task list is; null before the first task. See `sessionProgress`. */
   progress: Progress | null
   /** The pull requests and issues created, oldest first. */
   links: CreatedLink[]
@@ -199,11 +206,11 @@ export type SessionStatus = {
   observer: ObserverRecord
   /** The effort the session runs; null when it runs none. */
   effort: Effort | null
-  /** The effort's tickets last counted; null before the first count. Progress shows it during the effort. */
+  /** The effort's tickets last counted; null before the first count. The Effort section shows it. */
   tickets: TicketCount | null
   /**
    * The tickets the orchestrator reported, in the order it first named them.
-   * Progress counts a landed one as done and names the started ones.
+   * The Session section counts the current effort's: landed of all reported.
    */
   ticketReports: TicketReport[]
   /** When the status last changed, in `$.clock.now()` milliseconds. */

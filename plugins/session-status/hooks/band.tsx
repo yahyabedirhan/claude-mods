@@ -1,53 +1,46 @@
-// The band above the prompt: counts, and the tickets in progress, for a
-// terminal too narrow to place the pane. Whether the pane waits is read in register.tsx, where `$` is.
+// The band above the prompt: counts only, for a terminal too narrow to place
+// the pane. Whether the pane waits is read in register.tsx, where `$` is.
 
 import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { SessionStatus } from '../types'
-import { shownProgress } from './effort-progress'
+import { effortProgress } from './effort-progress'
+import { sessionProgress } from './session-progress'
 import { isOpen } from './status'
-import { ticketShortName } from './ticket-reports'
 
-/** The counts the band shows; resolved items are left out. */
-export type BandCounts = {
-  blocked: number
-  review: number
-  done: number
-  total: number
-  surprises: number
-}
-
-/** The open items of each kind, and the tickets or tasks done of the total. */
-export function bandCounts(status: SessionStatus | null): BandCounts {
+/** The open decisions of each urgency and the open surprises; resolved items are left out. */
+function openCounts(status: SessionStatus | null): { blocked: number; review: number; surprises: number } {
   const open = (status?.items ?? []).filter(isOpen)
-  const progress = shownProgress(status)
   const decisions = open.filter(item => item.kind === 'decision')
 
   return {
     blocked: decisions.filter(item => item.urgency === 'blocked').length,
     review: decisions.filter(item => item.urgency === 'review_later').length,
-    done: progress?.done ?? 0,
-    total: progress?.total ?? 0,
     surprises: open.filter(item => item.kind === 'surprise').length,
   }
 }
 
-/** The most tickets in progress the band names; the rest show as `+N`. */
-const BUILDING_SHOWN = 3
-
 /**
- * `<n> blocked · <n> review · <done>/<total> done · <n> surprise`, with
- * ` · building #3, #5` after the done count while the orchestrator builds
- * tickets.
+ * `<n> blocked · <n> review · <session> · <effort> · <n> surprise`. The
+ * session figure is `landed 4/9` once the orchestrator reports tickets, else
+ * the tasks' `<done>/<total> done`; the effort figure, `closed 1/13`, shows
+ * only while the tracker counts the effort's tickets.
  */
 export function bandText(status: SessionStatus | null): string {
-  const { blocked, review, done, total, surprises } = bandCounts(status)
-  const building = shownProgress(status)?.building ?? []
-  const names = building.slice(0, BUILDING_SHOWN).map(ticketShortName)
-  const more = building.length > names.length ? [`+${building.length - names.length}`] : []
-  const now = names.length === 0 ? '' : ` · building ${[...names, ...more].join(', ')}`
+  const { blocked, review, surprises } = openCounts(status)
+  const session = sessionProgress(status)
+  const effort = effortProgress(status)
+  const parts = [
+    `${blocked} blocked`,
+    `${review} review`,
+    session?.source === 'tickets'
+      ? `landed ${session.done}/${session.total}`
+      : `${session?.done ?? 0}/${session?.total ?? 0} done`,
+    ...(effort === null ? [] : [`closed ${effort.closed}/${effort.total}`]),
+    `${surprises} surprise`,
+  ]
 
-  return `${blocked} blocked · ${review} review · ${done}/${total} done${now} · ${surprises} surprise`
+  return parts.join(' · ')
 }
 
 /** The band's tree: one line in a Box keyed `session-status-band`. */
@@ -56,7 +49,7 @@ export function drawBand(
   status: SessionStatus | null,
 ): RenderElement {
   const { Box, Text } = ui
-  const isBlocked = bandCounts(status).blocked > 0
+  const isBlocked = openCounts(status).blocked > 0
 
   return (
     <Box key="session-status-band">

@@ -5,12 +5,13 @@
 // One tool with an `action` field: it records items, closes them, marks
 // the end-of-work list as posted and reports a ticket's state.
 
-import type { Decision, DecisionUrgency, StatusItem, TicketReport } from '../types'
+import type { Decision, DecisionUrgency, StatusItem } from '../types'
 import { effortLabel } from './effort'
-import type { ShownProgress } from './effort-progress'
+import { joinFirst } from './lists'
+import type { SessionProgress } from './session-progress'
 import type { ItemDraft } from './status'
 import { ticketName, ticketShortName } from './ticket-reports'
-import type { TicketRequest, TicketState } from './ticket-reports'
+import type { TicketOutcome, TicketRequest, TicketState } from './ticket-reports'
 
 /** The tool's short name: the model calls it as `mcp__session-status__status`. */
 export const STATUS_TOOL_NAME = 'status'
@@ -253,33 +254,43 @@ export function endListText(listed: readonly Decision[]): string {
     : `End-of-work list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
 }
 
+/** How many tickets in progress a reply names; the rest show as `+N more`. */
+const BUILDING_NAMED = 4
+
 /**
- * What the model reads after a ticket report: the ticket, its state and the
- * progress the pane shows now.
+ * What the model reads after a ticket report: what the call did to the
+ * ticket, then the Session progress the pane shows now.
  */
-export function ticketText(
-  ticket: TicketReport,
-  state: TicketState,
-  changed: boolean,
-  progress: ShownProgress | null,
-): string {
-  const name = ticketName(ticket)
-  const said =
-    state === 'stopped'
-      ? changed
-        ? `Ticket ${name} is no longer in progress.`
-        : ticket.state === 'landed'
-          ? `Ticket ${name} already landed; it stays landed.`
-          : `Ticket ${name} was not in progress.`
-      : `Ticket ${name} is ${state}${changed ? '' : ' already'}.`
-  if (progress === null || progress.source !== 'tickets') {
+export function ticketText(request: TicketRequest, outcome: TicketOutcome, progress: SessionProgress | null): string {
+  const said = ticketSaid(request, outcome)
+  if (progress?.source !== 'tickets') {
     return said
   }
   const building = progress.building.map(ticketShortName)
 
-  return `${said} Progress: ${progress.done}/${progress.total} tickets done${
-    building.length === 0 ? '' : `, building ${building.join(', ')}`
+  return `${said} Session: ${progress.done}/${progress.total} tickets landed${
+    building.length === 0 ? '' : `, building ${joinFirst(building, BUILDING_NAMED)}`
   }.`
+}
+
+/** One sentence on what a `ticket` call did to its ticket. */
+function ticketSaid(request: TicketRequest, { ticket, change }: TicketOutcome): string {
+  if (ticket === null) {
+    return `Ticket ${ticketShortName({ number: request.number, title: request.title ?? '' })} was not in progress.`
+  }
+  const name = ticketName(ticket)
+  switch (change) {
+    case 'dropped':
+      return `Ticket ${name} is no longer in progress.`
+    case 'relanded':
+      return `Ticket ${name} is landed again: its rework stopped.`
+    case 'moved':
+      return `Ticket ${name} is ${ticket.state}.`
+    case 'same':
+      return request.state === 'stopped'
+        ? `Ticket ${name} already landed; it stays landed.`
+        : `Ticket ${name} is ${ticket.state} already.`
+  }
 }
 
 /**

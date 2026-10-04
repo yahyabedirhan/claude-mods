@@ -124,18 +124,14 @@ export function withDefaults(status: SessionStatus | null): SessionStatus | null
  * The status a session starts with after `/clear`: empty for the new
  * session, but with the previous session's open decisions, ids unchanged, so
  * the person can still answer them by the same id, and its effort and
- * reported tickets: the new session still runs in the same effort.
+ * reported tickets: the new session still runs in the same effort. The
+ * Session section counts the carried tickets while the effort stays; a
+ * report for another effort starts it from zero (see `effortReports`).
  */
 export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
   const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
-  const held = withDefaults(previous)
 
-  return {
-    ...emptyStatus(sessionId),
-    items: open,
-    effort: held?.effort ?? null,
-    ticketReports: held?.ticketReports ?? [],
-  }
+  return { ...emptyStatus(sessionId), items: open, effort: previous.effort, ticketReports: previous.ticketReports }
 }
 
 /**
@@ -209,9 +205,9 @@ export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStat
   const ids = new Set(status.items.map(item => item.id))
   const carried = carry.items.filter(item => !ids.has(item.id))
   const effort = status.effort ?? carry.effort
-  const own = status.ticketReports ?? []
+  const own = status.ticketReports
   const ticketReports = own.length > 0 ? own : carry.ticketReports
-  if (carried.length === 0 && effort === status.effort && ticketReports.length === own.length) {
+  if (carried.length === 0 && effort === status.effort && ticketReports === own) {
     return status
   }
 
@@ -260,8 +256,9 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, reported tickets, and closed items of each kind. The oldest drop first; an open
- * item never drops.
+ * ids, links, reported tickets, and closed items of each kind. The oldest
+ * drop first (reported tickets by their last change); an open item never
+ * drops.
  */
 export const CAP = 200
 
@@ -299,9 +296,29 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     ...status,
     items,
     links: status.links.slice(-CAP),
-    ticketReports: status.ticketReports.slice(-CAP),
+    ticketReports: newestByChange(status.ticketReports, CAP),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
   }
+}
+
+/**
+ * The `limit` reports that changed last, in their order. A ticket that
+ * landed long ago drops before one started since, so past the cap the
+ * Session count holds the run's recent tickets.
+ */
+function newestByChange(reports: readonly TicketReport[], limit: number): TicketReport[] {
+  if (reports.length <= limit) {
+    return [...reports]
+  }
+  const kept = new Set(
+    reports
+      .map((report, index) => ({ at: report.at, index }))
+      .sort((a, b) => b.at - a.at || b.index - a.index)
+      .slice(0, limit)
+      .map(entry => entry.index),
+  )
+
+  return reports.filter((_report, index) => kept.has(index))
 }
 
 /** How many sessions' statuses `$.store` keeps; older ones are dropped. */

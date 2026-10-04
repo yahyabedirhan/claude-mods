@@ -25,12 +25,3 @@ export type SectionContext = {
  */
 export type Section = (context: SectionContext) => RenderNode | null
 
-/**
- * The newest `limit` of a list kept oldest first, newest first, and how many
- * older ones it leaves out: a section draws those as "+N more".
- */
-export function newest<T>(items: readonly T[], limit: number): { shown: T[]; more: number } {
-  const shown = items.slice(-limit).reverse()
-
-  return { shown, more: items.length - shown.length }
-}

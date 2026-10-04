@@ -346,7 +346,7 @@ test('/compact keeps all status', async ($, on) => {
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
     expect(await sectionText($, surface, 'surprises')).toContain('The API has no batch endpoint')
-    expect(await sectionText($, surface, 'progress')).toContain('0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
   }
 })
 
