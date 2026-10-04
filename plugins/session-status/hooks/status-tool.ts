@@ -25,6 +25,14 @@ const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
 
+/**
+ * How every item reads, told to the agent, to a subagent through the tool's
+ * description and to the observer's model: short and plain, with no
+ * character limit.
+ */
+export const CONCISE_RULE =
+  'Write each field as one short, clear sentence in plain technical style: active voice, one idea per sentence, no lists and no filler.'
+
 /** What `$.tool.register` takes for the status tool. */
 export const STATUS_TOOL_SPEC = {
   name: STATUS_TOOL_NAME,
@@ -38,6 +46,7 @@ export const STATUS_TOOL_SPEC = {
     'Stop only when no safe default exists: use urgency `blocked`.',
     '`record_surprise`: something unexpected that changed the work or the plan.',
     'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
+    CONCISE_RULE,
     '`resolve` with `id`: the user answered that decision in the chat.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
     '`post_end_list`: call it when, at the end of your work, you post one numbered list',
@@ -67,7 +76,7 @@ export const STATUS_TOOL_SPEC = {
         description:
           'record_decision: `blocked` when no safe default exists and the work stops; `review_later` when you continue with the default.',
       },
-      question: { type: 'string', description: 'record_decision: the question for the user.' },
+      question: { type: 'string', description: 'record_decision: the question for the user, in one short sentence.' },
       options: {
         type: 'array',
         items: { type: 'string' },
@@ -77,14 +86,17 @@ export const STATUS_TOOL_SPEC = {
       },
       default: {
         type: 'string',
-        description: 'record_decision: the answer you recommend, and use unless the user says otherwise.',
+        description: 'record_decision: the answer you recommend and use unless the user says otherwise, in one short sentence.',
       },
       unblocks: {
         type: 'string',
-        description: 'record_decision: the one thing the user must say or do to settle it.',
+        description: 'record_decision: the one thing the user must say or do to settle it, in one short sentence.',
       },
-      occurred: { type: 'string', description: 'record_surprise: what occurred.' },
-      changed: { type: 'string', description: 'record_surprise: what it changed in the work or the plan.' },
+      occurred: { type: 'string', description: 'record_surprise: what occurred, in one short sentence.' },
+      changed: {
+        type: 'string',
+        description: 'record_surprise: what it changed in the work or the plan, in one short sentence.',
+      },
       state: {
         type: 'string',
         enum: [...TICKET_STATES],

@@ -152,6 +152,7 @@ test('a check asks a small model with the recent steps, the task list and the ef
   expect(request?.prompt).toContain('user: Fix the build')
   expect(request?.prompt).toContain('tool Bash {"command":"npm test"} -> error: 1 failed')
   expect(request?.system).toContain('Ordinary errors that the agent fixed itself are not findings')
+  expect(request?.system).toMatch(/one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is)
 })
 
 test('a check reads at most the newest 30 messages, each cut short', async ($, on) => {

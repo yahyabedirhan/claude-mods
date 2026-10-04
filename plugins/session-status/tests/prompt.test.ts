@@ -99,3 +99,29 @@ test('the section tells the agent to resolve answered decisions and dismiss surp
   expect(text).toMatch(/`dismiss`/)
   expect(text).toMatch(/read-only/i)
 })
+
+/** The concise-item rule, as the prompt, the tool and the observer each say it. */
+const CONCISE = /one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is
+
+test('the section tells the agent to keep each item short in plain technical style, with no character limit', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(CONCISE)
+  expect(text).not.toMatch(/\d+ characters/)
+})
+
+test('the status tool tells a subagent the same rule, field by field', async ($, on) => {
+  const { tools } = world(on)
+  await start($)
+
+  const tool = tools.get(STATUS_TOOL)
+  const fields = (tool?.inputSchema as { properties: Record<string, { description: string }> }).properties
+
+  expect(tool?.description).toMatch(CONCISE)
+  for (const field of ['question', 'default', 'unblocks', 'occurred', 'changed']) {
+    expect(fields[field]?.description).toMatch(/one short sentence/i)
+  }
+})
