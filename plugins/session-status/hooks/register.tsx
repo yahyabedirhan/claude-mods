@@ -51,6 +51,9 @@ const COMMAND = 'session-status'
 // Written here as literals so `claude plugin validate` can read the matcher.
 const PANE_ID = 'session-status'
 const PANE_TITLE = 'Session status'
+// The dock's starting width, in columns: about a third of a wide terminal,
+// enough for the section lines. A width the person drags the dock to wins.
+const PANE_COLUMNS = 48
 
 /** The session's status in `$.state`; null before its first change. */
 const statusAtom = atom({ plugin: 'session-status', key: 'status' } as const, null)
@@ -233,7 +236,7 @@ async function togglePane($: EngineInterface): Promise<'opened' | 'closed'> {
     return 'closed'
   }
   await update($, paneAtom, () => 'open')
-  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+  await $.ui.open({ id: PANE_ID, title: PANE_TITLE, columns: PANE_COLUMNS })
 
   return 'opened'
 }
@@ -251,7 +254,7 @@ async function autoOpenPane($: EngineInterface): Promise<void> {
     return isOpening ? 'open' : state
   })
   if (isOpening) {
-    await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+    await $.ui.open({ id: PANE_ID, title: PANE_TITLE, columns: PANE_COLUMNS })
   }
 }
 
@@ -342,7 +345,7 @@ export const register: Register = on => {
     // An open pane stays open for the session: a reload that dropped it
     // opens it again.
     if ((await read($, paneAtom)) === 'open' && !(await isPaneOpen($))) {
-      await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+      await $.ui.open({ id: PANE_ID, title: PANE_TITLE, columns: PANE_COLUMNS })
     }
 
     return next(e)
