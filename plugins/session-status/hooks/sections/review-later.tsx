@@ -1,5 +1,6 @@
 import { onEndList, openReviewLater } from '../status'
 import { newest } from '../lists'
+import { COLOR } from '../palette'
 import type { Section } from './section'
 
 /** How many review-later decisions the pane shows; the rest are "+N more". */
@@ -30,13 +31,14 @@ export const reviewLaterSection: Section = ({ ui, status }) => {
       <Text bold>Review later ({decisions.length})</Text>
       {listed.length > 0 ? (
         <Box key="review-later-listed" flexDirection="column">
-          <Text color="yellow" bold>
+          <Text color={COLOR.attention} bold>
             In your end-of-work list ({listed.length})
           </Text>
           {listed.map(decision => (
             <Box key={`review-later-listed-${decision.id}`} flexDirection="column">
-              <Text color="yellow">
-                {decision.id} · {decision.question}
+              <Text>
+                <Text color={COLOR.attention}>{decision.id}</Text>
+                {` · ${decision.question}`}
               </Text>
               <Box paddingLeft={2}>
                 <Text dimColor>Default: {decision.default}</Text>
@@ -48,7 +50,8 @@ export const reviewLaterSection: Section = ({ ui, status }) => {
       {shown.map(decision => (
         <Box key={`review-later-${decision.id}`} flexDirection="column">
           <Text>
-            {decision.id} · {decision.question}
+            <Text color={COLOR.accent}>{decision.id}</Text>
+            {` · ${decision.question}`}
           </Text>
           <Box paddingLeft={2}>
             <Text dimColor>Default: {decision.default}</Text>

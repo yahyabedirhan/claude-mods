@@ -16,7 +16,7 @@ export const doingNowSection: Section = ({ ui, status }) => {
         <Text dimColor>Nothing yet.</Text>
       ) : (
         <Text wrap="truncate-end">
-          {doing.agentId === undefined ? '' : 'subagent · '}
+          {doing.agentId === undefined ? null : <Text dimColor>subagent · </Text>}
           {doing.text === '' ? doing.tool : `${doing.tool}: ${doing.text}`}
         </Text>
       )}

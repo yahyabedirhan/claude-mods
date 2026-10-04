@@ -1,6 +1,7 @@
 import type { Surprise } from '../../types'
 import { isOpen } from '../status'
 import { newest } from '../lists'
+import { COLOR } from '../palette'
 import type { Section } from './section'
 
 /** How many surprises the pane shows; the rest are "+N more". */
@@ -25,7 +26,9 @@ export const surprisesSection: Section = ({ ui, status }) => {
       {shown.map(surprise => (
         <Box key={`surprise-${surprise.id}`} flexDirection="column">
           <Text>
-            {surprise.id} · {surprise.source === 'observer' ? <Text color="cyan">[observer] </Text> : null}
+            <Text color={COLOR.accent}>{surprise.id}</Text>
+            {' · '}
+            {surprise.source === 'observer' ? <Text dimColor>[observer] </Text> : null}
             {surprise.occurred}
           </Text>
           <Box paddingLeft={2}>

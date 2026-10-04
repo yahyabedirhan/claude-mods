@@ -5,6 +5,7 @@ import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { SessionStatus } from '../types'
 import { effortProgress } from './effort-progress'
+import { COLOR } from './palette'
 import { sessionProgress } from './session-progress'
 import { isOpen } from './status'
 
@@ -54,7 +55,7 @@ export function drawBand(
   return (
     <Box key="session-status-band">
       {isBlocked ? (
-        <Text wrap="truncate-end" color="yellow">
+        <Text wrap="truncate-end" color={COLOR.attention}>
           {bandText(status)}
         </Text>
       ) : (

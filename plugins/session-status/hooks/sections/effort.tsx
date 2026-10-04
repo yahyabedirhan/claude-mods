@@ -1,4 +1,5 @@
 import { effortProgress } from '../effort-progress'
+import { COLOR } from '../palette'
 import { barCells, progressBar } from './bar'
 import type { Section } from './section'
 
@@ -18,8 +19,9 @@ export const effortSection: Section = ({ ui, status, columns }) => {
     <Box key="effort" flexDirection="column">
       <Text bold>Effort</Text>
       <Text>
-        {`Closed ${progress.closed}/${progress.total} `}
-        <Text color="green">{progressBar(progress.closed, progress.total, barCells(columns))}</Text>
+        <Text dimColor>Closed </Text>
+        {`${progress.closed}/${progress.total} `}
+        <Text color={COLOR.done}>{progressBar(progress.closed, progress.total, barCells(columns))}</Text>
       </Text>
     </Box>
   )

@@ -3,6 +3,7 @@ import type { RenderNode } from 'claude-code'
 import type { TicketReport } from '../../types'
 import { linkLabel } from '../links'
 import { first } from '../lists'
+import { COLOR } from '../palette'
 import { branchUrl, effortUrl, isSessionLink, issueUrl, worktreeLabel } from '../place'
 import { sessionProgress } from '../session-progress'
 import { ticketShortName } from '../ticket-reports'
@@ -45,8 +46,9 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
   if (progress !== null) {
     lines.push(
       <Text key="session-progress">
-        {`${progress.source === 'tickets' ? 'Landed' : 'Tasks'} ${progress.done}/${progress.total} `}
-        <Text color="green">{progressBar(progress.done, progress.total, barCells(columns))}</Text>
+        <Text dimColor>{progress.source === 'tickets' ? 'Landed ' : 'Tasks '}</Text>
+        {`${progress.done}/${progress.total} `}
+        <Text color={COLOR.done}>{progressBar(progress.done, progress.total, barCells(columns))}</Text>
       </Text>,
     )
   }
@@ -83,7 +85,7 @@ function labelled(ui: Ui, label: string, value: string, href: string | null): Re
 
   return (
     <Text key={`session-${label.toLowerCase()}`}>
-      {label.padEnd(LABEL_CELLS)}
+      <Text dimColor>{label.padEnd(LABEL_CELLS)}</Text>
       {href === null ? value : <Link href={href} label={value} />}
     </Text>
   )
@@ -96,9 +98,9 @@ function building(ui: Ui, tickets: readonly TicketReport[], pageOf: ((number: nu
 
   return (
     <Text key="session-building">
-      {'Building: '}
+      <Text dimColor>Building: </Text>
       {shown.map((ticket, index) => (
-        <Text key={`building-${ticket.number ?? ticket.title}`}>
+        <Text key={`building-${ticket.number ?? ticket.title}`} color={COLOR.accent}>
           {index === 0 ? '' : ', '}
           {ticket.number === undefined || pageOf === null ? (
             ticketShortName(ticket)
@@ -107,7 +109,7 @@ function building(ui: Ui, tickets: readonly TicketReport[], pageOf: ((number: nu
           )}
         </Text>
       ))}
-      {more > 0 ? `, +${more} more` : ''}
+      {more > 0 ? <Text dimColor>{`, +${more} more`}</Text> : null}
     </Text>
   )
 }
