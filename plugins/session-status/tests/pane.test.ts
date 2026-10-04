@@ -87,14 +87,28 @@ test('the age moves on while the pane stays open', async ($, on) => {
 })
 
 test('the pane draws its sections in the agreed order', async ($, on) => {
-  world(on)
+  const w = world(on)
+  w.answer('Bash', () => ({ stdout: 'https://github.com/octo/widgets/pull/12\n', stderr: '' }))
   await start($)
   await $.tool.call({ tool: 'Read', file_path: '/work/src/main.ts' })
   await callStatusTool($, surprise())
   await callStatusTool($, reviewLaterDecision())
   await callStatusTool($, blockedDecision())
 
-  const order = ['doing-now', 'blocked', 'review-later', 'surprises', 'last-update']
+  await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
+  await $.tool.call({ tool: 'Bash', command: 'gh pr create --fill' })
+  await $.classic.SubagentStart({ agent_id: 'agent-1', agent_type: 'general-purpose' })
+
+  const order = [
+    'doing-now',
+    'blocked',
+    'review-later',
+    'progress',
+    'links',
+    'surprises',
+    'counters',
+    'last-update',
+  ]
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     const keys = (await ui.findAll({ type: 'Box' }))

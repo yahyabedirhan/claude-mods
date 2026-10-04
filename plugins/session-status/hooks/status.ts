@@ -37,7 +37,25 @@ export function recordItem(
 
 /** A status with nothing in it yet, for one session. */
 export function emptyStatus(sessionId: string): SessionStatus {
-  return { version: 1, sessionId, doingNow: null, items: [], updatedAt: null }
+  return {
+    version: 1,
+    sessionId,
+    doingNow: null,
+    items: [],
+    tasks: [],
+    progress: null,
+    links: [],
+    subagents: { running: [], finished: [] },
+    updatedAt: null,
+  }
+}
+
+/**
+ * A status held from an older shape, with the fields it lacks taken from an
+ * empty status; null stays null.
+ */
+export function withDefaults(status: SessionStatus | null): SessionStatus | null {
+  return status === null ? null : { ...emptyStatus(status.sessionId), ...status }
 }
 
 /**
@@ -50,7 +68,7 @@ export function applyChange(
   stamp: { sessionId: string; now: number },
 ): SessionStatus {
   return {
-    ...change(current ?? emptyStatus(stamp.sessionId)),
+    ...change(withDefaults(current) ?? emptyStatus(stamp.sessionId)),
     sessionId: stamp.sessionId,
     updatedAt: stamp.now,
   }

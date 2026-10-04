@@ -12,6 +12,10 @@ test('the status store saves the status to $.store with the session id as the ke
     sessionId: SESSION_ID,
     doingNow: { tool: 'Bash', text: 'Show the tree', at: START },
     items: [],
+    tasks: [],
+    progress: null,
+    links: [],
+    subagents: { running: [], finished: [] },
     updatedAt: START,
   })
 })

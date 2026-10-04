@@ -56,6 +56,52 @@ export type Surprise = {
 
 /** One item the agent recorded: a decision or a surprise. */
 export type StatusItem = Decision | Surprise
+/** One task of the session's task list, from the task tools and Task events. */
+export type Task = {
+  /**
+   * The task's id: the task tools' own id, or `todo:<loop>:<index>` for an
+   * item of a TodoWrite list (`<loop>` is the subagent's id, or `main`).
+   */
+  id: string
+  /** The task's title. */
+  subject: string
+  /** What the task does while it runs ("Running tests"), when given. */
+  activeForm?: string
+  status: 'pending' | 'in_progress' | 'completed'
+  /** When the task last changed, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
+/**
+ * How far the work is: tasks done, the total and the task that runs now.
+ * Taken from the task list; an effort can give it from its tickets instead.
+ */
+export type Progress = {
+  done: number
+  total: number
+  /** The name of the task that runs now; null when none runs. */
+  current: string | null
+}
+
+/** A pull request or an issue the session, or one of its subagents, created. */
+export type CreatedLink = {
+  kind: 'pr' | 'issue'
+  /** The repository as `<owner>/<repo>`. */
+  repo: string
+  number: number
+  /** The page on GitHub, as `gh` printed it. */
+  url: string
+  /** The subagent's id when a subagent created it; absent on the main loop. */
+  agentId?: string
+  /** When it was found, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
+/** The session's subagents, by id: those that run now and those that finished. */
+export type Subagents = {
+  running: string[]
+  finished: string[]
+}
 
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
@@ -66,6 +112,13 @@ export type SessionStatus = {
   doingNow: DoingNow | null
   /** Decisions and surprises in the order they were recorded, oldest first. */
   items: StatusItem[]
+  /** The task list, in the order the tasks were created. */
+  tasks: Task[]
+  /** How far the work is; null before the first task. */
+  progress: Progress | null
+  /** The pull requests and issues created, oldest first. */
+  links: CreatedLink[]
+  subagents: Subagents
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

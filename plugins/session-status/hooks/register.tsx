@@ -10,8 +10,11 @@ import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
 import { INSTRUCTIONS } from './instructions'
 import { AGE_TICK_MS, drawPane } from './pane'
-import { applyChange, recordItem } from './status'
 import { STATUS_TOOL, STATUS_TOOL_SPEC, readStatusToolInput, recordedText } from './status-tool'
+import { applyChange, recordItem, withDefaults } from './status'
+import { subagentStarted, subagentStopped } from './subagents'
+import { taskCreated, taskUpdated } from './tasks'
+import { toolResultChange } from './tool-results'
 
 const COMMAND = 'session-status'
 // Written here as literals so `claude plugin validate` can read the matcher.
@@ -114,6 +117,8 @@ export const register: Register = on => {
     return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
   })
 
+  // Subagents' tool calls arrive here too, with `agentId` set: they count
+  // as the main loop's do.
   on('tool.call', async ($, e, next) => {
     // A call to the status tool is about the status, not the work.
     if (e.tool === STATUS_TOOL) {
@@ -121,6 +126,41 @@ export const register: Register = on => {
     }
     const doing = describeToolCall(e, await $.clock.now())
     await changeStatus($, status => ({ ...status, doingNow: doing }))
+    const answer = await next(e)
+    const change = toolResultChange(e, answer, await $.clock.now())
+    if (change !== null) {
+      await changeStatus($, change)
+    }
+
+    return answer
+  })
+
+  on('classic.TaskCreated', async ($, e, next) => {
+    const at = await $.clock.now()
+    await changeStatus($, status =>
+      taskCreated(status, { id: e.task_id, subject: e.task_subject }, at),
+    )
+
+    return next(e)
+  })
+
+  on('classic.TaskCompleted', async ($, e, next) => {
+    const at = await $.clock.now()
+    await changeStatus($, status =>
+      taskUpdated(status, { id: e.task_id, status: 'completed', subject: e.task_subject }, at),
+    )
+
+    return next(e)
+  })
+
+  on('classic.SubagentStart', async ($, e, next) => {
+    await changeStatus($, status => subagentStarted(status, e.agent_id))
+
+    return next(e)
+  })
+
+  on('classic.SubagentStop', async ($, e, next) => {
+    await changeStatus($, status => subagentStopped(status, e.agent_id))
 
     return next(e)
   })
@@ -130,7 +170,7 @@ export const register: Register = on => {
 
     return drawPane({
       ui: $.ui.resolve(e),
-      status: await read($, statusAtom),
+      status: withDefaults(await read($, statusAtom)),
       now: await $.clock.now(),
       columns: e.props.bodyColumns,
     })

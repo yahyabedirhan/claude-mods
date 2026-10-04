@@ -3,7 +3,7 @@
 
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On, ToolSpec, UiPane } from 'claude-code'
+import type { On, ToolCallArgs, ToolCallInput, ToolSpec, UiPane } from 'claude-code'
 
 export const PLUGIN = 'session-status'
 export const SESSION_ID = 'session-a'
@@ -25,6 +25,11 @@ export type World = {
   commands: string[]
   /** The tools the mod registered for the model, by full name. */
   tools: Map<string, ToolSpec>
+  /**
+   * Makes the tool named answer each call with what `result` gives for it,
+   * as the tool's record (`{ stdout }` for Bash). Other tools answer `ok`.
+   */
+  answer: (tool: string, result: (e: ToolCallInput) => unknown) => void
 }
 
 /** The engine's own system prompt beneath the mod: one shared section. */
@@ -43,6 +48,7 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
   const panes = new Map<string, UiPane>()
   const commands: string[] = []
   const tools = new Map<string, ToolSpec>()
+  const answers = new Map<string, (e: ToolCallInput) => unknown>()
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: options.sessionId ?? SESSION_ID }))
@@ -81,14 +87,32 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
     return { value: undefined }
   })
   on('ui.panes', () => ({ value: [...panes.values()] }))
-  on('tool.call', () => ({ result: 'ok' }) as never)
+  on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
+  on('classic.*', () => ({}))
 
-  return { clock, saved, panes, commands, tools }
+  return {
+    clock,
+    saved,
+    panes,
+    commands,
+    tools,
+    answer: (tool, result) => {
+      answers.set(tool, result)
+    },
+  }
 }
 
 /** Starts the session as the REPL does. */
 export async function start($: Engine) {
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+}
+
+/**
+ * A tool call a subagent makes: its loop's id rides the input as a session's
+ * does. `ToolCallArgs` leaves `agentId` out of its type, but the engine keeps it.
+ */
+export function subagentToolCall($: Engine, agentId: string, input: ToolCallArgs) {
+  return $.tool.call({ ...input, agentId } as never)
 }
 
 /** Runs `/session-status` as the person typing it does. */
@@ -159,4 +183,13 @@ export function surprise(fields: Record<string, unknown> = {}) {
     changed: 'Each item is sent in its own request',
     ...fields,
   }
+}
+
+/** The text of one pane section on a surface, by its key; undefined when it is not drawn. */
+export async function sectionText($: Engine, surface: Surface, key: string) {
+  const ui = await mountPane($, surface)
+  const text = (await ui.find({ key }))?.text
+  await ui.unmount()
+
+  return text
 }
