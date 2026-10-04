@@ -28,6 +28,8 @@ Places (2)       skills  3 files · 2 commands
 Surprises        the newest 2, then "+N more"
 Review later     the newest 3, then "+N more"
 Subagents        running · finished
+Cron jobs        1 active · 1 fired · 1 cancelled
+                 every hour · Check the build and report.
 Answered (N) · Last update
 ```
 
@@ -63,8 +65,13 @@ Answered (N) · Last update
 9. **Review later**: decisions the agent made with a safe default, each with
    that default.
 10. **Subagents**: running and finished.
-11. **Answered**: how many decisions were resolved and surprises dismissed.
-12. **Last update**: its time and age.
+11. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
+    as active, fired or cancelled, then each active job's schedule and
+    prompt (the newest 3, then "+N more"). A job fires when a turn starts
+    with its prompt; a one-shot job is then done. `CronDelete` cancels a job,
+    and a one-shot job that `CronList` no longer lists has fired.
+12. **Answered**: how many decisions were resolved and surprises dismissed.
+13. **Last update**: its time and age.
 
 Links go to GitHub when the repository's `origin` remote is there: the effort
 links its issues list (`label:effort:<name>`), the branch its tree, each

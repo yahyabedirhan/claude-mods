@@ -8,6 +8,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
+import { cronFired } from './crons'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
@@ -579,10 +580,15 @@ export const register: Register = on => {
 
   // A turn that starts puts the session in progress, a settled one too; a
   // prompt that types a settle skill's slash command settles the turn, as a
-  // Skill call to it does.
+  // Skill call to it does; a prompt that is a cron job's is that job firing.
   on('turn.start', async ($, e, next) => {
     const activity = settlesByPrompt(e.text) ? 'settling' : 'working'
-    await changeStatus($, status => (status.activity === activity ? status : { ...status, activity }))
+    const at = await $.clock.now()
+    await changeStatus($, status => {
+      const fired = cronFired(status, e.text, at)
+
+      return fired.activity === activity ? fired : { ...fired, activity }
+    })
 
     return next(e)
   })
