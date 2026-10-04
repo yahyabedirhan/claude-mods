@@ -3,10 +3,12 @@
 
 import { mock } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
-import type { On, UiPane } from 'claude-code'
+import type { On, ToolSpec, UiPane } from 'claude-code'
 
 export const PLUGIN = 'session-status'
 export const SESSION_ID = 'session-a'
+/** The status tool as the model sees it. */
+export const STATUS_TOOL = 'mcp__session-status__status'
 export const SURFACES = ['terminal', 'desktop'] as const
 export type Surface = (typeof SURFACES)[number]
 
@@ -21,11 +23,17 @@ export type World = {
   panes: Map<string, UiPane>
   /** The commands the mod registered, by name. */
   commands: string[]
+  /** The tools the mod registered for the model, by full name. */
+  tools: Map<string, ToolSpec>
 }
+
+/** The engine's own system prompt beneath the mod: one shared section. */
+export const BASE_SECTIONS = [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] as const
 
 /**
  * Answers every noun the mod calls beneath it: the clock (mocked), the
- * session id, the store, the panes, command registration and tool calls.
+ * session id, the store, the panes, command and tool registration, the
+ * engine's system prompt and tool calls.
  *
  * Call it before the test's first call on `$`.
  */
@@ -34,6 +42,7 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
   const saved: Record<string, unknown> = {}
   const panes = new Map<string, UiPane>()
   const commands: string[] = []
+  const tools = new Map<string, ToolSpec>()
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: options.sessionId ?? SESSION_ID }))
@@ -48,6 +57,13 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
 
     return { value: { command: e.name } }
   })
+  on('tool.register', (_$, e) => {
+    const tool = `mcp__${PLUGIN}__${e.name}`
+    tools.set(tool, e)
+
+    return { value: { tool } }
+  })
+  on('prompt.compose', () => ({ sections: BASE_SECTIONS }))
   on('ui.open', (_$, e) => {
     panes.set(e.id, {
       id: e.id,
@@ -67,7 +83,7 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
   on('ui.panes', () => ({ value: [...panes.values()] }))
   on('tool.call', () => ({ result: 'ok' }) as never)
 
-  return { clock, saved, panes, commands }
+  return { clock, saved, panes, commands, tools }
 }
 
 /** Starts the session as the REPL does. */
@@ -102,4 +118,45 @@ export function mountPane($: Engine, surface: Surface) {
       view: {},
     },
   })
+}
+
+/** Calls the status tool as the model does; resolves to what the model gets. */
+export function callStatusTool($: Engine, input: Record<string, unknown>) {
+  return $.tool.call({ tool: STATUS_TOOL, ...input })
+}
+
+/** A blocked decision's input, with the given fields changed. */
+export function blockedDecision(fields: Record<string, unknown> = {}) {
+  return {
+    action: 'record_decision',
+    urgency: 'blocked',
+    question: 'Which database do we use?',
+    options: ['Postgres', 'SQLite'],
+    default: 'Postgres',
+    unblocks: 'Pick one database',
+    ...fields,
+  }
+}
+
+/** A review-later decision's input, with the given fields changed. */
+export function reviewLaterDecision(fields: Record<string, unknown> = {}) {
+  return {
+    action: 'record_decision',
+    urgency: 'review_later',
+    question: 'Which name does the flag get?',
+    options: ['--fast', '--quick'],
+    default: '--fast',
+    unblocks: 'Confirm or change the name',
+    ...fields,
+  }
+}
+
+/** A surprise's input, with the given fields changed. */
+export function surprise(fields: Record<string, unknown> = {}) {
+  return {
+    action: 'record_surprise',
+    occurred: 'The API has no batch endpoint',
+    changed: 'Each item is sent in its own request',
+    ...fields,
+  }
 }

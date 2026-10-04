@@ -1,6 +1,16 @@
 import { expect, test } from 'claude-code/testing'
 
-import { SURFACES, mountPane, runCommand, start, world } from './world'
+import {
+  SURFACES,
+  blockedDecision,
+  callStatusTool,
+  mountPane,
+  reviewLaterDecision,
+  runCommand,
+  start,
+  surprise,
+  world,
+} from './world'
 
 test('the pane shows doing now from the last tool call', async ($, on) => {
   world(on)
@@ -80,13 +90,17 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
   world(on)
   await start($)
   await $.tool.call({ tool: 'Read', file_path: '/work/src/main.ts' })
+  await callStatusTool($, surprise())
+  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, blockedDecision())
 
+  const order = ['doing-now', 'blocked', 'review-later', 'surprises', 'last-update']
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     const keys = (await ui.findAll({ type: 'Box' }))
       .map(box => box.key)
-      .filter(key => key === 'doing-now' || key === 'last-update')
-    expect(keys).toEqual(['doing-now', 'last-update'])
+      .filter(key => key !== undefined && order.includes(key))
+    expect(keys).toEqual(order)
     await ui.unmount()
   }
 })

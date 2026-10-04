@@ -6,10 +6,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { SessionStatus } from '../types'
+import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
+import { INSTRUCTIONS } from './instructions'
 import { AGE_TICK_MS, drawPane } from './pane'
-import { applyChange } from './status'
+import { applyChange, recordItem } from './status'
+import { STATUS_TOOL, STATUS_TOOL_SPEC, readStatusToolInput, recordedText } from './status-tool'
 
 const COMMAND = 'session-status'
 // Written here as literals so `claude plugin validate` can read the matcher.
@@ -75,6 +77,7 @@ export const register: Register = on => {
       name: COMMAND,
       description: 'Open or close the session status pane',
     })
+    await $.tool.register(STATUS_TOOL_SPEC)
     startAgeTicker($)
 
     return next(e)
@@ -86,7 +89,36 @@ export const register: Register = on => {
     return { text: `Session status pane ${done}.` }
   })
 
+  on('prompt.compose', async (_$, e, next) => {
+    const { sections } = await next(e)
+
+    return { sections: [...sections, INSTRUCTIONS] }
+  })
+
+  // The status tool: the model records a decision or a surprise. The matcher
+  // spells STATUS_TOOL out, so `claude plugin validate` can read it.
+  on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
+    const input = readStatusToolInput(e as unknown as Record<string, unknown>)
+    if ('error' in input) {
+      return { deny: input.error }
+    }
+    const now = await $.clock.now()
+    let recorded: StatusItem | undefined
+    await changeStatus($, status => {
+      const { status: next, item } = recordItem(status, input.draft, now)
+      recorded = item
+
+      return next
+    })
+
+    return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
+  })
+
   on('tool.call', async ($, e, next) => {
+    // A call to the status tool is about the status, not the work.
+    if (e.tool === STATUS_TOOL) {
+      return next(e)
+    }
     const doing = describeToolCall(e, await $.clock.now())
     await changeStatus($, status => ({ ...status, doingNow: doing }))
 
