@@ -4,6 +4,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import {
+  PLUGIN,
   SESSION_ID,
   START,
   SURFACES,
@@ -129,6 +130,7 @@ test('/clear starts a new status that keeps only the open decisions', async ($, 
     subagents: { running: [], finished: [] },
     endListPostedAt: null,
     observer: { checks: 0, seen: [] },
+    effort: null,
     updatedAt: START,
   })
   for (const surface of SURFACES) {
@@ -136,6 +138,28 @@ test('/clear starts a new status that keeps only the open decisions', async ($, 
     expect(await sectionText($, surface, 'surprises')).toBeUndefined()
     expect(await sectionText($, surface, 'links')).toBeUndefined()
   }
+})
+
+test('a resumed status with items opens the pane', async ($, on) => {
+  const { panes } = world(on, { saved: { [SESSION_ID]: savedStatus(SESSION_ID) } })
+  await start($)
+  expect(panes.has(PLUGIN)).toBe(false)
+
+  await sessionStart($, 'resume', SESSION_ID)
+
+  expect(panes.has(PLUGIN)).toBe(true)
+})
+
+test('/clear carries the effort over to the new session', async ($, on) => {
+  const { saved, switchSession } = world(on, {
+    saved: { [SESSION_ID]: { ...savedStatus(SESSION_ID), effort: { name: 'session-status', from: 'label' } } },
+  })
+  await start($)
+  await sessionStart($, 'resume', SESSION_ID)
+  switchSession(NEW_SESSION)
+  await sessionStart($, 'clear', NEW_SESSION)
+
+  expect(saved[NEW_SESSION]).toMatchObject({ effort: { name: 'session-status', from: 'label' } })
 })
 
 test('/clear leaves the old session saved as it was', async ($, on) => {
@@ -207,13 +231,8 @@ test('a session start that runs again keeps one age timer', async ($, on) => {
   })
   await start($)
   await start($)
+  // The first recorded decision opens the pane.
   await callStatusTool($, blockedDecision())
-  await $.command.run({
-    command: 'session-status',
-    args: '',
-    origin: { kind: 'composer' },
-    presentation: { isFullscreen: true, columns: 160 },
-  })
   await clock.advance(15_000)
 
   expect(ticks).toBe(1)

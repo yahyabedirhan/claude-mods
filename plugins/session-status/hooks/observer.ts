@@ -39,9 +39,6 @@ export type Trigger = 'turn' | 'subagent'
 /** One finding as the model gives it: what it saw and what it costs or changes. */
 export type Finding = { occurred: string; changed: string }
 
-/** A status that may carry the effort ticket #5 adds; absent until then. */
-type WithEffort = SessionStatus & { effort?: { name: string } | null }
-
 function observerSurprises(status: SessionStatus): Surprise[] {
   return status.items.filter((item): item is Surprise => item.kind === 'surprise' && item.source === 'observer')
 }
@@ -120,7 +117,7 @@ Give at most ${FINDING_LIMIT} findings.`
 export function observerRequest(status: SessionStatus, messages: readonly SessionMessage[]): ModelCompleteRequest {
   const steps = newestWithin(messages.slice(-STEP_LIMIT).flatMap(stepLines), STEPS_LIMIT)
   const tasks = status.tasks.map(task => `- [${task.status}] ${clip(task.subject, 120)}`)
-  const effort = (status as WithEffort).effort?.name
+  const effort = status.effort?.name
   const shown = observerSurprises(status).map(item => `- ${clip(item.occurred, 160)}`)
   const prompt = [
     `Effort phase: ${effort ?? 'none'}`,

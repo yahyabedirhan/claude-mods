@@ -7,7 +7,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { SessionStatus, StatusItem } from '../types'
+import { meetsAutoOpenTrigger } from './auto-open'
+import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
+import { branchEffortName, effortSighting, withEffort } from './effort'
 import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
@@ -46,6 +49,12 @@ const PANE_TITLE = 'Session status'
 /** The session's status in `$.state`; null before its first change. */
 const statusAtom = atom({ plugin: 'session-status', key: 'status' } as const, null)
 
+/**
+ * Where the pane stands for the session. Auto-open opens only an `unopened`
+ * pane, so a pane the person closed stays closed until they open it again.
+ */
+const paneAtom = atom({ plugin: 'session-status', key: 'pane' } as const, 'unopened')
+
 /** Moved by the age timer; the pane reads it only to draw again when it moves. */
 const tickAtom = atom({ plugin: 'session-status', key: 'tick' } as const, 0)
 
@@ -76,6 +85,11 @@ async function holdSession($: EngineInterface, sessionId: string): Promise<void>
     await $.store.set(sessionId, status)
   }
   await pruneStore($, sessionId)
+  // A restored or carried status that meets a trigger opens the pane, unless
+  // the person closed it.
+  if (status !== null && meetsAutoOpenTrigger(status)) {
+    await autoOpenPane($)
+  }
 }
 
 /** Deletes the saved statuses beyond the newest KEPT_SESSIONS; keeps `current`. */
@@ -104,6 +118,9 @@ async function changeStatus(
   let status = emptyStatus(sessionId)
   await update($, statusAtom, current => (status = applyChange(current, change, stamp)))
   await $.store.set(stamp.sessionId, status)
+  if (meetsAutoOpenTrigger(status)) {
+    await autoOpenPane($)
+  }
 
   return status
 }
@@ -132,16 +149,44 @@ async function isPaneOpen($: EngineInterface): Promise<boolean> {
   return (await $.ui.panes()).some(pane => pane.id === PANE_ID)
 }
 
-/** Opens the pane, or closes it when it is open. Says which it did. */
+/**
+ * Opens the pane, or closes it when it is open and drawn. A pane that waits
+ * undrawn is opened again instead: the person's own open seats it at any width.
+ * Says which it did.
+ */
 async function togglePane($: EngineInterface): Promise<'opened' | 'closed'> {
-  if (await isPaneOpen($)) {
+  if ((await isPaneOpen($)) && !(await isPaneWaiting($))) {
+    await update($, paneAtom, () => 'closed')
     await $.ui.close({ id: PANE_ID })
 
     return 'closed'
   }
+  await update($, paneAtom, () => 'open')
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
 
   return 'opened'
+}
+
+/**
+ * Opens the pane unasked, once per session: only a pane that was never
+ * opened. The engine seats it from 144 columns (110 for an id the person
+ * opened before) and keeps it waiting below; the band shows meanwhile.
+ */
+async function autoOpenPane($: EngineInterface): Promise<void> {
+  let isOpening = false
+  await update($, paneAtom, state => {
+    isOpening = state === 'unopened'
+
+    return isOpening ? 'open' : state
+  })
+  if (isOpening) {
+    await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+  }
+}
+
+/** Whether the pane is open but waits undrawn: the terminal is too narrow. */
+async function isPaneWaiting($: EngineInterface): Promise<boolean> {
+  return (await $.ui.panes()).some(pane => pane.id === PANE_ID && !pane.isPlaced)
 }
 
 // The observer agent: a small model's check on the recent work, shown as
@@ -217,6 +262,11 @@ export const register: Register = on => {
     })
     await $.tool.register(STATUS_TOOL_SPEC)
     startAgeTicker($)
+    // An open pane stays open for the session: a reload that dropped it
+    // opens it again.
+    if ((await read($, paneAtom)) === 'open' && !(await isPaneOpen($))) {
+      await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+    }
 
     return next(e)
   })
@@ -309,6 +359,10 @@ export const register: Register = on => {
     }
     const doing = describeToolCall(e, await $.clock.now())
     await changeStatus($, status => ({ ...status, doingNow: doing }))
+    const sighting = effortSighting(e)
+    if (sighting !== null) {
+      await effortSeen($, sighting.name)
+    }
     const answer = await next(e)
     const change = toolResultChange(e, answer, await $.clock.now())
     if (change !== null) {
@@ -358,6 +412,26 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The person closing the pane by its mark or key: auto-open leaves it
+  // closed for the rest of the session.
+  on('ui.close', { id: 'session-status' }, async ($, e, next) => {
+    if (e.origin.kind === 'person') {
+      await update($, paneAtom, () => 'closed')
+    }
+
+    return next(e)
+  })
+
+  // The band: counts only, while the pane waits on a narrow terminal.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const status = await read($, statusAtom)
+    if ((await read($, paneAtom)) !== 'open' || e.props.hasSurvey || !(await isPaneWaiting($))) {
+      return next(e)
+    }
+
+    return drawBand($.ui.resolve(e), withDefaults(status))
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => {
     await read($, tickAtom)
 
@@ -368,4 +442,34 @@ export const register: Register = on => {
       columns: e.props.bodyColumns,
     })
   })
+}
+
+/**
+ * Records an effort run a tool call shows, and opens the pane for it. A run
+ * that names no label takes the branch's name while the effort has none.
+ */
+async function effortSeen($: EngineInterface, name: string | null): Promise<void> {
+  if (name !== null) {
+    await changeStatus($, status => withEffort(status, { name, from: 'label' }))
+  } else if (withDefaults(await read($, statusAtom))?.effort == null) {
+    const branch = await readBranch($)
+    if (branch !== null) {
+      await changeStatus($, status => withEffort(status, { name: branch, from: 'branch' }))
+    }
+  }
+  // A run whose name is still unknown opens the pane too.
+  await autoOpenPane($)
+}
+
+/** The session's git branch, or null when git gives none. */
+async function readBranch($: EngineInterface): Promise<string | null> {
+  try {
+    const { exitCode, stdout } = await $.process.run(['git', 'branch', '--show-current'], {
+      timeoutMs: 5_000,
+    })
+
+    return exitCode === 0 ? branchEffortName(stdout) : null
+  } catch {
+    return null
+  }
 }

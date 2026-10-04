@@ -64,6 +64,9 @@ export const MODEL_USAGE = {
   cache_creation_input_tokens: 0,
 }
 
+/** A process's output read whole. */
+const FULL = { isStdoutTruncated: false, isStderrTruncated: false }
+
 /** The engine's own system prompt beneath the mod: one shared section. */
 export const BASE_SECTIONS = [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] as const
 
@@ -81,6 +84,13 @@ export function world(
     saved?: Record<string, unknown>
     /** Makes every `$.process.run` fail as a missing command does, after it is recorded. */
     failRuns?: boolean
+    /**
+     * A terminal below the floor for an unasked pane: every open answers
+     * `{ isPlaced: false }` and the pane waits undrawn.
+     */
+    isNarrow?: boolean
+    /** What `git branch --show-current` prints; git fails when absent. */
+    branch?: string
   } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
@@ -122,15 +132,18 @@ export function world(
   })
   on('prompt.compose', () => ({ sections: BASE_SECTIONS }))
   on('ui.open', (_$, e) => {
+    const isPlaced = options.isNarrow !== true
     panes.set(e.id, {
       id: e.id,
       title: e.title ?? e.id,
       isShown: true,
       isFocused: false,
-      isPlaced: true,
+      isPlaced,
     })
 
-    return { value: { isPlaced: true } }
+    return {
+      value: isPlaced ? { isPlaced: true } : { isPlaced: false, reason: 'below 144 columns' },
+    }
   })
   on('ui.close', (_$, e) => {
     panes.delete(e.id)
@@ -138,16 +151,21 @@ export function world(
     return { value: undefined }
   })
   on('ui.panes', () => ({ value: [...panes.values()] }))
-  on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
-  on('classic.*', () => ({}))
   on('process.run', (_$, e) => {
     runs.push([...e.argv])
     if (options.failRuns === true) {
       throw new Error(`${e.argv[0]}: command not found`)
     }
+    if (e.argv.join(' ') === 'git branch --show-current') {
+      return options.branch === undefined
+        ? { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository', ...FULL } }
+        : { value: { exitCode: 0, stdout: `${options.branch}\n`, stderr: '', ...FULL } }
+    }
 
-    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return { value: { exitCode: 0, stdout: '', stderr: '', ...FULL } }
   })
+  on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
+  on('classic.*', () => ({}))
   on('session.messages', () => ({ value: messages }) as never)
   on('model.complete', async (_$, e) => {
     modelCalls.push(e)
@@ -161,6 +179,8 @@ export function world(
     } as never
   })
   on('turn.complete', (_$, e) => ({ text: e.answer }))
+  // The engine's own band beneath the mod: nothing above the prompt.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => h($.ui.resolve(e).Box, { key: 'engine-band' }) as never)
 
   return {
     clock,
@@ -285,6 +305,33 @@ export function surprise(fields: Record<string, unknown> = {}) {
 export async function sectionText($: Engine, surface: Surface, key: string) {
   const ui = await mountPane($, surface)
   const text = (await ui.find({ key }))?.text
+  await ui.unmount()
+
+  return text
+}
+
+/** Mounts the band above the prompt on a surface. */
+export function mountBand($: Engine, surface: Surface) {
+  return $.ui.mount({
+    plugin: PLUGIN,
+    surface,
+    component: 'AbovePrompt',
+    viewport: { columns: 100, rows: 40 },
+    props: {
+      hasSurvey: false,
+      isWorking: false,
+      maxRows: 10,
+      bodyColumns: 95,
+      scroll: { offset: 0, bodyRows: 10 },
+      view: {},
+    },
+  })
+}
+
+/** The band's line on a surface; undefined when the band is not drawn. */
+export async function bandText($: Engine, surface: Surface) {
+  const ui = await mountBand($, surface)
+  const text = (await ui.find({ key: 'session-status-band' }))?.text
   await ui.unmount()
 
   return text

@@ -120,6 +120,23 @@ export type ObserverRecord = {
   seen: string[]
 }
 
+/** The effort the session runs, found from its tool calls. */
+export type Effort = {
+  /** The effort's name, as its `effort:<name>` label writes it. */
+  name: string
+  /**
+   * Where the name came from: an `effort:<name>` label, or the session's git
+   * branch when an effort skill ran before any label showed.
+   */
+  from?: 'label' | 'branch'
+}
+
+/**
+ * Where the status pane stands for the session: never opened yet, open
+ * (by the person or by an auto-open trigger), or closed by the person.
+ */
+export type PaneState = 'unopened' | 'open' | 'closed'
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
@@ -143,6 +160,8 @@ export type SessionStatus = {
   endListPostedAt: number | null
   /** The observer agent's checks and the findings it showed. */
   observer: ObserverRecord
+  /** The effort the session runs; null when it runs none. */
+  effort: Effort | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }
@@ -156,6 +175,8 @@ declare module 'claude-code' {
       tick: number
       /** Main-loop turns that ended with the pane open since the observer's last check. */
       observerTurns: number
+      /** Where the pane stands: auto-open opens only an `unopened` pane. */
+      pane: PaneState
     }
   }
 }

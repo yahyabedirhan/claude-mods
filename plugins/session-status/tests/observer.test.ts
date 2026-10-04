@@ -89,6 +89,9 @@ test('the observer checks when a subagent finishes, only while the pane is open'
   const w = world(on)
   const s = session($, w)
   await start($)
+  // The person opens the pane and closes it: a finished subagent leaves it closed.
+  await runCommand($)
+  await runCommand($)
   await s.stop('agent-1')
   expect(w.modelCalls).toHaveLength(0)
 
@@ -123,8 +126,8 @@ test('a check asks a small model with the recent steps, the task list and the ef
     },
   )
   await start($)
+  // The first task opens the pane.
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Fix the build' })
-  await runCommand($)
   await session($, w).stop('agent-1')
 
   const [request] = w.modelCalls
@@ -170,8 +173,8 @@ test('findings show as surprises with the observer tag', async ($, on) => {
   const w = world(on)
   w.model(() => findings(LOOP))
   await start($)
+  // The first surprise opens the pane.
   await callStatusTool($, surprise({ occurred: 'The API has no batch endpoint' }))
-  await runCommand($)
   await session($, w).stop('agent-1')
 
   for (const surface of SURFACES) {
@@ -253,7 +256,7 @@ test('each dismissed observer finding doubles the turn interval, up to 40 turns'
   await start($)
   await callStatusTool($, surprise())
   await callStatusTool($, { action: 'dismiss', id: 'S1' })
-  await runCommand($)
+  // The first surprise opened the pane.
 
   await s.turns(5)
   expect(w.modelCalls).toHaveLength(1)

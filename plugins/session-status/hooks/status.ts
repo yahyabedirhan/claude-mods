@@ -105,6 +105,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     subagents: { running: [], finished: [] },
     endListPostedAt: null,
     observer: { checks: 0, seen: [] },
+    effort: null,
     updatedAt: null,
   }
 }
@@ -120,12 +121,13 @@ export function withDefaults(status: SessionStatus | null): SessionStatus | null
 /**
  * The status a session starts with after `/clear`: empty for the new
  * session, but with the previous session's open decisions, ids unchanged, so
- * the person can still answer them by the same id.
+ * the person can still answer them by the same id, and its effort: the new
+ * session still runs in the same effort.
  */
 export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
   const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
 
-  return { ...emptyStatus(sessionId), items: open }
+  return { ...emptyStatus(sessionId), items: open, effort: withDefaults(previous)?.effort ?? null }
 }
 
 /**
