@@ -64,7 +64,7 @@ test('a running subagent keeps the session in progress after the turn ends', asy
   }
 })
 
-test('a turn that runs a settle skill ends settled, and the next turn clears it', async ($, on) => {
+test('a turn that runs a settle skill shows Settling, ends settled, and the next turn clears it', async ($, on) => {
   world(on)
   await start($)
   await runCommand($)
@@ -72,7 +72,7 @@ test('a turn that runs a settle skill ends settled, and the next turn clears it'
   await $.tool.call({ tool: 'Skill', skill: 'settle-session' })
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'state')).toBe('● In progress')
+    expect(await sectionText($, surface, 'state')).toBe('● Settling')
   }
 
   await endTurn($)
@@ -113,5 +113,58 @@ test('the state line waits for the first turn, and the next section is headed No
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'state')).toBeUndefined()
     expect(await sectionText($, surface, 'doing-now')).toMatch(/^Now/)
+  }
+})
+
+test('a turn started with /settle-session or /settle-effort ends settled', async ($, on) => {
+  world(on)
+  await start($)
+  await runCommand($)
+
+  const typed = [
+    '<command-message>settle-session</command-message>\n<command-name>/settle-session</command-name>',
+    '<command-message>skills:settle-effort</command-message>\n<command-name>/skills:settle-effort</command-name>\n<command-args>merge it</command-args>',
+    '/settle-session',
+  ]
+  for (const prompt of typed) {
+    await startTurn($, prompt)
+    for (const surface of SURFACES) {
+      expect(await sectionText($, surface, 'state')).toBe('● Settling')
+    }
+    await endTurn($)
+    for (const surface of SURFACES) {
+      expect(await sectionText($, surface, 'state')).toBe('● Settled')
+    }
+  }
+})
+
+test('a prompt that only mentions settling does not settle', async ($, on) => {
+  world(on)
+  await start($)
+  await runCommand($)
+
+  const mentions = [
+    'run /settle-session later',
+    '/settle-sessions',
+    '<command-message>show-me</command-message>\n<command-name>/show-me</command-name>\n<command-args>/settle-session</command-args>',
+  ]
+  for (const prompt of mentions) {
+    await startTurn($, prompt)
+    await endTurn($)
+    for (const surface of SURFACES) {
+      expect(await sectionText($, surface, 'state')).toBe('● Waiting for reply')
+    }
+  }
+})
+
+test('an interrupted settle turn waits for a reply instead of settling', async ($, on) => {
+  world(on)
+  await start($)
+  await runCommand($)
+  await startTurn($, '/settle-session')
+  await $.turn.complete({ answer: '', durationMs: 1000, isAborted: true, turnId: 'turn', reason: 'aborted' })
+
+  for (const surface of SURFACES) {
+    expect(await sectionText($, surface, 'state')).toBe('● Waiting for reply')
   }
 })

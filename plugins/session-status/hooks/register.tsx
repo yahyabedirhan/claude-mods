@@ -7,7 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
-import { afterTurn, settles } from './activity'
+import { afterTurn, settles, settlesByPrompt } from './activity'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
@@ -577,9 +577,12 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // A turn that starts puts the session in progress, a settled one too.
+  // A turn that starts puts the session in progress, a settled one too; a
+  // prompt that types a settle skill's slash command settles the turn, as a
+  // Skill call to it does.
   on('turn.start', async ($, e, next) => {
-    await changeStatus($, status => (status.activity === 'working' ? status : { ...status, activity: 'working' }))
+    const activity = settlesByPrompt(e.text) ? 'settling' : 'working'
+    await changeStatus($, status => (status.activity === activity ? status : { ...status, activity }))
 
     return next(e)
   })
@@ -589,7 +592,7 @@ export const register: Register = on => {
   // observer's interval.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
-      await changeStatus($, status => ({ ...status, activity: afterTurn(status.activity) }))
+      await changeStatus($, status => ({ ...status, activity: afterTurn(status.activity, e.reason === 'aborted') }))
       startObserver($, 'turn')
     }
 

@@ -13,7 +13,7 @@ claude plugin install session-status@claude-mods
 Sections, top to bottom. An empty section is not drawn.
 
 ```text
-● In progress    the session's state: Blocked, In progress, Waiting for reply or Settled
+● In progress    the session's state: Blocked, In progress, Settling, Waiting for reply or Settled
 Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
 Session          Branch    pane-width
@@ -34,9 +34,12 @@ Answered (N) · Last update
 1. **State**: one word for the whole session, by priority.
    - **Blocked** while a blocked decision is open.
    - **In progress** while a turn or a subagent runs.
+   - **Settling** while a turn that runs `settle-session` or `settle-effort`
+     runs.
    - **Waiting for reply** once the turn ended.
    - **Settled** once a turn that ran `settle-session` or `settle-effort`
-     ended; the next turn clears it.
+     ended, as a Skill call or as the slash command you typed; the next turn
+     clears it.
 2. **Now**: the current task, or the last tool call (its description, file
    name or programs).
 3. **Blocked on you**: decisions that stop the work until you answer.

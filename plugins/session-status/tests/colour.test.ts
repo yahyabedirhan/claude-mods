@@ -3,7 +3,18 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { SURFACES, blockedDecision, callStatusTool, mountPane, reviewLaterDecision, start, world } from './world'
+import {
+  SURFACES,
+  blockedDecision,
+  callStatusTool,
+  endTurn,
+  mountPane,
+  reviewLaterDecision,
+  runCommand,
+  start,
+  startTurn,
+  world,
+} from './world'
 import type { Surface } from './world'
 
 /** The style props of the innermost Text that shows exactly `text`. */
@@ -44,4 +55,38 @@ test('blocked items take the warning colour, ids the accent, bars the success co
     expect(await styleOf($, surface, /^\[observer\] $/)).toMatchObject({ dimColor: true })
     expect(await styleOf($, surface, /^Session$/)).toMatchObject({ bold: true })
   }
+})
+
+test('every state line draws in a colour of its own', async ($, on) => {
+  world(on)
+  await start($)
+  await runCommand($)
+  const seen: Record<string, string> = {}
+  const look = async (state: string) => {
+    for (const surface of SURFACES) {
+      const { color, dimColor } = await styleOf($, surface, new RegExp(`^● ${state}$`))
+      seen[state] = typeof color === 'string' ? color : dimColor === true ? 'dim' : 'none'
+    }
+  }
+
+  await startTurn($)
+  await look('In progress')
+  await callStatusTool($, blockedDecision())
+  await look('Blocked')
+  await callStatusTool($, { action: 'resolve', id: 'D1' })
+  await endTurn($)
+  await look('Waiting for reply')
+  await startTurn($, '/settle-session')
+  await look('Settling')
+  await endTurn($)
+  await look('Settled')
+
+  expect(seen).toEqual({
+    'In progress': 'success',
+    Blocked: 'warning',
+    'Waiting for reply': 'suggestion',
+    Settling: 'planMode',
+    Settled: 'dim',
+  })
+  expect(new Set(Object.values(seen)).size).toBe(5)
 })
