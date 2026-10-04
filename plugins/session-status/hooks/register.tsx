@@ -4,7 +4,7 @@
 // writes. Keep feature logic in those modules; keep only I/O here.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
@@ -19,12 +19,16 @@ import {
   recordedText,
 } from './status-tool'
 import {
+  KEPT_SESSIONS,
   applyChange,
   closeItem,
   emptyStatus,
+  keysToPrune,
   onEndList,
   openReviewLater,
   recordItem,
+  savedStatus,
+  statusForSession,
   withDefaults,
 } from './status'
 import { subagentStarted, subagentStopped } from './subagents'
@@ -45,13 +49,53 @@ const tickAtom = atom({ plugin: 'session-status', key: 'tick' } as const, 0)
 // The status store: the status in `$.state`, every change saved to
 // `$.store` with the session id as the key.
 
+/**
+ * Makes `$.state` hold the status of `sessionId` when it holds another
+ * session's or none: the saved one on a resume, else the open decisions
+ * carried over from the one held (a `/clear`), saved at once. A new session
+ * also drops the oldest saved sessions beyond KEPT_SESSIONS.
+ */
+async function holdSession($: EngineInterface, sessionId: string): Promise<void> {
+  const held = await read($, statusAtom)
+  if (held?.sessionId === sessionId) {
+    return
+  }
+  const saved = savedStatus(await $.store.get(sessionId), sessionId)
+  const now = await $.clock.now()
+  const status = await update($, statusAtom, current =>
+    statusForSession(current, sessionId, saved, now),
+  )
+  // A restored status is saved as it was; a carried one is saved for the first time.
+  if (status !== null) {
+    await $.store.set(sessionId, status)
+  }
+  await pruneStore($, sessionId)
+}
+
+/** Deletes the saved statuses beyond the newest KEPT_SESSIONS; keeps `current`. */
+async function pruneStore($: EngineInterface, current: string): Promise<void> {
+  const keys = await $.store.keys()
+  const all = keys.includes(current) ? keys : [...keys, current]
+  if (all.length <= KEPT_SESSIONS) {
+    return
+  }
+  const entries = await Promise.all(
+    all.map(async key => ({ key, value: key === current ? null : await $.store.get(key) })),
+  )
+  for (const key of keysToPrune(entries, current)) {
+    await $.store.delete(key)
+  }
+}
+
 /** Applies one change to the status and saves it; resolves to the new status. See `applyChange`. */
 async function changeStatus(
   $: EngineInterface,
   change: (status: SessionStatus) => SessionStatus,
 ): Promise<SessionStatus> {
-  const stamp = { sessionId: await $.session.id(), now: await $.clock.now() }
-  let status = emptyStatus(stamp.sessionId)
+  const sessionId = await $.session.id()
+  await holdSession($, sessionId)
+  const stamp = { sessionId, now: await $.clock.now() }
+  let status = emptyStatus(sessionId)
   await update($, statusAtom, current => (status = applyChange(current, change, stamp)))
   await $.store.set(stamp.sessionId, status)
 
@@ -76,13 +120,19 @@ async function togglePane($: EngineInterface): Promise<'opened' | 'closed'> {
   return 'opened'
 }
 
+/** This module load's age timer; a reload starts the module, and this, over. */
+let ageTicker: Timer | undefined
+
 /**
  * Draws the pane again every AGE_TICK_MS while it is open, so "last update"
  * ages without a status change. A reload drops the timer, and the
- * `session.start` that follows a reload starts it again.
+ * `session.start` that follows a reload starts it again. A `session.start`
+ * that runs again in the same load stops the timer before it, so one runs.
+ * (`/clear` fires no `session.start`; the timer goes on across it.)
  */
 function startAgeTicker($: EngineInterface): void {
-  $.clock.every(AGE_TICK_MS, () => {
+  ageTicker?.cancel()
+  ageTicker = $.clock.every(AGE_TICK_MS, () => {
     void (async () => {
       if (await isPaneOpen($)) {
         const now = await $.clock.now()
@@ -100,6 +150,18 @@ export const register: Register = on => {
     })
     await $.tool.register(STATUS_TOOL_SPEC)
     startAgeTicker($)
+
+    return next(e)
+  })
+
+  // Resume, /clear and fork move the process to another session id; the
+  // status follows it (see holdSession). /compact keeps the session and its
+  // status, so `compact` changes nothing, and no hook here touches the
+  // status on PreCompact, PostCompact or session.end.
+  on('classic.SessionStart', async ($, e, next) => {
+    if (e.source !== 'compact') {
+      await holdSession($, e.session_id)
+    }
 
     return next(e)
   })

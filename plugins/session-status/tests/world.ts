@@ -30,6 +30,8 @@ export type World = {
    * as the tool's record (`{ stdout }` for Bash). Other tools answer `ok`.
    */
   answer: (tool: string, result: (e: ToolCallInput) => unknown) => void
+  /** Moves the process on to another session id, as /clear and /resume do. */
+  switchSession: (sessionId: string) => void
 }
 
 /** The engine's own system prompt beneath the mod: one shared section. */
@@ -42,22 +44,32 @@ export const BASE_SECTIONS = [{ id: 'intro', text: 'You are Claude Code.', scope
  *
  * Call it before the test's first call on `$`.
  */
-export function world(on: On, options: { sessionId?: string } = {}): World {
+export function world(
+  on: On,
+  options: { sessionId?: string; saved?: Record<string, unknown> } = {},
+): World {
   const clock = mock.clock(on, { now: START })
-  const saved: Record<string, unknown> = {}
+  const saved: Record<string, unknown> = { ...options.saved }
+  let sessionId = options.sessionId ?? SESSION_ID
   const panes = new Map<string, UiPane>()
   const commands: string[] = []
   const tools = new Map<string, ToolSpec>()
   const answers = new Map<string, (e: ToolCallInput) => unknown>()
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.id', () => ({ value: options.sessionId ?? SESSION_ID }))
+  on('session.id', () => ({ value: sessionId }))
   on('store.get', (_$, e) => ({ value: saved[e.key] }))
   on('store.set', (_$, e) => {
     saved[e.key] = e.value
 
     return { value: undefined }
   })
+  on('store.delete', (_$, e) => {
+    delete saved[e.key]
+
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: Object.keys(saved) }))
   on('command.register', (_$, e) => {
     commands.push(e.name)
 
@@ -98,6 +110,9 @@ export function world(on: On, options: { sessionId?: string } = {}): World {
     tools,
     answer: (tool, result) => {
       answers.set(tool, result)
+    },
+    switchSession: id => {
+      sessionId = id
     },
   }
 }

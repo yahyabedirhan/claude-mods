@@ -117,17 +117,97 @@ export function withDefaults(status: SessionStatus | null): SessionStatus | null
 }
 
 /**
+ * The status a session starts with after `/clear`: empty for the new
+ * session, but with the previous session's open decisions, ids unchanged, so
+ * the person can still answer them by the same id.
+ */
+export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
+  const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
+
+  return { ...emptyStatus(sessionId), items: open }
+}
+
+/**
+ * A value read from `$.store` as the saved status of `sessionId`, or null
+ * when it is not one: missing, another session's, or not a status at all.
+ */
+export function savedStatus(value: unknown, sessionId: string): SessionStatus | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+  const status = value as Partial<SessionStatus>
+  if (status.version !== 1 || status.sessionId !== sessionId || !Array.isArray(status.items)) {
+    return null
+  }
+
+  return withDefaults(status as SessionStatus)
+}
+
+/**
+ * The status `sessionId` holds, given the one held now and the one saved for
+ * it: the held one when it is this session's; else the saved one (a resume);
+ * else the held one's open decisions carried over at `now` (a `/clear`);
+ * else none.
+ */
+export function statusForSession(
+  held: SessionStatus | null,
+  sessionId: string,
+  saved: SessionStatus | null,
+  now: number,
+): SessionStatus | null {
+  if (held?.sessionId === sessionId) {
+    return held
+  }
+  if (saved !== null) {
+    return saved
+  }
+
+  return held === null ? null : { ...carryOver(held, sessionId), updatedAt: now }
+}
+
+/** How many sessions' statuses `$.store` keeps; older ones are dropped. */
+export const KEPT_SESSIONS = 30
+
+/**
+ * The store keys to delete so at most KEPT_SESSIONS sessions stay: the
+ * oldest by their last update, a value that is not a status counting as
+ * oldest. The current session always stays.
+ */
+export function keysToPrune(saved: { key: string; value: unknown }[], current: string): string[] {
+  if (saved.length <= KEPT_SESSIONS) {
+    return []
+  }
+  const updatedAt = (value: unknown) => {
+    const at = (value as { updatedAt?: unknown } | null)?.updatedAt
+
+    return typeof at === 'number' ? at : 0
+  }
+  const others = saved
+    .filter(entry => entry.key !== current)
+    .sort((a, b) => updatedAt(b.value) - updatedAt(a.value))
+  const kept = saved.length - others.length
+
+  return others.slice(Math.max(KEPT_SESSIONS - kept, 0)).map(entry => entry.key)
+}
+
+/**
  * The status after one change: `change` applied to the current status (an
  * empty one before the first change), stamped with the session and the time.
+ * A current status of another session is never stamped with this one: the
+ * change applies to its open decisions carried over, as after a `/clear`.
  */
 export function applyChange(
   current: SessionStatus | null,
   change: (status: SessionStatus) => SessionStatus,
   stamp: { sessionId: string; now: number },
 ): SessionStatus {
-  return {
-    ...change(withDefaults(current) ?? emptyStatus(stamp.sessionId)),
-    sessionId: stamp.sessionId,
-    updatedAt: stamp.now,
-  }
+  const held = withDefaults(current)
+  const base =
+    held === null
+      ? emptyStatus(stamp.sessionId)
+      : held.sessionId === stamp.sessionId
+        ? held
+        : carryOver(held, stamp.sessionId)
+
+  return { ...change(base), sessionId: stamp.sessionId, updatedAt: stamp.now }
 }
