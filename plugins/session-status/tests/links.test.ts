@@ -19,7 +19,7 @@ function shell(w: World, printed: Record<string, string>) {
 async function linksIn($: Engine, surface: (typeof SURFACES)[number]) {
   const ui = await mountPane($, surface)
   const links = await ui.findAll({ type: 'Link' })
-  const section = await ui.find({ key: 'links' })
+  const section = await ui.find({ key: 'session' })
   await ui.unmount()
 
   return { links, section }
@@ -42,7 +42,7 @@ test('a created pull request and issue show as clickable <repo>#<number> links',
       ['widgets#34', ISSUE_URL],
     ])
     expect(section?.text).toContain('PR widgets#12')
-    expect(section?.text).toContain('Issue widgets#34')
+    expect(section?.text).toContain('issue widgets#34')
   }
 })
 
@@ -85,7 +85,7 @@ test('the same page shows once', async ($, on) => {
   expect((w.saved[SESSION_ID] as { links: unknown[] }).links).toHaveLength(1)
 })
 
-test('the links section stays out of the pane before the first link', async ($, on) => {
+test('no link shows before the first created page', async ($, on) => {
   world(on)
   await start($)
   await $.tool.call({ tool: 'Bash', command: 'ls' })

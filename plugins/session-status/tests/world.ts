@@ -75,7 +75,16 @@ export type World = {
    * called, as a long-running tool does.
    */
   holdTool: (tool: string) => () => void
+  /** Sets what `git branch --show-current` prints from now on; undefined makes git fail. */
+  branch: (name: string | undefined) => void
 }
+
+/**
+ * A git repository on the test host: its top folder and, when it has one, its
+ * `origin` remote. `git -C <dir> rev-parse --show-toplevel` answers the
+ * deepest repository that holds the folder.
+ */
+export type GitRepo = { root: string; remote?: string }
 
 /** One issue as `gh issue list --json number,title,state,labels` prints it. */
 export type GhIssue = { number: number; title: string; state: 'OPEN' | 'CLOSED'; labels: { name: string }[] }
@@ -129,6 +138,10 @@ export function world(
     issues?: GhIssue[]
     /** Makes every `$.store.set` fail, as a full store does, after it is recorded. */
     failStoreWrites?: boolean
+    /** The session's directory, as `$.session.cwd()` answers it; `/work` when absent. */
+    cwd?: string
+    /** The git repositories on the host; none when absent, so git finds no repository. */
+    repos?: GitRepo[]
   } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
@@ -144,12 +157,14 @@ export function world(
   const modelCalls: ModelCompleteRequest[] = []
   let reply: ModelReply = () => '{"findings":[]}'
   let issues = options.issues
+  let branch = options.branch
   let issueGate: Promise<void> | null = null
   const storeWrites: { key: string; value: unknown }[] = []
   const toolGates = new Map<string, Promise<void>>()
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
+  on('session.cwd', () => ({ value: options.cwd ?? '/work' }))
   on('store.get', (_$, e) => ({ value: saved[e.key] }))
   on('store.set', (_$, e) => {
     storeWrites.push({ key: e.key, value: e.value })
@@ -205,9 +220,13 @@ export function world(
       throw new Error(`${e.argv[0]}: command not found`)
     }
     if (e.argv.join(' ') === 'git branch --show-current') {
-      return options.branch === undefined
+      return branch === undefined
         ? { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository', ...FULL } }
-        : { value: { exitCode: 0, stdout: `${options.branch}\n`, stderr: '', ...FULL } }
+        : { value: { exitCode: 0, stdout: `${branch}\n`, stderr: '', ...FULL } }
+    }
+    const git = gitAnswer(options.repos ?? [], e.argv)
+    if (git !== null) {
+      return { value: { ...git, ...FULL } }
     }
     if (e.argv.slice(0, 3).join(' ') === 'gh issue list') {
       await issueGate
@@ -299,6 +318,9 @@ export function world(
         release()
       }
     },
+    branch: name => {
+      branch = name
+    },
     holdTool: tool => {
       let release = () => {}
       toolGates.set(
@@ -314,6 +336,31 @@ export function world(
       }
     },
   }
+}
+
+/**
+ * What git prints for `git -C <dir> rev-parse --show-toplevel` and
+ * `git -C <root> remote get-url origin` on a host with these repositories;
+ * null for any other command.
+ */
+function gitAnswer(repos: readonly GitRepo[], argv: readonly string[]) {
+  if (argv[0] !== 'git' || argv[1] !== '-C' || argv[2] === undefined) {
+    return null
+  }
+  const dir = argv[2].replace(/\/+$/, '')
+  const rest = argv.slice(3).join(' ')
+  const holder = repos
+    .filter(repo => dir === repo.root || dir.startsWith(`${repo.root}/`))
+    .sort((a, b) => b.root.length - a.root.length)[0]
+  const fail = { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+  if (rest === 'rev-parse --show-toplevel') {
+    return holder === undefined ? fail : { exitCode: 0, stdout: `${holder.root}\n`, stderr: '' }
+  }
+  if (rest === 'remote get-url origin') {
+    return holder?.remote === undefined ? { ...fail, exitCode: 2 } : { exitCode: 0, stdout: `${holder.remote}\n`, stderr: '' }
+  }
+
+  return null
 }
 
 /** Ends one main-loop turn as the query loop does; resolves to its result. */

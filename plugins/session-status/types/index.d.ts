@@ -181,6 +181,24 @@ export type TicketReport = {
   landedAt?: number
 }
 
+/** A repository on GitHub. */
+export type GitHubRepo = {
+  /** `<owner>/<name>`. */
+  slug: string
+  /** Its page: `https://github.com/<owner>/<name>`. */
+  url: string
+}
+
+/** Where the session works: its repository, read from git in its directory. */
+export type SessionPlace = {
+  /** The repository's top folder, absolute: kept for the record, never shown. */
+  root: string
+  /** The branch checked out; null on a detached head. */
+  branch: string | null
+  /** The repository on GitHub, from its `origin` remote; null when it has none there. */
+  repo: GitHubRepo | null
+}
+
 /** One session's status, as held in `$.state` and saved to `$.store`. */
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
@@ -213,6 +231,8 @@ export type SessionStatus = {
    * The Session section counts the current effort's: landed of all reported.
    */
   ticketReports: TicketReport[]
+  /** Where the session works; null before git answers, and outside a repository. */
+  place: SessionPlace | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

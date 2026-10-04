@@ -14,6 +14,11 @@ import {
 const SESSION = '3F2A9C1E-77b0-4d2e-9a10-5c3e8d1f0a42'
 const PING = 'ss-3f2a9c1e-d1'
 
+/** The shipyard commands among the runs: the session's git reads are not pings. */
+function pingRuns(runs: string[][]) {
+  return runs.filter(argv => argv[0] === 'shipyard')
+}
+
 /** Lets the pings the mod queued with `$.clock.after(0, ...)` run. */
 async function settle(clock: { advance: (ms: number) => Promise<void> }) {
   await clock.advance(0)
@@ -82,7 +87,7 @@ test('a new blocking decision sends one ping with its id and --herdr', async ($,
   await callStatusTool($, blockedDecision())
   await settle(clock)
 
-  expect(runs).toEqual([
+  expect(pingRuns(runs)).toEqual([
     [
       'shipyard',
       'ping',
@@ -108,7 +113,7 @@ test('resolving a blocking decision withdraws its ping', async ($, on) => {
   await callStatusTool($, { action: 'resolve', id: 'D1' })
   await settle(clock)
 
-  expect(runs).toEqual([['shipyard', 'ping', 'withdraw', PING]])
+  expect(pingRuns(runs)).toEqual([['shipyard', 'ping', 'withdraw', PING]])
 })
 
 test('resolving a blocked decision carried over /clear withdraws the ping the first session sent', async ($, on) => {
@@ -124,7 +129,7 @@ test('resolving a blocked decision carried over /clear withdraws the ping the fi
   await callStatusTool($, { action: 'resolve', id: 'D1' })
   await settle(clock)
 
-  expect(runs).toEqual([['shipyard', 'ping', 'withdraw', PING]])
+  expect(pingRuns(runs)).toEqual([['shipyard', 'ping', 'withdraw', PING]])
 })
 
 test('review-later decisions and surprises send no ping, and resolving them withdraws nothing', async ($, on) => {
@@ -137,7 +142,7 @@ test('review-later decisions and surprises send no ping, and resolving them with
   await callStatusTool($, { action: 'dismiss', id: 'S1' })
   await settle(clock)
 
-  expect(runs).toEqual([])
+  expect(pingRuns(runs)).toEqual([])
 })
 
 test('a refused status call sends no ping', async ($, on) => {
@@ -148,7 +153,7 @@ test('a refused status call sends no ping', async ($, on) => {
   await callStatusTool($, blockedDecision({ question: '' }))
   await settle(clock)
 
-  expect(runs).toEqual([])
+  expect(pingRuns(runs)).toEqual([])
 })
 
 test('the end-of-work list sends one ping with the count of open decisions on it', async ($, on) => {
@@ -162,7 +167,7 @@ test('the end-of-work list sends one ping with the count of open decisions on it
   await callStatusTool($, { action: 'post_end_list' })
   await settle(clock)
 
-  expect(runs).toEqual([
+  expect(pingRuns(runs)).toEqual([
     [
       'shipyard',
       'ping',
@@ -185,7 +190,7 @@ test('an end-of-work list with no open decision sends no ping', async ($, on) =>
   await callStatusTool($, { action: 'post_end_list' })
   await settle(clock)
 
-  expect(runs).toEqual([])
+  expect(pingRuns(runs)).toEqual([])
 })
 
 test('a failing shipyard leaves the status call answered', async ($, on) => {
@@ -197,7 +202,7 @@ test('a failing shipyard leaves the status call answered', async ($, on) => {
   const resolved = await callStatusTool($, { action: 'resolve', id: 'D1' })
   await settle(clock)
 
-  expect(runs.map(argv => argv[2])).toEqual(['Which database do we use?', 'withdraw'])
+  expect(pingRuns(runs).map(argv => argv[2])).toEqual(['Which database do we use?', 'withdraw'])
   expect(recorded.deny).toBeUndefined()
   expect(recorded.result).toContain('D1')
   expect(resolved.deny).toBeUndefined()

@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { SessionStatus, StatusItem } from '../types'
+import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
@@ -23,6 +23,7 @@ import { isCheckDue, observerRequest, parseFindings, recordCheck } from './obser
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
 import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
+import { changesBranch, githubRepo, withPlace } from './place'
 import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
@@ -356,6 +357,7 @@ export const register: Register = on => {
     if ((await read($, paneAtom)) === 'open' && !(await isPaneOpen($))) {
       await $.ui.open({ id: PANE_ID, title: PANE_TITLE, columns: PANE_COLUMNS })
     }
+    readPlace($)
 
     return next(e)
   })
@@ -392,6 +394,15 @@ export const register: Register = on => {
       clearedFrom = null
       await holdSession($, e.session_id)
     }
+    if (e.source !== 'compact') {
+      readPlace($)
+    }
+
+    return next(e)
+  })
+
+  on('classic.CwdChanged', async ($, e, next) => {
+    readPlace($)
 
     return next(e)
   })
@@ -511,6 +522,9 @@ export const register: Register = on => {
     const change = toolResultChange(e, answer, await $.clock.now())
     await changeStatus($, change ?? (status => status))
     await countTicketsIfDue($, e)
+    if (changesBranch(e)) {
+      readPlace($)
+    }
 
     return answer
   })
@@ -686,35 +700,97 @@ async function countTickets($: EngineInterface, effort: string): Promise<void> {
 }
 
 /**
- * Names the effort after the session's git branch, on a timer so `git` never
- * holds the tool call. A label found meanwhile wins (see `withEffort`).
+ * Runs `work` on a timer, so it never holds the hook that starts it; a
+ * failure goes to the debug log, and the status stays as it was.
+ */
+function inBackground($: EngineInterface, what: string, work: () => Promise<void>): void {
+  try {
+    $.clock.after(0, () => {
+      work().catch((error: unknown) => {
+        $.ui.log(`session-status ${what}: ${String(error)}`, { to: 'debug' })
+      })
+    })
+  } catch {
+    // The status stays as it was until the next read.
+  }
+}
+
+/**
+ * Names the effort after the session's git branch, in the background. A
+ * label or a report found meanwhile wins (see `withEffort`).
  */
 function nameEffortFromBranch($: EngineInterface): void {
-  const name = async () => {
+  inBackground($, 'branch read', async () => {
     const branch = await readBranch($)
     if (branch !== null) {
       await changeStatus($, status => withEffort(status, { name: branch, from: 'branch' }))
     }
-  }
-  try {
-    $.clock.after(0, () => {
-      name().catch((error: unknown) => {
-        $.ui.log(`session-status branch read: ${String(error)}`, { to: 'debug' })
-      })
-    })
-  } catch {
-    // The effort stays unnamed until a label names it.
-  }
+  })
 }
 
 /** The session's git branch, or null when git gives none. */
 async function readBranch($: EngineInterface): Promise<string | null> {
-  try {
-    const { exitCode, stdout } = await $.process.run(['git', 'branch', '--show-current'], {
-      timeoutMs: 5_000,
-    })
+  const branch = await gitLine($, ['git', 'branch', '--show-current'])
 
-    return exitCode === 0 ? branchEffortName(stdout) : null
+  return branch === null ? null : branchEffortName(branch)
+}
+
+// Where the session works: its repository, branch and worktree, read from
+// git in the background and cached per folder, so a tool call never waits.
+
+/** Each folder's repository top folder, as git answered it; null outside one. */
+const repoRoots = new Map<string, Promise<string | null>>()
+
+/** Each repository's GitHub repository, from its `origin` remote; null when it has none there. */
+const githubRepos = new Map<string, Promise<GitHubRepo | null>>()
+
+/** The top folder of the repository that holds `dir`, asked of git once per folder. */
+function repoRootOf($: EngineInterface, dir: string): Promise<string | null> {
+  let root = repoRoots.get(dir)
+  if (root === undefined) {
+    root = gitLine($, ['git', '-C', dir, 'rev-parse', '--show-toplevel'])
+    repoRoots.set(dir, root)
+  }
+
+  return root
+}
+
+/** The GitHub repository of the repository at `root`, asked of git once per repository. */
+function githubRepoOf($: EngineInterface, root: string): Promise<GitHubRepo | null> {
+  let repo = githubRepos.get(root)
+  if (repo === undefined) {
+    repo = gitLine($, ['git', '-C', root, 'remote', 'get-url', 'origin']).then(url =>
+      url === null ? null : githubRepo(url),
+    )
+    githubRepos.set(root, repo)
+  }
+
+  return repo
+}
+
+/**
+ * Reads where the session works, in the background, into the status: in
+ * `$.state` alone, so a session that does nothing saves nothing; the next
+ * change saves it. Outside a repository the status keeps what it had.
+ */
+function readPlace($: EngineInterface): void {
+  inBackground($, 'place read', async () => {
+    const root = await repoRootOf($, await $.session.cwd())
+    if (root === null) {
+      return
+    }
+    const [branch, repo] = await Promise.all([readBranch($), githubRepoOf($, root)])
+    await changeStatus($, status => withPlace(status, { root, branch, repo }), { save: false })
+  })
+}
+
+/** What a git command prints, trimmed; null when it fails or prints nothing. */
+async function gitLine($: EngineInterface, argv: string[]): Promise<string | null> {
+  try {
+    const { exitCode, stdout } = await $.process.run(argv, { timeoutMs: 5_000 })
+    const line = stdout.trim()
+
+    return exitCode === 0 && line !== '' ? line : null
   } catch {
     return null
   }

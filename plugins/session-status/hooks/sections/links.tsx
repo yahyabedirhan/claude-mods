@@ -1,10 +1,11 @@
 import { linkLabel } from '../links'
+import { isSessionLink } from '../place'
 import type { Section } from './section'
 
 /** The pull requests and issues the session created, each a link to its page. */
 export const linksSection: Section = ({ ui, status }) => {
   const { Box, Link, Text } = ui
-  const links = status?.links ?? []
+  const links = status === null ? [] : status.links.filter(link => !isSessionLink(status, link))
   if (links.length === 0) {
     return null
   }
