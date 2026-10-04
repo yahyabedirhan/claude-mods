@@ -1,0 +1,12 @@
+{
+  "name": "claude-mods",
+  "owner": { "name": "yahyabedirhan" },
+  "description": "Claude Code mods: plugins of function hooks that change how Claude Code behaves or looks.",
+  "plugins": [
+    {
+      "name": "session-status",
+      "source": "./plugins/session-status",
+      "description": "A read-only pane that shows the session's live status: doing now, decisions, progress, surprises and the last update."
+    }
+  ]
+}
