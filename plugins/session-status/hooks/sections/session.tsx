@@ -37,10 +37,10 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
   if (effort !== null) {
     lines.push(labelled(ui, 'Effort', effort.name, repo === null ? null : effortUrl(repo, effort.name)))
   }
-  if (place?.branch != null) {
+  if (place !== null && place.branch !== null) {
     lines.push(labelled(ui, 'Branch', place.branch, repo === null ? null : branchUrl(repo, place.branch)))
   }
-  if (place != null && worktreeLabel(place.root) !== '') {
+  if (place !== null && worktreeLabel(place.root) !== '') {
     lines.push(labelled(ui, 'Worktree', worktreeLabel(place.root), null))
   }
   if (progress !== null) {

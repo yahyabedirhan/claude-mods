@@ -11,13 +11,7 @@ import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
 import { branchEffortName, effortSighting, withEffort } from './effort'
-import {
-  TICKET_TIMEOUT_MS,
-  isTicketReadDue,
-  parseTicketList,
-  ticketListArgv,
-  withTickets,
-} from './effort-progress'
+import { TICKET_TIMEOUT_MS, isTicketReadDue, parseTicketList, ticketListArgv, withTickets } from './effort-progress'
 import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
@@ -743,7 +737,10 @@ async function readBranch($: EngineInterface): Promise<string | null> {
 // Where the session works: its repository, branch and worktree, read from
 // git in the background and cached per folder, so a tool call never waits.
 
-/** Each folder's repository top folder, as git answered it; null outside one. */
+/**
+ * Each folder's repository top folder, as git answered it. Only an answer is
+ * kept: a folder outside a repository, or not made yet, is asked again.
+ */
 const repoRoots = new Map<string, Promise<string | null>>()
 
 /** Each repository's GitHub repository, from its `origin` remote; null when it has none there. */
@@ -755,6 +752,11 @@ function repoRootOf($: EngineInterface, dir: string): Promise<string | null> {
   if (root === undefined) {
     root = gitLine($, ['git', '-C', dir, 'rev-parse', '--show-toplevel'])
     repoRoots.set(dir, root)
+    void root.then(found => {
+      if (found === null) {
+        repoRoots.delete(dir)
+      }
+    })
   }
 
   return root

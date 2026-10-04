@@ -191,13 +191,12 @@ export type ShownPlace = {
  */
 export function shownPlaces(status: SessionStatus): ShownPlace[] {
   const own = status.place
-  const isOwn = (key: string, slug: string | undefined) =>
-    own !== null &&
-    (own.root === key || (own.repo !== null && slug !== undefined && isSameRepo(own.repo.slug, slug)))
+  const isOwnRepo = (slug: string | undefined) =>
+    own?.repo != null && slug !== undefined && isSameRepo(own.repo.slug, slug)
   const shown = new Map<string, ShownPlace>()
   const groupOf = (slug: string | undefined, key: string) => slug?.toLowerCase() ?? key
   for (const place of status.places) {
-    if (isOwn(place.key, place.repo?.slug)) {
+    if (place.key === own?.root || isOwnRepo(place.repo?.slug)) {
       continue
     }
     const group = groupOf(place.repo?.slug, place.key)
@@ -215,7 +214,7 @@ export function shownPlaces(status: SessionStatus): ShownPlace[] {
     return [...shown.values()]
   }
   for (const link of status.links) {
-    if (isOwn('', link.repo)) {
+    if (isOwnRepo(link.repo)) {
       continue
     }
     const group = groupOf(link.repo, link.repo)
