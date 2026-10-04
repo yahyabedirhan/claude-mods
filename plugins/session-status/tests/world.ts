@@ -24,6 +24,8 @@ export type Surface = (typeof SURFACES)[number]
 export const START = Date.UTC(2026, 9, 4, 12, 0, 0)
 
 export type World = {
+  /** The argument of every `$.ui.open` the mod made, oldest first. */
+  opens: { id: string; title?: string; columns?: number }[]
   clock: MockClock
   /** What the mod saved to `$.store`, by key. */
   saved: Record<string, unknown>
@@ -133,6 +135,7 @@ export function world(
   const saved: Record<string, unknown> = { ...options.saved }
   let sessionId = options.sessionId ?? SESSION_ID
   const panes = new Map<string, UiPane>()
+  const opens: World['opens'] = []
   const commands: string[] = []
   const tools = new Map<string, ToolSpec>()
   const answers = new Map<string, (e: ToolCallInput) => unknown>()
@@ -176,6 +179,7 @@ export function world(
   })
   on('prompt.compose', () => ({ sections: BASE_SECTIONS }))
   on('ui.open', (_$, e) => {
+    opens.push({ id: e.id, title: e.title, columns: e.columns })
     const isPlaced = options.isNarrow !== true
     panes.set(e.id, {
       id: e.id,
@@ -258,6 +262,7 @@ export function world(
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => h($.ui.resolve(e).Box, { key: 'engine-band' }) as never)
 
   return {
+    opens,
     clock,
     saved,
     storeWrites,
