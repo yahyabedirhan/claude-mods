@@ -1,11 +1,11 @@
 // The status tool: what the model reads about it, and the rules that turn
-// one call's input into an item to record. Registering the tool and
+// one call's input into what it asks for. Registering the tool and
 // answering its calls live in register.tsx, where `$` is.
 //
-// One tool with an `action` field, so later actions (resolve a decision,
-// dismiss a surprise) join this same tool.
+// One tool with an `action` field: it records items, closes them and marks
+// the end-of-work list as posted.
 
-import type { DecisionUrgency, StatusItem } from '../types'
+import type { Decision, DecisionUrgency, StatusItem } from '../types'
 import type { ItemDraft } from './status'
 
 /** The tool's short name: the model calls it as `mcp__session-status__status`. */
@@ -14,7 +14,7 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list'] as const
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
@@ -22,15 +22,21 @@ const MAX_OPTIONS = 4
 /** What `$.tool.register` takes for the status tool. */
 export const STATUS_TOOL_SPEC = {
   name: STATUS_TOOL_NAME,
+  // Subagents get this tool but not the prompt section, so the description
+  // carries the core of the instructions too, in short.
   description: [
-    "Records an item on the session status pane the user watches.",
-    "`record_decision`: a choice the user must make. Give the question, two to four options,",
-    "your default (the answer you recommend) and what unblocks it.",
-    "Use urgency `review_later` when a safe default exists: continue with the default.",
-    "Use urgency `blocked` only when no safe default exists and you must stop.",
-    "`record_surprise`: something unexpected that changed the work or the plan.",
-    "Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.",
-    'The result names the item\'s id (D1, S1, ...).',
+    'Keeps the session status pane the user watches current. The pane is read-only: the user answers in the chat.',
+    '`record_decision`: a choice the user must make. Give the question, two to four options,',
+    'your default (the answer you recommend) and what unblocks it.',
+    'Choose a safe default and continue: use urgency `review_later`.',
+    'Stop only when no safe default exists: use urgency `blocked`.',
+    '`record_surprise`: something unexpected that changed the work or the plan.',
+    'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
+    '`resolve` with `id`: the user answered that decision in the chat.',
+    '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
+    '`post_end_list`: call it when, at the end of your work, you post one numbered list',
+    'of the open review-later decisions, each with its default and options.',
+    "The result names the item's id (D1, S1, ...).",
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -38,7 +44,11 @@ export const STATUS_TOOL_SPEC = {
       action: {
         type: 'string',
         enum: [...ACTIONS],
-        description: 'What to record.',
+        description: 'What to do: record an item, close one (`resolve`, `dismiss`) or mark the end-of-work list posted.',
+      },
+      id: {
+        type: 'string',
+        description: 'resolve: the decision id (D1, ...). dismiss: the surprise id (S1, ...).',
       },
       urgency: {
         type: 'string',
@@ -69,13 +79,22 @@ export const STATUS_TOOL_SPEC = {
   },
 } as const
 
+/** What one call asks for, read from its input. */
+export type StatusToolRequest =
+  /** Record a new item. */
+  | { draft: ItemDraft }
+  /** Close an open item: resolve a decision or dismiss a surprise. */
+  | { close: { kind: StatusItem['kind']; id: string } }
+  /** Mark the end-of-work list as posted. */
+  | { postEndList: true }
+
 /**
- * Reads one call's input into the item it records, or says what is wrong
- * with it, for the model to fix and call again.
+ * Reads one call's input into what it asks for, or says what is wrong with
+ * it, for the model to fix and call again.
  */
 export function readStatusToolInput(
   input: Record<string, unknown>,
-): { draft: ItemDraft } | { error: string } {
+): StatusToolRequest | { error: string } {
   const withAgent = <T extends ItemDraft>(draft: T): { draft: T } =>
     typeof input.agentId === 'string' ? { draft: { ...draft, agentId: input.agentId } } : { draft }
 
@@ -127,6 +146,22 @@ export function readStatusToolInput(
 
       return withAgent({ kind: 'surprise', occurred, changed })
     }
+    case 'resolve':
+    case 'dismiss': {
+      const id = text(input.id)
+      if (id === null) {
+        return {
+          error:
+            input.action === 'resolve'
+              ? 'Resolve needs `id`: the decision id (D1, ...).'
+              : 'Dismiss needs `id`: the surprise id (S1, ...).',
+        }
+      }
+
+      return { close: { kind: input.action === 'resolve' ? 'decision' : 'surprise', id } }
+    }
+    case 'post_end_list':
+      return { postEndList: true }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }
@@ -141,6 +176,20 @@ export function recordedText(item: StatusItem): string {
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id}: blocked on the user. Stop the work that needs it.`
     : `Recorded decision ${item.id} for review later. Continue with the default: ${item.default}.`
+}
+
+/** What the model reads after it closed an item. */
+export function closedText(item: StatusItem): string {
+  return item.kind === 'decision'
+    ? `Resolved decision ${item.id}. It moved to the answered history.`
+    : `Dismissed surprise ${item.id}. It moved to the answered history.`
+}
+
+/** What the model reads after `post_end_list`, given the decisions the list holds. */
+export function endListText(listed: readonly Decision[]): string {
+  return listed.length === 0
+    ? 'No open review-later decisions: there is no end-of-work list to post.'
+    : `End-of-work list marked as posted. The pane highlights ${listed.map(d => d.id).join(', ')} until each is resolved.`
 }
 
 /** A trimmed, non-empty string, or null. */

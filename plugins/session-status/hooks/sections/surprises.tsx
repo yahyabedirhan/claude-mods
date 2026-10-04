@@ -1,4 +1,5 @@
 import type { Surprise } from '../../types'
+import { isOpen } from '../status'
 import { newest } from './section'
 import type { Section } from './section'
 
@@ -11,7 +12,7 @@ const LIMIT = 2
  */
 export const surprisesSection: Section = ({ ui, status }) => {
   const { Box, Text } = ui
-  const surprises = (status?.items ?? []).filter((item): item is Surprise => item.kind === 'surprise')
+  const surprises = (status?.items ?? []).filter((item): item is Surprise => item.kind === 'surprise' && isOpen(item))
   if (surprises.length === 0) {
     return null
   }

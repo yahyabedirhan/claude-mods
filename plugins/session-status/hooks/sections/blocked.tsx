@@ -1,4 +1,5 @@
 import type { Decision } from '../../types'
+import { isOpen } from '../status'
 import type { Section } from './section'
 
 /**
@@ -8,7 +9,7 @@ import type { Section } from './section'
 export const blockedSection: Section = ({ ui, status }) => {
   const { Box, Text } = ui
   const blocked = (status?.items ?? []).filter(
-    (item): item is Decision => item.kind === 'decision' && item.urgency === 'blocked',
+    (item): item is Decision => item.kind === 'decision' && item.urgency === 'blocked' && isOpen(item),
   )
   if (blocked.length === 0) {
     return null

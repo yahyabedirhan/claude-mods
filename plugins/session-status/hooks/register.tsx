@@ -10,8 +10,23 @@ import type { SessionStatus, StatusItem } from '../types'
 import { describeToolCall } from './describe-tool-call'
 import { INSTRUCTIONS } from './instructions'
 import { AGE_TICK_MS, drawPane } from './pane'
-import { STATUS_TOOL, STATUS_TOOL_SPEC, readStatusToolInput, recordedText } from './status-tool'
-import { applyChange, recordItem, withDefaults } from './status'
+import {
+  STATUS_TOOL,
+  STATUS_TOOL_SPEC,
+  closedText,
+  endListText,
+  readStatusToolInput,
+  recordedText,
+} from './status-tool'
+import {
+  applyChange,
+  closeItem,
+  emptyStatus,
+  onEndList,
+  openReviewLater,
+  recordItem,
+  withDefaults,
+} from './status'
 import { subagentStarted, subagentStopped } from './subagents'
 import { taskCreated, taskUpdated } from './tasks'
 import { toolResultChange } from './tool-results'
@@ -30,14 +45,17 @@ const tickAtom = atom({ plugin: 'session-status', key: 'tick' } as const, 0)
 // The status store: the status in `$.state`, every change saved to
 // `$.store` with the session id as the key.
 
-/** Applies one change to the status and saves it. See `applyChange`. */
+/** Applies one change to the status and saves it; resolves to the new status. See `applyChange`. */
 async function changeStatus(
   $: EngineInterface,
   change: (status: SessionStatus) => SessionStatus,
-): Promise<void> {
+): Promise<SessionStatus> {
   const stamp = { sessionId: await $.session.id(), now: await $.clock.now() }
-  const status = await update($, statusAtom, current => applyChange(current, change, stamp))
+  let status = emptyStatus(stamp.sessionId)
+  await update($, statusAtom, current => (status = applyChange(current, change, stamp)))
   await $.store.set(stamp.sessionId, status)
+
+  return status
 }
 
 // The pane.
@@ -98,14 +116,43 @@ export const register: Register = on => {
     return { sections: [...sections, INSTRUCTIONS] }
   })
 
-  // The status tool: the model records a decision or a surprise. The matcher
-  // spells STATUS_TOOL out, so `claude plugin validate` can read it.
+  // The status tool: the model records a decision or a surprise, closes one,
+  // or marks the end-of-work list posted. The matcher spells STATUS_TOOL
+  // out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
     if ('error' in input) {
       return { deny: input.error }
     }
     const now = await $.clock.now()
+
+    if ('close' in input) {
+      const current = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
+      const checked = closeItem(current, input.close, now)
+      if ('error' in checked) {
+        return { deny: checked.error }
+      }
+      await changeStatus($, status => {
+        const closed = closeItem(status, input.close, now)
+
+        return 'error' in closed ? status : closed.status
+      })
+      // Ticket #7: withdraw a resolved blocking decision's ping here.
+
+      return { result: closedText(checked.item) }
+    }
+
+    if ('postEndList' in input) {
+      const current = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
+      if (openReviewLater(current).length === 0) {
+        return { result: endListText([]) }
+      }
+      const posted = await changeStatus($, status => ({ ...status, endListPostedAt: now }))
+      // Ticket #7: send the end-of-work ping with the count of open decisions here.
+
+      return { result: endListText(onEndList(posted)) }
+    }
+
     let recorded: StatusItem | undefined
     await changeStatus($, status => {
       const { status: next, item } = recordItem(status, input.draft, now)

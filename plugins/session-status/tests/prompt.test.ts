@@ -61,3 +61,27 @@ test('the section gives a subagent the fallback: decisions and surprises go in i
   expect(text).toMatch(/final report/i)
   expect(text).toMatch(/orchestrator records them/i)
 })
+
+test('the section tells the agent to post one numbered end-of-work list and call post_end_list', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(/end of (your|the) work/i)
+  expect(text).toMatch(/one numbered list/i)
+  expect(text).toMatch(/default and (its )?options/i)
+  expect(text).toContain('post_end_list')
+})
+
+test('the section tells the agent to resolve answered decisions and dismiss surprises the user asks to', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(/`resolve`/)
+  expect(text).toMatch(/answers? .*in the chat/i)
+  expect(text).toMatch(/`dismiss`/)
+  expect(text).toMatch(/read-only/i)
+})

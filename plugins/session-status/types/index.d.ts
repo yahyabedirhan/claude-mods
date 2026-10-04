@@ -37,6 +37,8 @@ export type Decision = {
   recordedAt: number
   /** The subagent's id when a subagent recorded it; absent on the main loop. */
   agentId?: string
+  /** When the agent marked it resolved; absent while the decision is open. */
+  resolvedAt?: number
 }
 
 /** Something unexpected the agent recorded with the status tool. */
@@ -52,6 +54,8 @@ export type Surprise = {
   recordedAt: number
   /** The subagent's id when a subagent recorded it; absent on the main loop. */
   agentId?: string
+  /** When the user dismissed it; absent while the surprise is open. */
+  resolvedAt?: number
 }
 
 /** One item the agent recorded: a decision or a surprise. */
@@ -119,6 +123,11 @@ export type SessionStatus = {
   /** The pull requests and issues created, oldest first. */
   links: CreatedLink[]
   subagents: Subagents
+  /**
+   * When the agent last posted the end-of-work list of open review-later
+   * decisions; null before it posts one.
+   */
+  endListPostedAt: number | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }
