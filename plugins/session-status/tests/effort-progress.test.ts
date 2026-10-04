@@ -60,8 +60,8 @@ test('the count is closed tickets of all tickets, without the spec issue', () =>
     ghIssue(4, 'Effort progress from tickets'),
     ghIssue(5, 'SPEC: an older spec', 'CLOSED'),
   ]
-  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3 })
-  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0 })
+  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3, closed: [2, 3], open: [4] })
+  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0, closed: [], open: [] })
   expect(parseTicketList('not json')).toBeNull()
   expect(parseTicketList('{"number":1}')).toBeNull()
 })
@@ -109,9 +109,10 @@ test('tickets show only for the effort they were counted for', () => {
     done: 3,
     total: 9,
     current: 'Write tests',
+    building: [],
   })
-  expect(shownProgress({ ...base, effort: { name: 'f' }, tickets })).toEqual({ source: 'tasks', ...tasks })
-  expect(shownProgress({ ...base, tickets })).toEqual({ source: 'tasks', ...tasks })
+  expect(shownProgress({ ...base, effort: { name: 'f' }, tickets })).toEqual({ source: 'tasks', ...tasks, building: [] })
+  expect(shownProgress({ ...base, tickets })).toEqual({ source: 'tasks', ...tasks, building: [] })
   expect(shownProgress(emptyStatus(SESSION_ID))).toBeNull()
 })
 

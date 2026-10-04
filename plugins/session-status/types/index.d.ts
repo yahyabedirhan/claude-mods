@@ -85,7 +85,8 @@ export type Task = {
 
 /**
  * How far the work is: tasks done, the total and the task that runs now.
- * Taken from the task list; during an effort the pane shows the tickets instead.
+ * Taken from the task list; during an effort, or once the orchestrator reports
+ * a ticket, the pane shows the tickets instead.
  */
 export type Progress = {
   done: number
@@ -150,7 +151,26 @@ export type TicketCount = {
   done: number
   /** All tickets, open and closed; the spec issue is not one. */
   total: number
+  /** The issue numbers of the closed tickets; absent on a count saved before reports. */
+  closed?: number[]
+  /** The issue numbers of the open tickets; absent on a count saved before reports. */
+  open?: number[]
   /** When it was counted, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
+/**
+ * A ticket the orchestrator reported with the status tool: `started` while a
+ * delegate builds it, `landed` once its commit is on the effort branch,
+ * whether or not its issue is closed.
+ */
+export type TicketReport = {
+  /** The ticket's issue number; absent for a ticket that has none (a local tracker). */
+  number?: number
+  /** The ticket's title. */
+  title: string
+  state: 'started' | 'landed'
+  /** When it reached this state, in `$.clock.now()` milliseconds. */
   at: number
 }
 
@@ -181,6 +201,11 @@ export type SessionStatus = {
   effort: Effort | null
   /** The effort's tickets last counted; null before the first count. Progress shows it during the effort. */
   tickets: TicketCount | null
+  /**
+   * The tickets the orchestrator reported, in the order it first named them.
+   * Progress counts a landed one as done and names the started ones.
+   */
+  ticketReports: TicketReport[]
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

@@ -1,11 +1,12 @@
-// The band above the prompt: counts only, for a terminal too narrow to place
-// the pane. Whether the pane waits is read in register.tsx, where `$` is.
+// The band above the prompt: counts, and the tickets in progress, for a
+// terminal too narrow to place the pane. Whether the pane waits is read in register.tsx, where `$` is.
 
 import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { SessionStatus } from '../types'
 import { shownProgress } from './effort-progress'
 import { isOpen } from './status'
+import { ticketShortName } from './ticket-reports'
 
 /** The counts the band shows; resolved items are left out. */
 export type BandCounts = {
@@ -31,11 +32,22 @@ export function bandCounts(status: SessionStatus | null): BandCounts {
   }
 }
 
-/** `<n> blocked · <n> review · <done>/<total> done · <n> surprise`. */
+/** The most tickets in progress the band names; the rest show as `+N`. */
+const BUILDING_SHOWN = 3
+
+/**
+ * `<n> blocked · <n> review · <done>/<total> done · <n> surprise`, with
+ * ` · building #3, #5` after the done count while the orchestrator builds
+ * tickets.
+ */
 export function bandText(status: SessionStatus | null): string {
   const { blocked, review, done, total, surprises } = bandCounts(status)
+  const building = shownProgress(status)?.building ?? []
+  const names = building.slice(0, BUILDING_SHOWN).map(ticketShortName)
+  const more = building.length > names.length ? [`+${building.length - names.length}`] : []
+  const now = names.length === 0 ? '' : ` · building ${[...names, ...more].join(', ')}`
 
-  return `${blocked} blocked · ${review} review · ${done}/${total} done · ${surprises} surprise`
+  return `${blocked} blocked · ${review} review · ${done}/${total} done${now} · ${surprises} surprise`
 }
 
 /** The band's tree: one line in a Box keyed `session-status-band`. */

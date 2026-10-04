@@ -74,6 +74,20 @@ test('the section tells the agent to post one numbered end-of-work list and call
   expect(text).toContain('post_end_list')
 })
 
+test('the section tells an orchestrator to report each ticket started and landed', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(/orchestrate an effort's tickets/i)
+  expect(text).toMatch(/`ticket`/)
+  expect(text).toMatch(/`started` when you delegate/i)
+  expect(text).toMatch(/`landed` when the ticket's commit is on the effort branch/i)
+  expect(text).toMatch(/do not wait for the issue to close/i)
+  expect(text).toMatch(/`effort`/)
+})
+
 test('the section tells the agent to resolve answered decisions and dismiss surprises the user asks to', async ($, on) => {
   world(on)
   await start($)

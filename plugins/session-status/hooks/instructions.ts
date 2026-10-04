@@ -1,5 +1,5 @@
 // The system prompt section the mod adds: how the agent records decisions
-// and surprises. register.tsx adds it in `prompt.compose`.
+// and surprises, and how an orchestrator reports its tickets. register.tsx adds it in `prompt.compose`.
 
 import type { PromptComposeSection } from 'claude-code'
 
@@ -20,6 +20,11 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
 - Collect review-later decisions while you work. Do not ask about them in the middle of the work.
 - At the end of your work, if review-later decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_end_list\`.
+- When you orchestrate an effort's tickets, report each ticket with action \`ticket\`, so the pane shows where the run is. Give the ticket's issue \`number\` and its \`title\`. On your first ticket call, also give \`effort\`: the name in the effort's \`effort:<name>\` issue label.
+  - Call it with state \`started\` when you delegate the ticket.
+  - Call it with state \`landed\` when the ticket's commit is on the effort branch. Do not wait for the issue to close: a ticket that waits for QA or for the merge has landed.
+  - Call it with state \`stopped\` when a started ticket is no longer being built and has not landed.
+  - Only the orchestrator reports tickets. A delegate that builds one ticket does not.
 - If you are a subagent and cannot call the status tool, put your decisions and surprises in your final report, with the same fields. The orchestrator records them with the status tool.`
 
 /** The section, added after the engine's own on the session side. */

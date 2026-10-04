@@ -1,12 +1,17 @@
 import { shownProgress } from '../effort-progress'
+import { ticketName } from '../ticket-reports'
 import type { Section } from './section'
 
 /** The bar's widest, in cells. */
 const BAR_CELLS = 20
 
+/** The most tickets in progress the section names; the rest show as "+N more". */
+const BUILDING_SHOWN = 4
+
 /**
- * Tickets (during an effort) or tasks done, the total, a bar and the task
- * that runs now. The line names its source: `Tickets 3/9` or `Tasks 3/9`.
+ * Tickets (during an effort) or tasks done, the total, a bar, the tickets
+ * the orchestrator builds now and the task that runs now. The line names its
+ * source: `Tickets 3/9` or `Tasks 3/9`.
  */
 export const progressSection: Section = ({ ui, status, columns }) => {
   const { Box, Text } = ui
@@ -14,7 +19,7 @@ export const progressSection: Section = ({ ui, status, columns }) => {
   if (progress === null) {
     return null
   }
-  const { source, done, total, current } = progress
+  const { source, done, total, current, building } = progress
   const cells = Math.max(5, Math.min(BAR_CELLS, columns - 14))
 
   return (
@@ -24,6 +29,12 @@ export const progressSection: Section = ({ ui, status, columns }) => {
         {`${source === 'tickets' ? 'Tickets' : 'Tasks'} ${done}/${total} done `}
         <Text color="green">{progressBar(done, total, cells)}</Text>
       </Text>
+      {building.slice(0, BUILDING_SHOWN).map(ticket => (
+        <Text key={`building-${ticket.number ?? ticket.title}`} wrap="truncate-end">
+          {`Building: ${ticketName(ticket)}`}
+        </Text>
+      ))}
+      {building.length > BUILDING_SHOWN ? <Text dimColor>{`+${building.length - BUILDING_SHOWN} more building`}</Text> : null}
       {current === null ? null : <Text wrap="truncate-end">{`Current: ${current}`}</Text>}
     </Box>
   )

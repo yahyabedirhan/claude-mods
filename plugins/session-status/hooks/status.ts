@@ -3,7 +3,7 @@
 // register.tsx, because the engine follows `$` and the state library's
 // sources only within the hooks module's own file.
 
-import type { Decision, Effort, SessionStatus, StatusItem } from '../types'
+import type { Decision, Effort, SessionStatus, StatusItem, TicketReport } from '../types'
 
 /** An item before it is recorded: `recordItem` adds its id and its time. */
 export type ItemDraft = StatusItem extends infer I
@@ -107,6 +107,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     observer: { checks: 0, seen: [] },
     effort: null,
     tickets: null,
+    ticketReports: [],
     updatedAt: null,
   }
 }
@@ -122,13 +123,19 @@ export function withDefaults(status: SessionStatus | null): SessionStatus | null
 /**
  * The status a session starts with after `/clear`: empty for the new
  * session, but with the previous session's open decisions, ids unchanged, so
- * the person can still answer them by the same id, and its effort: the new
- * session still runs in the same effort.
+ * the person can still answer them by the same id, and its effort and
+ * reported tickets: the new session still runs in the same effort.
  */
 export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
   const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
+  const held = withDefaults(previous)
 
-  return { ...emptyStatus(sessionId), items: open, effort: withDefaults(previous)?.effort ?? null }
+  return {
+    ...emptyStatus(sessionId),
+    items: open,
+    effort: held?.effort ?? null,
+    ticketReports: held?.ticketReports ?? [],
+  }
 }
 
 /**
@@ -144,7 +151,7 @@ export const CARRY_KEY = 'clear-carry'
  */
 export const CARRY_WINDOW_MS = 60_000
 
-/** What a `/clear` carries over: the ended session's open decisions and effort. */
+/** What a `/clear` carries over: the ended session's open decisions, effort and reported tickets. */
 export type ClearCarry = {
   kind: 'clear-carry'
   /** The session that ended. */
@@ -153,17 +160,18 @@ export type ClearCarry = {
   at: number
   items: Decision[]
   effort: Effort | null
+  ticketReports: TicketReport[]
 }
 
-/** What a session that ends by `/clear` carries over; null when nothing is open. */
+/** What a session that ends by `/clear` carries over; null when it has nothing to carry. */
 export function clearCarry(status: SessionStatus, now: number): ClearCarry | null {
-  const { items, effort } = carryOver(status, status.sessionId)
+  const { items, effort, ticketReports } = carryOver(status, status.sessionId)
   const decisions = items.filter((item): item is Decision => item.kind === 'decision')
-  if (decisions.length === 0 && effort === null) {
+  if (decisions.length === 0 && effort === null && ticketReports.length === 0) {
     return null
   }
 
-  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort }
+  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports }
 }
 
 /**
@@ -184,24 +192,30 @@ export function readCarry(value: unknown, sessionId: string, now: number): Clear
     return null
   }
 
-  return { ...(carry as ClearCarry), effort: carry.effort ?? null }
+  return {
+    ...(carry as ClearCarry),
+    effort: carry.effort ?? null,
+    ticketReports: Array.isArray(carry.ticketReports) ? carry.ticketReports : [],
+  }
 }
 
 /**
  * The status with a carry's decisions added before its own items, each id
- * once, and the carry's effort while the status has none. A status that the
- * carried state already reached (`$.state` kept across the `/clear`) stays as
- * it is.
+ * once, and the carry's effort and reported tickets while the status has
+ * none. A status that the carried state already reached (`$.state` kept
+ * across the `/clear`) stays as it is.
  */
 export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStatus {
   const ids = new Set(status.items.map(item => item.id))
   const carried = carry.items.filter(item => !ids.has(item.id))
   const effort = status.effort ?? carry.effort
-  if (carried.length === 0 && effort === status.effort) {
+  const own = status.ticketReports ?? []
+  const ticketReports = own.length > 0 ? own : carry.ticketReports
+  if (carried.length === 0 && effort === status.effort && ticketReports.length === own.length) {
     return status
   }
 
-  return { ...status, items: [...carried, ...status.items], effort }
+  return { ...status, items: [...carried, ...status.items], effort, ticketReports }
 }
 
 /**
@@ -246,7 +260,7 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, and closed items of each kind. The oldest drop first; an open
+ * ids, links, reported tickets, and closed items of each kind. The oldest drop first; an open
  * item never drops.
  */
 export const CAP = 200
@@ -265,6 +279,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
   const isOver =
     status.subagents.finished.length > CAP ||
     status.links.length > CAP ||
+    status.ticketReports.length > CAP ||
     closedCount.decision > CAP ||
     closedCount.surprise > CAP
   if (!isOver) {
@@ -284,6 +299,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     ...status,
     items,
     links: status.links.slice(-CAP),
+    ticketReports: status.ticketReports.slice(-CAP),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
   }
 }

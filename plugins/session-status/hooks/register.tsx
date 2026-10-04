@@ -11,7 +11,14 @@ import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
 import { describeToolCall } from './describe-tool-call'
 import { branchEffortName, effortSighting, withEffort } from './effort'
-import { TICKET_TIMEOUT_MS, isTicketReadDue, parseTicketList, ticketListArgv, withTickets } from './effort-progress'
+import {
+  TICKET_TIMEOUT_MS,
+  isTicketReadDue,
+  parseTicketList,
+  shownProgress,
+  ticketListArgv,
+  withTickets,
+} from './effort-progress'
 import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
@@ -24,6 +31,7 @@ import {
   endListText,
   readStatusToolInput,
   recordedText,
+  ticketText,
 } from './status-tool'
 import {
   CARRY_KEY,
@@ -45,6 +53,7 @@ import {
 import type { ClearCarry } from './status'
 import { isRunningSubagent, subagentStarted, subagentStopped } from './subagents'
 import { taskCreated, taskUpdated } from './tasks'
+import { reportTicket } from './ticket-reports'
 import { toolResultChange } from './tool-results'
 
 const COMMAND = 'session-status'
@@ -400,7 +409,7 @@ export const register: Register = on => {
   })
 
   // The status tool: the model records a decision or a surprise, closes one,
-  // or marks the end-of-work list posted. The matcher spells STATUS_TOOL
+  // marks the end-of-work list posted, or reports a ticket's state. The matcher spells STATUS_TOOL
   // out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
@@ -438,6 +447,26 @@ export const register: Register = on => {
       sendPing($, endListPing(posted.sessionId, listed.map(item => item.id)))
 
       return { result: endListText(listed) }
+    }
+
+    if ('ticket' in input) {
+      const request = input.ticket
+      const checked = reportTicket(await currentStatus($), request, now)
+      if ('error' in checked) {
+        return { deny: checked.error }
+      }
+      const reported = await changeStatus($, status => {
+        const next = reportTicket(status, request, now)
+
+        return 'error' in next ? status : next.status
+      })
+      // A ticket report shows an effort run, as a call to an effort skill does:
+      // it names the effort from its `effort` field or, failing that, the branch.
+      await effortSeen($, request.effort ?? null)
+      await countTicketsIfDue($, e)
+      const shown = shownProgress(withDefaults(await read($, statusAtom)) ?? reported)
+
+      return { result: ticketText(checked.ticket, request.state, checked.changed, shown) }
     }
 
     let recorded: StatusItem | undefined

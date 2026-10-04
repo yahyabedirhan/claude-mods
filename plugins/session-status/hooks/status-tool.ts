@@ -2,11 +2,15 @@
 // one call's input into what it asks for. Registering the tool and
 // answering its calls live in register.tsx, where `$` is.
 //
-// One tool with an `action` field: it records items, closes them and marks
-// the end-of-work list as posted.
+// One tool with an `action` field: it records items, closes them, marks
+// the end-of-work list as posted and reports a ticket's state.
 
-import type { Decision, DecisionUrgency, StatusItem } from '../types'
+import type { Decision, DecisionUrgency, StatusItem, TicketReport } from '../types'
+import { effortLabel } from './effort'
+import type { ShownProgress } from './effort-progress'
 import type { ItemDraft } from './status'
+import { ticketName, ticketShortName } from './ticket-reports'
+import type { TicketRequest, TicketState } from './ticket-reports'
 
 /** The tool's short name: the model calls it as `mcp__session-status__status`. */
 export const STATUS_TOOL_NAME = 'status'
@@ -14,7 +18,8 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list', 'ticket'] as const
+const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
@@ -37,6 +42,10 @@ export const STATUS_TOOL_SPEC = {
     '`post_end_list`: call it when, at the end of your work, you post one numbered list',
     'of the open review-later decisions, each with its default and options.',
     "The result names the item's id (D1, S1, ...).",
+    '`ticket`: only for the session that orchestrates an effort\'s tickets, never for a delegate.',
+    'Give the ticket\'s issue `number`, its `title` and its `state`:',
+    '`started` when you delegate the ticket, `landed` when its commit is on the effort branch',
+    '(do not wait for the issue to close), `stopped` when a started ticket is no longer being built.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -44,7 +53,8 @@ export const STATUS_TOOL_SPEC = {
       action: {
         type: 'string',
         enum: [...ACTIONS],
-        description: 'What to do: record an item, close one (`resolve`, `dismiss`) or mark the end-of-work list posted.',
+        description:
+          'What to do: record an item, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s state.',
       },
       id: {
         type: 'string',
@@ -74,6 +84,25 @@ export const STATUS_TOOL_SPEC = {
       },
       occurred: { type: 'string', description: 'record_surprise: what occurred.' },
       changed: { type: 'string', description: 'record_surprise: what it changed in the work or the plan.' },
+      state: {
+        type: 'string',
+        enum: [...TICKET_STATES],
+        description:
+          'ticket: `started` when you delegate it; `landed` when its commit is on the effort branch; `stopped` when a started ticket is no longer being built.',
+      },
+      number: {
+        type: 'integer',
+        description: "ticket: the ticket's issue number. Leave it out only when the ticket has none.",
+      },
+      title: {
+        type: 'string',
+        description: "ticket: the ticket's title. Needed the first time you report the ticket.",
+      },
+      effort: {
+        type: 'string',
+        description:
+          "ticket: the effort's name, as its `effort:<name>` issue label writes it. Give it on your first ticket call.",
+      },
     },
     required: ['action'],
   },
@@ -87,6 +116,8 @@ export type StatusToolRequest =
   | { close: { kind: StatusItem['kind']; id: string } }
   /** Mark the end-of-work list as posted. */
   | { postEndList: true }
+  /** Report a ticket's state. */
+  | { ticket: TicketRequest }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -162,6 +193,31 @@ export function readStatusToolInput(
     }
     case 'post_end_list':
       return { postEndList: true }
+    case 'ticket': {
+      const state = input.state
+      if (!TICKET_STATES.includes(state as TicketState)) {
+        return { error: 'A ticket needs a state: `started`, `landed` or `stopped`.' }
+      }
+      const number = ticketNumber(input.number)
+      if (number === null) {
+        return { error: 'A ticket\'s `number` is its issue number: a positive integer.' }
+      }
+      const title = text(input.title)
+      if (number === undefined && title === null) {
+        return { error: 'A ticket needs `number` (its issue number) or, when it has none, `title`.' }
+      }
+      const effort = text(input.effort)
+
+      return {
+        ticket: {
+          state: state as TicketState,
+          ...(number === undefined ? {} : { number }),
+          ...(title === null ? {} : { title }),
+          // `effort:x` and `x` both name the effort x.
+          ...(effort === null ? {} : { effort: effortLabel(effort) ?? effort }),
+        },
+      }
+    }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }
@@ -195,6 +251,48 @@ export function endListText(listed: readonly Decision[]): string {
   return listed.length === 0
     ? 'No open review-later decisions. No end-of-work list was marked as posted.'
     : `End-of-work list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
+}
+
+/**
+ * What the model reads after a ticket report: the ticket, its state and the
+ * progress the pane shows now.
+ */
+export function ticketText(
+  ticket: TicketReport,
+  state: TicketState,
+  changed: boolean,
+  progress: ShownProgress | null,
+): string {
+  const name = ticketName(ticket)
+  const said =
+    state === 'stopped'
+      ? changed
+        ? `Ticket ${name} is no longer in progress.`
+        : ticket.state === 'landed'
+          ? `Ticket ${name} already landed; it stays landed.`
+          : `Ticket ${name} was not in progress.`
+      : `Ticket ${name} is ${state}${changed ? '' : ' already'}.`
+  if (progress === null || progress.source !== 'tickets') {
+    return said
+  }
+  const building = progress.building.map(ticketShortName)
+
+  return `${said} Progress: ${progress.done}/${progress.total} tickets done${
+    building.length === 0 ? '' : `, building ${building.join(', ')}`
+  }.`
+}
+
+/**
+ * A ticket's issue number from the input: `3`, `"3"` and `"#3"` all read as
+ * 3; undefined when the input has none; null when it is no issue number.
+ */
+function ticketNumber(value: unknown): number | undefined | null {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+  const number = typeof value === 'string' ? Number(value.trim().replace(/^#/, '')) : value
+
+  return typeof number === 'number' && Number.isInteger(number) && number > 0 ? number : null
 }
 
 /** A trimmed, non-empty string, or null. */

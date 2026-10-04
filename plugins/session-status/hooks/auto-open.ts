@@ -5,8 +5,8 @@ import type { SessionStatus } from '../types'
 
 /**
  * Whether the status has met an auto-open trigger: a subagent started, a
- * task list was made, an effort run was found, or a decision or a surprise
- * was recorded. The turn count is no trigger: a short session stays closed.
+ * task list was made, an effort run was found, a ticket was reported, or a
+ * decision or a surprise was recorded. The turn count is no trigger: a short session stays closed.
  */
 export function meetsAutoOpenTrigger(status: SessionStatus): boolean {
   const { subagents } = status
@@ -15,6 +15,7 @@ export function meetsAutoOpenTrigger(status: SessionStatus): boolean {
     subagents.running.length + subagents.finished.length > 0 ||
     status.tasks.length > 0 ||
     status.effort !== null ||
+    (status.ticketReports ?? []).length > 0 ||
     status.items.length > 0
   )
 }
