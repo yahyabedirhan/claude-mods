@@ -297,7 +297,7 @@ test('/clear leaves the old session saved as it was', async ($, on) => {
   })
 })
 
-test('a change under a new session id starts a new status even without its SessionStart', async ($, on) => {
+test('a change under a new session id without a /clear starts an empty status', async ($, on) => {
   const { saved, switchSession } = world(on)
   await start($)
   await callStatusTool($, blockedDecision())
@@ -310,9 +310,24 @@ test('a change under a new session id starts a new status even without its Sessi
   expect(saved[SESSION_ID]).toEqual(before)
   expect(saved[NEW_SESSION]).toMatchObject({
     sessionId: NEW_SESSION,
-    items: [{ kind: 'decision', id: 'D1' }],
+    items: [],
     doingNow: { text: 'git diff' },
   })
+})
+
+test('a resume of a session with no saved status takes none of the open decisions', async ($, on) => {
+  const { saved, switchSession } = world(on)
+  await start($)
+  await callStatusTool($, blockedDecision())
+  switchSession(NEW_SESSION)
+
+  await sessionStart($, 'resume', NEW_SESSION)
+
+  for (const surface of SURFACES) {
+    expect(await sectionText($, surface, 'blocked')).toBeUndefined()
+  }
+  await $.tool.call({ tool: 'Bash', command: 'git status' })
+  expect(saved[NEW_SESSION]).toMatchObject({ sessionId: NEW_SESSION, items: [] })
 })
 
 test('/compact keeps all status', async ($, on) => {

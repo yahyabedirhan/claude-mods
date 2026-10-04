@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import type { SessionStatus } from '../types'
+import { isCheckDue } from '../hooks/observer'
+import { emptyStatus } from '../hooks/status'
 import {
   BASE_SECTIONS,
   STATUS_TOOL,
@@ -286,12 +288,35 @@ test('each dismissed observer finding doubles the turn interval, up to 40 turns'
   expect(w.modelCalls).toHaveLength(3)
 
   await callStatusTool($, { action: 'dismiss', id: 'S4' })
-  await s.stop('agent-1')
+  await s.turns(39)
+  expect(w.modelCalls).toHaveLength(3)
+  await s.turns(1)
+  expect(w.modelCalls).toHaveLength(4)
   await callStatusTool($, { action: 'dismiss', id: 'S5' })
   await s.turns(39)
   expect(w.modelCalls).toHaveLength(4)
   await s.turns(1)
   expect(w.modelCalls).toHaveLength(5)
+})
+
+test('after a dismissal a finished subagent waits for the turn interval too', async ($, on) => {
+  const w = world(on)
+  const s = session($, w)
+  w.model(() => findings(LOOP))
+  await start($)
+  await runCommand($)
+  await s.stop('agent-1')
+  expect(w.modelCalls).toHaveLength(1)
+  await callStatusTool($, { action: 'dismiss', id: 'S1' })
+
+  // One dismissal: the interval is 10 turns, and a subagent stop waits for it.
+  await s.stop('agent-2')
+  expect(w.modelCalls).toHaveLength(1)
+  await s.turns(9)
+  await s.stop('agent-3')
+  expect(w.modelCalls).toHaveLength(1)
+  await s.turns(1)
+  expect(w.modelCalls).toHaveLength(2)
 })
 
 test('the observer stops at 20 checks for the session', async ($, on) => {
@@ -356,4 +381,15 @@ test('the observer adds no context for the main agent', async ($, on) => {
   expect(sections.map(section => section.id)).toEqual([...BASE_SECTIONS.map(section => section.id), 'session-status:status'])
   expect(sections.map(section => section.text).join('\n')).not.toContain(LOOP.occurred)
   expect(await callStatusTool($, surprise())).toMatchObject({ result: 'Recorded surprise S2.' })
+})
+
+test('a subagent check after a dismissal is due once the turns since the last check reach the interval', () => {
+  const dismissed: SessionStatus = {
+    ...emptyStatus('session-a'),
+    items: [{ kind: 'surprise', id: 'S1', occurred: 'x', changed: 'y', recordedAt: 0, source: 'observer', resolvedAt: 1 }],
+  }
+
+  expect(isCheckDue(emptyStatus('session-a'), 0, 'subagent')).toBe(true)
+  expect(isCheckDue(dismissed, 9, 'subagent')).toBe(false)
+  expect(isCheckDue(dismissed, 10, 'subagent')).toBe(true)
 })

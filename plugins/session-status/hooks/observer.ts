@@ -49,21 +49,30 @@ function observerSurprises(status: SessionStatus): Surprise[] {
  * idea of the built-in "You Should Know" plugin: ignored advice comes less often.
  */
 export function turnInterval(status: SessionStatus): number {
-  const dismissed = observerSurprises(status).filter(item => item.resolvedAt !== undefined).length
+  return Math.min(BASE_TURN_INTERVAL * 2 ** dismissedCount(status), MAX_TURN_INTERVAL)
+}
 
-  return Math.min(BASE_TURN_INTERVAL * 2 ** dismissed, MAX_TURN_INTERVAL)
+/** How many observer findings the person dismissed. */
+function dismissedCount(status: SessionStatus): number {
+  return observerSurprises(status).filter(item => item.resolvedAt !== undefined).length
 }
 
 /**
- * Whether a check is due: under the cap, and a subagent finished or enough
- * turns ended. The pane being open and no check running are register.tsx's.
+ * Whether a check is due: under the cap, and enough turns ended since the
+ * last check (`turns`). A finished subagent starts a check at once until the
+ * person dismisses an observer finding; after that it too waits for the
+ * turn interval, so the back-off holds for both triggers. The pane being
+ * open and no check running are register.tsx's.
  */
 export function isCheckDue(status: SessionStatus, turns: number, trigger: Trigger): boolean {
   if (status.observer.checks >= CHECK_CAP) {
     return false
   }
+  if (trigger === 'subagent' && dismissedCount(status) === 0) {
+    return true
+  }
 
-  return trigger === 'subagent' || turns >= turnInterval(status)
+  return turns >= turnInterval(status)
 }
 
 function clip(text: string, limit = TEXT_LIMIT): string {

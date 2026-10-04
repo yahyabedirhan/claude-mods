@@ -16,7 +16,7 @@ import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
-import { blockedPing, endListPing, withdrawPing } from './pings'
+import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
@@ -71,20 +71,29 @@ const observerTurnsAtom = atom({ plugin: 'session-status', key: 'observerTurns' 
 // `$.store` with the session id as the key.
 
 /**
+ * The session a `/clear` in this module load ended, until the new session's
+ * SessionStart: a change that comes first still takes the `/clear`'s carry.
+ * Any other session id change (a resume, a fork) starts empty.
+ */
+let clearedFrom: string | null = null
+
+/**
  * Makes `$.state` hold the status of `sessionId` when it holds another
- * session's or none: the saved one on a resume, else the open decisions
- * carried over from the one held (a `/clear`), saved at once. A new session
- * also drops the oldest saved sessions beyond KEPT_SESSIONS.
+ * session's or none: the saved one on a resume; else, on a `/clear`
+ * (`clear` given), the open decisions carried over from the one held, saved
+ * at once; else none. A new session also drops the oldest saved sessions
+ * beyond KEPT_SESSIONS.
  *
- * `carry` is what the session a `/clear` ended left in the store: its open
- * decisions join the status even when `$.state` came through the `/clear`
- * empty, or an earlier event already started the new session's status.
+ * `clear.carry` is what the session a `/clear` ended left in the store: its
+ * open decisions join the status even when `$.state` came through the
+ * `/clear` empty, or an earlier event already started the new session's status.
  */
 async function holdSession(
   $: EngineInterface,
   sessionId: string,
-  carry: ClearCarry | null = null,
+  clear: { carry: ClearCarry | null } | null = null,
 ): Promise<void> {
+  const carry = clear?.carry ?? null
   const held = await read($, statusAtom)
   if (held?.sessionId === sessionId && carry === null) {
     return
@@ -92,13 +101,13 @@ async function holdSession(
   const saved = savedStatus(await $.store.get(sessionId), sessionId)
   const now = await $.clock.now()
   const status = await update($, statusAtom, current => {
-    const kept = statusForSession(current, sessionId, saved, now)
+    const kept = statusForSession(current, sessionId, saved, now, clear !== null)
 
     return carry === null ? kept : withCarry(kept ?? { ...emptyStatus(sessionId), updatedAt: now }, carry)
   })
   // A restored status is saved as it was; a carried one is saved for the first time.
   if (status !== null) {
-    await $.store.set(sessionId, status)
+    await saveStatus($, status)
   }
   await pruneStore($, sessionId)
   // A restored or carried status that meets a trigger opens the pane, unless
@@ -123,17 +132,63 @@ async function pruneStore($: EngineInterface, current: string): Promise<void> {
   }
 }
 
-/** Applies one change to the status and saves it; resolves to the new status. See `applyChange`. */
+/**
+ * Makes `$.state` hold the status of the session that runs now (see
+ * holdSession) and resolves to its id. A change under a new id after a
+ * `/clear` in this load takes that `/clear`'s carry.
+ */
+async function holdCurrentSession($: EngineInterface): Promise<string> {
+  const sessionId = await $.session.id()
+  if ((await read($, statusAtom))?.sessionId === sessionId) {
+    return sessionId
+  }
+  if (clearedFrom === null || clearedFrom === sessionId) {
+    await holdSession($, sessionId)
+  } else {
+    const carry = readCarry(await $.store.get(CARRY_KEY), sessionId, await $.clock.now())
+    await holdSession($, sessionId, { carry: carry?.from === clearedFrom ? carry : null })
+  }
+
+  return sessionId
+}
+
+/** The status of the session that runs now, held first; empty before its first change. */
+async function currentStatus($: EngineInterface): Promise<SessionStatus> {
+  const sessionId = await holdCurrentSession($)
+
+  return withDefaults(await read($, statusAtom)) ?? emptyStatus(sessionId)
+}
+
+/**
+ * Saves a status to `$.store` under its session id. A refused write (a full
+ * store) goes to the debug log: the status in `$.state` stands, and the next
+ * change saves it again.
+ */
+async function saveStatus($: EngineInterface, status: SessionStatus): Promise<void> {
+  try {
+    await $.store.set(status.sessionId, status)
+  } catch (error) {
+    $.ui.log(`session-status: the status was not saved: ${String(error)}`, { to: 'debug' })
+  }
+}
+
+/**
+ * Applies one change to the status and saves it; resolves to the new status.
+ * See `applyChange`. `save: false` changes `$.state` alone, for a change a
+ * later one saves with it.
+ */
 async function changeStatus(
   $: EngineInterface,
   change: (status: SessionStatus) => SessionStatus,
+  options: { save?: boolean } = {},
 ): Promise<SessionStatus> {
-  const sessionId = await $.session.id()
-  await holdSession($, sessionId)
+  const sessionId = await holdCurrentSession($)
   const stamp = { sessionId, now: await $.clock.now() }
   let status = emptyStatus(sessionId)
   await update($, statusAtom, current => (status = applyChange(current, change, stamp)))
-  await $.store.set(stamp.sessionId, status)
+  if (options.save !== false) {
+    await saveStatus($, status)
+  }
   if (meetsAutoOpenTrigger(status)) {
     await autoOpenPane($)
   }
@@ -214,14 +269,17 @@ let isObserving = false
 /**
  * Counts a main-loop turn toward the observer's interval and runs one check
  * when it is due: the pane open, no check running, under the cap, and the
- * turn interval reached or a subagent finished. The hooks start it without
- * waiting, so a check never holds up the session.
+ * turn interval reached or a subagent finished (see isCheckDue). The hooks
+ * start it without waiting, so a check never holds up the session.
  */
 async function observe($: EngineInterface, trigger: Trigger): Promise<void> {
   if (!(await isPaneOpen($))) {
     return
   }
-  const turns = trigger === 'turn' ? await update($, observerTurnsAtom, n => n + 1) : 0
+  // A subagent trigger reads the turns since the last check: after a
+  // dismissal it waits for the turn interval too (see isCheckDue).
+  const turns =
+    trigger === 'turn' ? await update($, observerTurnsAtom, n => n + 1) : await read($, observerTurnsAtom)
   const status = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
   // No await between the test and the set: a second trigger sees the flag.
   if (isObserving || !isCheckDue(status, turns, trigger)) {
@@ -266,7 +324,9 @@ function startAgeTicker($: EngineInterface): void {
         const now = await $.clock.now()
         await update($, tickAtom, () => now)
       }
-    })()
+    })().catch((error: unknown) => {
+      $.ui.log(`session-status age timer: ${String(error)}`, { to: 'debug' })
+    })
   })
 }
 
@@ -277,6 +337,7 @@ export const register: Register = on => {
       description: 'Open or close the session status pane',
     })
     await $.tool.register(STATUS_TOOL_SPEC)
+    clearedFrom = null
     startAgeTicker($)
     // An open pane stays open for the session: a reload that dropped it
     // opens it again.
@@ -294,10 +355,12 @@ export const register: Register = on => {
   //
   // A /clear can empty `$.state`, so the session it ends saves what it carries
   // over to the store, and the new session's SessionStart (source `clear`)
-  // takes it once. Only that SessionStart takes it, and only within
-  // CARRY_WINDOW_MS: a startup, a resume or another process never does.
+  // takes it once. Only that SessionStart, or a change that comes before it
+  // (see holdCurrentSession), takes it, and only within CARRY_WINDOW_MS: a
+  // startup, a resume or another process never does.
   on('session.end', async ($, e, next) => {
     if (e.reason === 'clear') {
+      clearedFrom = e.sessionId
       const ended = savedStatus(await $.store.get(e.sessionId), e.sessionId)
       const carry = ended === null ? null : clearCarry(ended, await $.clock.now())
       // No carry leaves no older one behind for this /clear's new session.
@@ -311,8 +374,10 @@ export const register: Register = on => {
     if (e.source === 'clear') {
       const carry = readCarry(await $.store.get(CARRY_KEY), e.session_id, await $.clock.now())
       await $.store.delete(CARRY_KEY)
-      await holdSession($, e.session_id, carry)
+      clearedFrom = null
+      await holdSession($, e.session_id, { carry })
     } else if (e.source !== 'compact') {
+      clearedFrom = null
       await holdSession($, e.session_id)
     }
 
@@ -342,7 +407,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
 
     if ('close' in input) {
-      const current = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
+      const current = await currentStatus($)
       const checked = closeItem(current, input.close, now)
       if ('error' in checked) {
         return { deny: checked.error }
@@ -353,14 +418,15 @@ export const register: Register = on => {
         return 'error' in closed ? status : closed.status
       })
       if (checked.item.kind === 'decision' && checked.item.urgency === 'blocked') {
-        sendPing($, withdrawPing(await $.session.id(), checked.item.id))
+        // A decision carried over a /clear keeps the ping id its own session sent.
+        sendPing($, withdrawPing(checked.item.pingId ?? pingId(current.sessionId, checked.item.id)))
       }
 
       return { result: closedText(checked.item) }
     }
 
     if ('postEndList' in input) {
-      const current = withDefaults(await read($, statusAtom)) ?? emptyStatus(await $.session.id())
+      const current = await currentStatus($)
       if (openReviewLater(current).length === 0) {
         return { result: endListText([]) }
       }
@@ -372,15 +438,22 @@ export const register: Register = on => {
     }
 
     let recorded: StatusItem | undefined
-    await changeStatus($, status => {
+    const after = await changeStatus($, status => {
       const { status: next, item } = recordItem(status, input.draft, now)
-      recorded = item
+      if (item.kind !== 'decision' || item.urgency !== 'blocked') {
+        recorded = item
 
-      return next
+        return next
+      }
+      // The ping id is kept, so a resolve after a /clear withdraws this ping.
+      const pinged = { ...item, pingId: pingId(status.sessionId, item.id) }
+      recorded = pinged
+
+      return { ...next, items: next.items.map(candidate => (candidate === item ? pinged : candidate)) }
     })
 
     if (recorded?.kind === 'decision' && recorded.urgency === 'blocked') {
-      sendPing($, blockedPing(await $.session.id(), recorded))
+      sendPing($, blockedPing(after.sessionId, recorded))
     }
 
     return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
@@ -393,17 +466,17 @@ export const register: Register = on => {
     if (e.tool === STATUS_TOOL) {
       return next(e)
     }
+    // Doing now reaches `$.state` (and the pane) before the tool runs, and
+    // `$.store` once with the call's result, after it.
     const doing = describeToolCall(e, await $.clock.now())
-    await changeStatus($, status => ({ ...status, doingNow: doing }))
+    await changeStatus($, status => ({ ...status, doingNow: doing }), { save: false })
     const sighting = effortSighting(e)
     if (sighting !== null) {
       await effortSeen($, sighting.name)
     }
     const answer = await next(e)
     const change = toolResultChange(e, answer, await $.clock.now())
-    if (change !== null) {
-      await changeStatus($, change)
-    }
+    await changeStatus($, change ?? (status => status))
     await countTicketsIfDue($, e)
 
     return answer
@@ -503,10 +576,7 @@ async function effortSeen($: EngineInterface, name: string | null): Promise<void
   if (name !== null) {
     await changeStatus($, status => withEffort(status, { name, from: 'label' }))
   } else if (withDefaults(await read($, statusAtom))?.effort == null) {
-    const branch = await readBranch($)
-    if (branch !== null) {
-      await changeStatus($, status => withEffort(status, { name: branch, from: 'branch' }))
-    }
+    nameEffortFromBranch($)
   }
   // A run whose name is still unknown opens the pane too.
   await autoOpenPane($)
@@ -579,6 +649,28 @@ async function countTickets($: EngineInterface, effort: string): Promise<void> {
     }
   } catch {
     // No gh, no network, a timeout: the last good count holds.
+  }
+}
+
+/**
+ * Names the effort after the session's git branch, on a timer so `git` never
+ * holds the tool call. A label found meanwhile wins (see `withEffort`).
+ */
+function nameEffortFromBranch($: EngineInterface): void {
+  const name = async () => {
+    const branch = await readBranch($)
+    if (branch !== null) {
+      await changeStatus($, status => withEffort(status, { name: branch, from: 'branch' }))
+    }
+  }
+  try {
+    $.clock.after(0, () => {
+      name().catch((error: unknown) => {
+        $.ui.log(`session-status branch read: ${String(error)}`, { to: 'debug' })
+      })
+    })
+  } catch {
+    // The effort stays unnamed until a label names it.
   }
 }
 

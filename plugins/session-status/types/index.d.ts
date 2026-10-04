@@ -39,6 +39,11 @@ export type Decision = {
   agentId?: string
   /** When the agent marked it resolved; absent while the decision is open. */
   resolvedAt?: number
+  /**
+   * The shipyard id of the ping sent for it, set when it is recorded blocked.
+   * A `/clear` carries the decision to a new session id; the ping keeps this one.
+   */
+  pingId?: string
 }
 
 /** Something unexpected the agent recorded with the status tool. */

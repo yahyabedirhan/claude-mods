@@ -84,10 +84,13 @@ test('the first surprise a subagent records opens the pane', async ($, on) => {
 
 for (const skill of ['orchestrate-effort', 'orchestrate-with-handoff', 'skills:orchestrate-effort']) {
   test(`a Skill call to ${skill} opens the pane and names the effort from the branch`, async ($, on) => {
-    const { panes, saved } = world(on, { branch: 'session-status' })
+    const { panes, saved, runs, clock } = world(on, { branch: 'session-status' })
     await start($)
 
     await $.tool.call({ tool: 'Skill', skill })
+    // The branch is read after the tool call, never before it.
+    expect(runs).toEqual([])
+    await clock.settle()
 
     expect(panes.has(PLUGIN)).toBe(true)
     expect(saved[SESSION_ID]).toMatchObject({ effort: { name: 'session-status' } })
@@ -126,10 +129,11 @@ test('a Bash command with an effort label opens the pane and names the effort', 
 })
 
 test('an effort label names the effort over the branch', async ($, on) => {
-  const { saved } = world(on, { branch: 'main' })
+  const { saved, clock } = world(on, { branch: 'main' })
   await start($)
 
   await $.tool.call({ tool: 'Skill', skill: 'orchestrate-effort' })
+  await clock.settle()
   expect(saved[SESSION_ID]).toMatchObject({ effort: { name: 'main' } })
 
   await $.tool.call({ tool: 'Bash', command: 'gh issue list --label effort:session-status' })

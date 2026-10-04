@@ -45,9 +45,9 @@ export function blockedPing(
   )
 }
 
-/** Withdraws a decision's ping. */
-export function withdrawPing(sessionId: string, decisionId: string): string[] {
-  return ['shipyard', 'ping', 'withdraw', pingId(sessionId, decisionId)]
+/** Withdraws a ping by its shipyard id (see `pingId`). */
+export function withdrawPing(id: string): string[] {
+  return ['shipyard', 'ping', 'withdraw', id]
 }
 
 /**

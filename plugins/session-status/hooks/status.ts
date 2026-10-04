@@ -223,14 +223,16 @@ export function savedStatus(value: unknown, sessionId: string): SessionStatus | 
 /**
  * The status `sessionId` holds, given the one held now and the one saved for
  * it: the held one when it is this session's; else the saved one (a resume);
- * else the held one's open decisions carried over at `now` (a `/clear`);
- * else none.
+ * else, on a known `/clear` alone, the held one's open decisions carried over
+ * at `now`; else none. A resume or fork with nothing saved starts empty: it
+ * never takes the decisions of the session the process held before.
  */
 export function statusForSession(
   held: SessionStatus | null,
   sessionId: string,
   saved: SessionStatus | null,
   now: number,
+  isClear = false,
 ): SessionStatus | null {
   if (held?.sessionId === sessionId) {
     return held
@@ -239,7 +241,51 @@ export function statusForSession(
     return saved
   }
 
-  return held === null ? null : { ...carryOver(held, sessionId), updatedAt: now }
+  return held === null || !isClear ? null : { ...carryOver(held, sessionId), updatedAt: now }
+}
+
+/**
+ * How many of each list a status keeps within a session: finished subagent
+ * ids, links, and closed items of each kind. The oldest drop first; an open
+ * item never drops.
+ */
+export const CAP = 200
+
+/**
+ * The status within its bounds (see CAP). The newest closed item of each
+ * kind always stays, so the next id of that kind never repeats an old one.
+ */
+export function withinBounds(status: SessionStatus): SessionStatus {
+  const closedCount = { decision: 0, surprise: 0 }
+  for (const item of status.items) {
+    if (!isOpen(item)) {
+      closedCount[item.kind] += 1
+    }
+  }
+  const isOver =
+    status.subagents.finished.length > CAP ||
+    status.links.length > CAP ||
+    closedCount.decision > CAP ||
+    closedCount.surprise > CAP
+  if (!isOver) {
+    return status
+  }
+  const toDrop = { decision: closedCount.decision - CAP, surprise: closedCount.surprise - CAP }
+  const items = status.items.filter(item => {
+    if (isOpen(item) || toDrop[item.kind] <= 0) {
+      return true
+    }
+    toDrop[item.kind] -= 1
+
+    return false
+  })
+
+  return {
+    ...status,
+    items,
+    links: status.links.slice(-CAP),
+    subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
+  }
 }
 
 /** How many sessions' statuses `$.store` keeps; older ones are dropped. */
@@ -269,9 +315,11 @@ export function keysToPrune(saved: { key: string; value: unknown }[], current: s
 
 /**
  * The status after one change: `change` applied to the current status (an
- * empty one before the first change), stamped with the session and the time.
- * A current status of another session is never stamped with this one: the
- * change applies to its open decisions carried over, as after a `/clear`.
+ * empty one before the first change), kept within its bounds and stamped
+ * with the session and the time. A current status of another session is
+ * never stamped with this one: the change applies to an empty status. (A
+ * `/clear`'s carry reaches the new session before any change; see
+ * register.tsx's holdSession.)
  */
 export function applyChange(
   current: SessionStatus | null,
@@ -279,12 +327,7 @@ export function applyChange(
   stamp: { sessionId: string; now: number },
 ): SessionStatus {
   const held = withDefaults(current)
-  const base =
-    held === null
-      ? emptyStatus(stamp.sessionId)
-      : held.sessionId === stamp.sessionId
-        ? held
-        : carryOver(held, stamp.sessionId)
+  const base = held !== null && held.sessionId === stamp.sessionId ? held : emptyStatus(stamp.sessionId)
 
-  return { ...change(base), sessionId: stamp.sessionId, updatedAt: stamp.now }
+  return { ...withinBounds(change(base)), sessionId: stamp.sessionId, updatedAt: stamp.now }
 }

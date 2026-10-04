@@ -223,3 +223,22 @@ test('after the end-of-work list the pane highlights every listed open decision 
     await ui.unmount()
   }
 })
+
+test('resolve and post_end_list check the status of the session that runs now', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, blockedDecision())
+  await callStatusTool($, reviewLaterDecision())
+  await w.clock.advance(0)
+  w.runs.length = 0
+  // A resume moves the process to a session with no saved status.
+  w.switchSession('session-b')
+
+  const resolved = await callStatusTool($, { action: 'resolve', id: 'D1' })
+  const listed = await callStatusTool($, { action: 'post_end_list' })
+  await w.clock.advance(0)
+
+  expect(resolved.deny).toContain('No decision D1')
+  expect(listed.result).toBe('No open review-later decisions. No end-of-work list was marked as posted.')
+  expect(w.runs).toEqual([])
+})

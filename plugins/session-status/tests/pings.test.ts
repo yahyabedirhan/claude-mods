@@ -4,6 +4,7 @@ import { blockedPing, endListPing, pingId, withdrawPing } from '../hooks/pings'
 import {
   blockedDecision,
   callStatusTool,
+  endSession,
   reviewLaterDecision,
   start,
   surprise,
@@ -58,7 +59,7 @@ test('a long question is cut to a short title', () => {
 })
 
 test('the withdraw and end-of-work commands', () => {
-  expect(withdrawPing(SESSION, 'D1')).toEqual(['shipyard', 'ping', 'withdraw', PING])
+  expect(withdrawPing(PING)).toEqual(['shipyard', 'ping', 'withdraw', PING])
   expect(endListPing(SESSION, ['D2', 'D3'])).toEqual([
     'shipyard',
     'ping',
@@ -81,15 +82,42 @@ test('a new blocking decision sends one ping with its id and --herdr', async ($,
   await callStatusTool($, blockedDecision())
   await settle(clock)
 
-  expect(runs).toEqual([blockedPing(SESSION, { id: 'D1', ...blockedDecision() })])
-  expect(runs[0]).toContain('--herdr')
-  expect(runs[0]).toContain(PING)
+  expect(runs).toEqual([
+    [
+      'shipyard',
+      'ping',
+      'Which database do we use?',
+      '--body',
+      'Recommended: Postgres. To unblock: Pick one database',
+      '--from',
+      'session-status',
+      '--id',
+      PING,
+      '--herdr',
+    ],
+  ])
 })
 
 test('resolving a blocking decision withdraws its ping', async ($, on) => {
   const { runs, clock } = world(on, { sessionId: SESSION })
   await start($)
   await callStatusTool($, blockedDecision())
+  await settle(clock)
+  runs.length = 0
+
+  await callStatusTool($, { action: 'resolve', id: 'D1' })
+  await settle(clock)
+
+  expect(runs).toEqual([['shipyard', 'ping', 'withdraw', PING]])
+})
+
+test('resolving a blocked decision carried over /clear withdraws the ping the first session sent', async ($, on) => {
+  const { runs, clock, switchSession } = world(on, { sessionId: SESSION })
+  await start($)
+  await callStatusTool($, blockedDecision())
+  await endSession($, SESSION)
+  switchSession('9b7d5e3a-0000-4000-8000-000000000000')
+  await $.classic.SessionStart({ source: 'clear', session_id: '9b7d5e3a-0000-4000-8000-000000000000' })
   await settle(clock)
   runs.length = 0
 
@@ -134,8 +162,20 @@ test('the end-of-work list sends one ping with the count of open decisions on it
   await callStatusTool($, { action: 'post_end_list' })
   await settle(clock)
 
-  expect(runs).toEqual([endListPing(SESSION, ['D1', 'D3'])])
-  expect(runs[0]?.[2]).toBe('2 decisions to review')
+  expect(runs).toEqual([
+    [
+      'shipyard',
+      'ping',
+      '2 decisions to review',
+      '--body',
+      'Open on the end-of-work list: D1, D3',
+      '--from',
+      'session-status',
+      '--id',
+      'ss-3f2a9c1e-end',
+      '--herdr',
+    ],
+  ])
 })
 
 test('an end-of-work list with no open decision sends no ping', async ($, on) => {

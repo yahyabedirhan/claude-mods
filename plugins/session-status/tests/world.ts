@@ -27,6 +27,8 @@ export type World = {
   clock: MockClock
   /** What the mod saved to `$.store`, by key. */
   saved: Record<string, unknown>
+  /** Every `$.store.set` the mod made, oldest first, refused ones too. */
+  storeWrites: { key: string; value: unknown }[]
   /** The panes open now, by id. */
   panes: Map<string, UiPane>
   /** The commands the mod registered, by name. */
@@ -66,6 +68,11 @@ export type World = {
    * function is called, as a slow network does.
    */
   holdIssues: () => () => void
+  /**
+   * Holds every call of the tool named until the returned function is
+   * called, as a long-running tool does.
+   */
+  holdTool: (tool: string) => () => void
 }
 
 /** One issue as `gh issue list --json number,title,state,labels` prints it. */
@@ -118,6 +125,8 @@ export function world(
     denySpawns?: boolean
     /** What `gh issue list` answers, as its `--json` output; `gh` fails when absent. */
     issues?: GhIssue[]
+    /** Makes every `$.store.set` fail, as a full store does, after it is recorded. */
+    failStoreWrites?: boolean
   } = {},
 ): World {
   const clock = mock.clock(on, { now: START })
@@ -133,11 +142,17 @@ export function world(
   let reply: ModelReply = () => '{"findings":[]}'
   let issues = options.issues
   let issueGate: Promise<void> | null = null
+  const storeWrites: { key: string; value: unknown }[] = []
+  const toolGates = new Map<string, Promise<void>>()
 
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: sessionId }))
   on('store.get', (_$, e) => ({ value: saved[e.key] }))
   on('store.set', (_$, e) => {
+    storeWrites.push({ key: e.key, value: e.value })
+    if (options.failStoreWrites === true) {
+      throw new Error('store full')
+    }
     saved[e.key] = e.value
 
     return { value: undefined }
@@ -199,7 +214,11 @@ export function world(
 
     return { value: { exitCode: 0, stdout: '', stderr: '', ...FULL } }
   })
-  on('tool.call', (_$, e) => ({ result: answers.get(e.tool)?.(e) ?? 'ok' }) as never)
+  on('tool.call', async (_$, e) => {
+    await toolGates.get(e.tool)
+
+    return { result: answers.get(e.tool)?.(e) ?? 'ok' } as never
+  })
   on('classic.*', () => ({}))
   // An Agent tool call's spawn answers the started subagent's id: the call's `name`.
   on('agent.spawn', (_$, e) =>
@@ -241,6 +260,7 @@ export function world(
   return {
     clock,
     saved,
+    storeWrites,
     panes,
     commands,
     tools,
@@ -271,6 +291,20 @@ export function world(
 
       return () => {
         issueGate = null
+        release()
+      }
+    },
+    holdTool: tool => {
+      let release = () => {}
+      toolGates.set(
+        tool,
+        new Promise<void>(resolve => {
+          release = resolve
+        }),
+      )
+
+      return () => {
+        toolGates.delete(tool)
         release()
       }
     },
