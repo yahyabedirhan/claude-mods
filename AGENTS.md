@@ -1,6 +1,6 @@
 # Agent instructions
 
-Claude Code mods made by the maintainer. Each mod is a plugin: a
+Claude Code mods made by yahyabedirhan. Each mod is a plugin: a
 TypeScript hooks module that changes how Claude Code behaves or looks.
 Mods run only in Claude Code; other harnesses don't load them.
 
