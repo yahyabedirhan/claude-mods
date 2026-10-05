@@ -43,9 +43,45 @@ observer     a Haiku check every few turns for loops, time sinks and off-flow st
 survives     resume, /clear (open decisions carry over) and /compact
 ```
 
+An example pane, midway through an effort, with one decision waiting on you:
+
+```text
+● Blocked
+Now
+Edit: crons.tsx
+Blocked on you (1)
+D3 · Should the band show cron jobs too?
+  Unblocks: Answer yes or no in the chat.
+  Recommended: No, the pane is enough.
+  Options: Yes / No
+Session
+Branch   cron-readable
+Worktree claude-mods-8ec7ac/1
+Landed 3/5 ████████████░░░░░░░░
+Building: #21, #22
+Effort  session-status-v2
+Closed 2/7 ██████░░░░░░░░░░░░░░
+Created
+PR claude-mods#18 · issue claude-mods#19 · issue skills#163
+skills  2 files · 1 command
+Surprises (1)
+S1 · CronCreate's result has no readable schedule.
+  Changed: The mod formats the cron expression itself.
+Review later (1)
+D2 · Which word marks a week-old recurring job?
+  Default: expired
+Subagents
+1 running · 2 finished
+Cron jobs
+1 active · 1 fired
+weekdays 09:00 · Check the build and report.
+Answered (4)
+Last update 09:41:07 · 12s ago
+```
+
 ## Adding a mod
 
-Put it in `plugins/<name>/` with `.claude-plugin/plugin.json`, `hooks/hooks.json`, its hooks module and its `*.test.ts` tests. List it in `.claude-plugin/marketplace.json`, which is how Claude Code finds the mods in this repo. Add its row to [Mods](#mods) and its section under [How the mods work](#how-the-mods-work), in the same shape: two sentences and one outline.
+Put it in `plugins/<name>/` with `.claude-plugin/plugin.json`, `hooks/hooks.json`, its hooks module and its `*.test.ts` tests. List it in `.claude-plugin/marketplace.json`, which is how Claude Code finds the mods in this repo. Add its row to [Mods](#mods) and its section under [How the mods work](#how-the-mods-work), in the same shape: two sentences, one outline and, optionally, an example of what the mod shows.
 
 Check a mod before you commit it:
 
