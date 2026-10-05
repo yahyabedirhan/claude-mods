@@ -55,22 +55,31 @@ export function isOpen(item: StatusItem): boolean {
   return item.resolvedAt === undefined
 }
 
-/** The open review-later decisions, oldest first: what the end-of-work list holds. */
-export function openReviewLater(status: SessionStatus): Decision[] {
+/** The open decisions to make before the session settles, oldest first: what the decide list holds. */
+export function openToDecide(status: SessionStatus): Decision[] {
+  return openOfUrgency(status, 'before_settling')
+}
+
+/** The open decisions that can wait until after the session settles, oldest first. */
+export function openFollowUps(status: SessionStatus): Decision[] {
+  return openOfUrgency(status, 'after_settling')
+}
+
+function openOfUrgency(status: SessionStatus, urgency: Decision['urgency']): Decision[] {
   return status.items.filter(
-    (item): item is Decision => item.kind === 'decision' && item.urgency === 'review_later' && isOpen(item),
+    (item): item is Decision => item.kind === 'decision' && item.urgency === urgency && isOpen(item),
   )
 }
 
 /**
- * The decisions the last end-of-work list named that are still open, oldest
+ * The decisions the last decide list named that are still open, oldest
  * first; none before the agent posts a list. A decision recorded after the
  * list was posted is not on it.
  */
 export function onEndList(status: SessionStatus): Decision[] {
   const postedAt = status.endListPostedAt
 
-  return postedAt === null ? [] : openReviewLater(status).filter(item => item.recordedAt <= postedAt)
+  return postedAt === null ? [] : openToDecide(status).filter(item => item.recordedAt <= postedAt)
 }
 
 /** The open blockers, oldest first. */
@@ -140,7 +149,21 @@ export function emptyStatus(sessionId: string): SessionStatus {
  * empty status; null stays null.
  */
 export function withDefaults(status: SessionStatus | null): SessionStatus | null {
-  return status === null ? null : { ...emptyStatus(status.sessionId), ...status }
+  if (status === null) {
+    return null
+  }
+  const full = { ...emptyStatus(status.sessionId), ...status }
+
+  return full.items.some(isOldUrgency) ? { ...full, items: full.items.map(withNewUrgency) } : full
+}
+
+/** A decision saved before 0.4.0 with `review_later`: it reads as `before_settling`. */
+function isOldUrgency(item: StatusItem): boolean {
+  return item.kind === 'decision' && (item.urgency as string) === 'review_later'
+}
+
+function withNewUrgency<T extends StatusItem>(item: T): T {
+  return isOldUrgency(item) ? { ...item, urgency: 'before_settling' } : item
 }
 
 /**
@@ -222,6 +245,7 @@ export function readCarry(value: unknown, sessionId: string, now: number): Clear
 
   return {
     ...(carry as ClearCarry),
+    items: (carry.items ?? []).map(withNewUrgency),
     effort: carry.effort ?? null,
     ticketReports: Array.isArray(carry.ticketReports) ? carry.ticketReports : [],
     sessionItems: Array.isArray(carry.sessionItems) ? carry.sessionItems : [],

@@ -19,7 +19,7 @@ Blocked on you   every open blocked decision
 You should know  every open blocker: what failed and what unblocks it
 Session          Branch    pane-width
                  Worktree  claude-mods-8ec7ac/1
-                 Items 7/19 ███████░░░░░          the session's items and effort tickets
+                 Progress 7/19 ███████░░░░░       the session's items and effort tickets
                  ○ I8 Open the pull request       the open items, the first 4
                  Building: #3, #5
                  Tasks 2/5 ████████░░░░░          while a task list exists
@@ -28,8 +28,9 @@ Effort           video-review-v1                  during an effort
 Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
+Decide before settling     the newest 5, asked ones first, then a pressable "+N more"
+Follow-up after settling   the newest 3, then a pressable "+N more"
 Surprises        the newest 2, then a pressable "+N more"
-Review later     the newest 3, then a pressable "+N more"
 Observations     the observer's findings, dim: the newest 2, then "+N more"
 Subagents        running · finished
 Cron jobs        1 active · 1 fired · 1 expired · 1 cancelled
@@ -58,13 +59,13 @@ Answered (N) · Last update
    - **Branch** and **Worktree** (the two folders above the repository
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
      The full path stays in the status.
-   - **Items**: how close the session is to settling, as done of all (see
+   - **Progress**: how close the session is to settling, as done of all (see
      [Session progress](#session-progress)). The total grows as the session
      takes on more work.
    - The open items, each with its id: the first 4, then "+N more".
    - **Building**: the tickets the orchestrator builds now.
    - **Tasks**: the task list's tasks done, on a line of its own. It never
-     mixes into Items.
+     mixes into Progress.
 6. **Effort**, during an effort: its name, then the tracker's count once it
    has one: closed tickets of all the effort's issues, `QA:` tickets
    included. It never mixes in the orchestrator's reports.
@@ -72,13 +73,18 @@ Answered (N) · Last update
    repository, newest 5 first, then "+N more".
 8. **Places**: the other repositories the session changed (see
    [Places](#places)).
-9. **Surprises**: unexpected things the agent recorded and what they changed.
-10. **Review later**: decisions the agent made with a safe default, each with
-   that default.
-11. **Observations**: the observer's findings (see [The observer](#the-observer)),
+9. **Decide before settling**: decisions the agent went on with a default
+   for, which you answer before the session settles. The ones it asked you
+   about in the chat (its decide list) come first, their ids in the warning
+   colour; then the newest of the rest, five in all.
+10. **Follow-up after settling**: decisions that can wait until after the
+    session settles, each with the default the agent went on with. They never
+    hold up settling.
+11. **Surprises**: unexpected things the agent recorded and what they changed.
+12. **Observations**: the observer's findings (see [The observer](#the-observer)),
     kept apart from what the agent itself knows, under a dim heading.
-12. **Subagents**: running and finished.
-13. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
+13. **Subagents**: running and finished.
+14. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
     as active, fired, expired or cancelled, then each active job's schedule
     and prompt (the newest 3, then "+N more"). The schedule is short text
     (`every 5m`, `hourly`, `daily 09:00`, `weekdays 09:00`, `Mondays 08:00`,
@@ -87,11 +93,12 @@ Answered (N) · Last update
     one-shot job is then done. A recurring job expires 7 days after
     `CronCreate` scheduled it, as Claude Code expires it. `CronDelete` cancels
     a job, and a one-shot job that `CronList` no longer lists has fired.
-14. **Answered**: how many decisions and blockers were resolved and surprises
+15. **Answered**: how many decisions and blockers were resolved and surprises
     dismissed.
-15. **Last update**: its time and age.
+16. **Last update**: its time and age.
 
-**"+N more"** under Surprises, Review later and Observations is a button:
+**"+N more"** under Decide before settling, Follow-up after settling,
+Surprises and Observations is a button:
 pressing it turns the pane into that whole list, newest first, with a
 **← Back** button (or the `b` key) to return. Closing the pane returns it to
 every section.
@@ -104,16 +111,17 @@ Colour carries meaning, from Claude Code's theme, so it reads in light and
 dark themes: headings are bold and labels dim; the state line takes the
 warning colour when blocked, the success colour in progress, the accent
 colour waiting for a reply, and is dim when settled; blocked decisions,
-blockers and the end-of-work list take the warning colour, and decision, surprise and
+blockers and the decisions asked in the chat take the warning colour, and decision, surprise and
 session item ids and the tickets being built the accent colour. The progress
 bars stay neutral.
 
 When the terminal is too narrow for the pane, a one-line band above the
 prompt shows the counts instead:
-`<n> blocked · <n> review · items 7/19 · tasks 2/5 · closed 1/13 · <n> surprise`.
+`<n> blocked · <n> decide · <n> follow-up · progress 7/19 · tasks 2/5 · closed 1/13 · <n> surprise`.
 `blocked` counts blocked decisions and blockers; `surprise` leaves the
 observer's findings out.
-`tasks` shows while a task list exists, and `closed` during an effort.
+`follow-up` shows while there is one, `tasks` while a task list exists, and
+`closed` during an effort.
 Without items or effort tickets the session figure is the tasks'
 `<done>/<total> done`.
 
@@ -132,12 +140,12 @@ prompt section that tells the agent how to use it. Actions:
 
 | Action | What it does |
 | --- | --- |
-| `record_decision` | Records a decision: question, two to four options, a default, what unblocks it, and urgency `blocked` or `review_later`. |
+| `record_decision` | Records a decision: question, two to four options, a default, what unblocks it, and urgency `blocked`, `before_settling` or `after_settling`. |
 | `record_surprise` | Records a surprise: what occurred and what it changed. |
 | `record_blocker` | Records a blocker: what failed (`failed`) and what you can do to unblock it (`needs`). It pings you. |
 | `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat, or a blocker (`B1`, ...) resolved once it works. |
 | `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. |
-| `post_end_list` | Marks the end-of-work list posted. |
+| `post_decide_list` | Marks the decide list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
 | `item` | Reports a session item: `state` `added` with a `title` (the reply names its id, `I1`, ...), or `done` or `dropped` with its `id`. |
 
@@ -146,21 +154,21 @@ observer's instructions ask for the same style: each field one short, clear
 sentence in plain technical style, with active voice, one idea per sentence,
 no lists and no filler. There is no character limit.
 
-**End-of-work list.** The agent collects review-later decisions while it
-works. At the end, it posts one numbered list of the open ones in the chat
-and calls `post_end_list`. The pane highlights each listed decision until it
-is resolved.
+**Decide list.** The agent collects before-settling decisions while it
+works. When the work is done, it posts one numbered list of the open ones in
+the chat and calls `post_decide_list`. The pane highlights each asked
+decision until it is resolved. Follow-ups are never on the list.
 
 ## Session progress
 
-Every session shows how close it is to settling: `Items 7/19`, done of all.
+Every session shows how close it is to settling: `Progress 7/19`, done of all.
 The total is the session's items plus, during an effort, the effort's
 tickets.
 
 **Items.** The main session reports each piece of work it must do before it
 settles with the `item` action. The total grows as the session goes on.
 
-| State | When the agent reports it | What Items does |
+| State | When the agent reports it | What Progress does |
 | --- | --- | --- |
 | `added` | You ask for something: one item for each request or sub-request. Also follow-up work the agent takes on, and each step left before the session settles (review, pull request, your approval, merge, settle). | Counts one more item and lists it as open. |
 | `done` | The item's work is finished and verified. | Counts it as done. |
@@ -170,9 +178,9 @@ settles with the `item` action. The total grows as the session goes on.
   dropped.
 - Only the main session reports items; a subagent's `item` call is refused.
 - The task list (`TaskCreate`, `TodoWrite`) keeps its own **Tasks** line and
-  never mixes into Items.
+  never mixes into Progress.
 
-**Effort tickets.** During an effort, Items also counts the effort's
+**Effort tickets.** During an effort, Progress also counts the effort's
 tickets: every ticket the tracker counted, or the tickets reported when they
 are more. A ticket counts as done once the orchestrator reports it landed.
 `Spec:` and `QA:` issues are left out: you close a QA ticket by hand, so the
@@ -182,7 +190,7 @@ orchestrator never lands one. The agent adds no item for a ticket.
 
 During an effort the pane shows two counts that never mix:
 
-- **Session** (`Items 7/19`): the session's items and the tickets the
+- **Session** (`Progress 7/19`): the session's items and the tickets the
   orchestrator reported landed, of every ticket of the effort.
 - **Effort** (`Closed 1/14`): what the tracker says. An issue often closes
   long after its ticket is built: when the pull request merges, after QA,
@@ -248,7 +256,7 @@ All are skipped silently when they are missing.
 - **`git`** for the branch, the worktree, the GitHub links and Places. It
   runs in the background and never holds a tool call.
 - **`shipyard` and Herdr** for pings: a ping for each blocked decision
-  (withdrawn when it is resolved), and one ping when the end-of-work list is
+  (withdrawn when it is resolved), and one ping when the decide list is
   posted.
 - **`gh`** for links and effort progress: created pull requests and issues
   are read from `gh` output, and the effort's tickets are counted with

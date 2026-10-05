@@ -83,7 +83,7 @@ test('items added one by one grow the total, and done ones count as done', async
   })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Items 1/3')
+    expect(text).toContain('Progress 1/3')
     expect(text).toContain('○ I2 Open each count chip on GitHub')
     expect(text).toContain('○ I3 Commit the work')
     expect(text).not.toContain('I1')
@@ -101,7 +101,7 @@ test('a dropped item leaves the total, even after it was done', async ($, on) =>
 
   expect((await mark($, 'dropped', 'i1')).result).toBe('Item I1 Make the icon bigger is dropped. Session: 1/1 done.')
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 1/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 1/1')
   }
 })
 
@@ -147,10 +147,10 @@ test("during an effort the session total holds every build ticket, QA left out, 
   // The tracker's count arrives after the reply: until then the reported ticket stands for the tickets.
   expect(answer.result).toBe('Ticket #2 Ticket 2 is landed. Session: 1/7 done.')
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 1/19')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 1/19')
     // The effort keeps counting its QA ticket: it is not finished until QA closes.
     expect(await sectionText($, surface, 'effort')).toContain('Closed 0/14')
-    expect(await bandText($, surface)).toBe('0 blocked · 0 review · items 1/19 · closed 0/14 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/19 · closed 0/14 · 0 surprise')
   }
 })
 
@@ -174,9 +174,9 @@ test('the task list keeps a line of its own beside the items', async ($, on) => 
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Items 0/1')
+    expect(text).toContain('Progress 0/1')
     expect(text).toContain('Tasks 0/1')
-    expect(await bandText($, surface)).toBe('0 blocked · 0 review · items 0/1 · tasks 0/1 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 0/1 · tasks 0/1 · 0 surprise')
   }
 })
 

@@ -74,7 +74,7 @@ test('a status keeps the newest 200 finished subagents, links and closed items o
   const decision = (n: number, isOpen: boolean): StatusItem => ({
     kind: 'decision',
     id: `D${n}`,
-    urgency: 'review_later',
+    urgency: 'before_settling',
     question: 'Which name?',
     options: ['a', 'b'],
     default: 'a',

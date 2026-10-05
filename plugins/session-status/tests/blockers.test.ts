@@ -68,7 +68,7 @@ test('a blocker shows under You should know, blocks the state line and pings the
     expect(text).toContain('To unblock: Start claude once in a terminal')
     expect(await sectionText($, surface, 'state')).toBe('● Blocked')
     expect(await sectionText($, surface, 'surprises')).toBeUndefined()
-    expect(await bandText($, surface)).toBe('1 blocked · 0 review · 0/0 done · 0 surprise')
+    expect(await bandText($, surface)).toBe('1 blocked · 0 decide · 0/0 done · 0 surprise')
   }
 })
 

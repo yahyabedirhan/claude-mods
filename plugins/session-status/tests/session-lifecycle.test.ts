@@ -11,7 +11,7 @@ import {
   blockedDecision,
   callStatusTool,
   endSession,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   sectionText,
   start,
   surprise,
@@ -45,7 +45,7 @@ function savedStatus(sessionId: string, updatedAt = START - 60_000) {
       {
         kind: 'decision',
         id: 'D2',
-        urgency: 'review_later',
+        urgency: 'before_settling',
         question: 'Which name does the flag get?',
         options: ['--fast', '--quick'],
         default: '--fast',
@@ -172,13 +172,13 @@ test('/clear carries the effort over to the new session', async ($, on) => {
 })
 
 /**
- * Records D1 (blocked), D2 (review later, then resolved) and S1 under the
+ * Records D1 (blocked), D2 (before settling, then resolved) and S1 under the
  * first session, then runs a `/clear` that empties `$.state`: the old
  * session ends, the process moves to NEW_SESSION.
  */
 async function clearWithEmptyState($: Engine, w: World) {
   await callStatusTool($, blockedDecision())
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, surprise())
   await callStatusTool($, { action: 'resolve', id: 'D2' })
   await endSession($, SESSION_ID)
@@ -291,14 +291,14 @@ test('/clear leaves the old session saved as it was', async ($, on) => {
   const before = saved[SESSION_ID]
   switchSession(NEW_SESSION)
   await sessionStart($, 'clear', NEW_SESSION)
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
 
   expect(saved[SESSION_ID]).toEqual(before)
   expect(saved[NEW_SESSION]).toMatchObject({
     sessionId: NEW_SESSION,
     items: [
       { kind: 'decision', id: 'D1', urgency: 'blocked' },
-      { kind: 'decision', id: 'D2', urgency: 'review_later' },
+      { kind: 'decision', id: 'D2', urgency: 'before_settling' },
     ],
   })
 })

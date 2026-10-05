@@ -5,7 +5,7 @@ import {
   blockedDecision,
   callStatusTool,
   endSession,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   start,
   surprise,
   world,
@@ -63,21 +63,21 @@ test('a long question is cut to a short title', () => {
   expect(argv[2]?.endsWith('…')).toBe(true)
 })
 
-test('the withdraw and end-of-work commands', () => {
+test('the withdraw and decide-list commands', () => {
   expect(withdrawPing(PING)).toEqual(['shipyard', 'ping', 'withdraw', PING])
   expect(endListPing(SESSION, ['D2', 'D3'])).toEqual([
     'shipyard',
     'ping',
-    '2 decisions to review',
+    '2 decisions before settling',
     '--body',
-    'Open on the end-of-work list: D2, D3',
+    'To decide before the session settles: D2, D3',
     '--from',
     'session-status',
     '--id',
     'ss-3f2a9c1e-end',
     '--herdr',
   ])
-  expect(endListPing(SESSION, ['D1'])[2]).toBe('1 decision to review')
+  expect(endListPing(SESSION, ['D1'])[2]).toBe('1 decision before settling')
 })
 
 test('a new blocking decision sends one ping with its id and --herdr', async ($, on) => {
@@ -132,11 +132,11 @@ test('resolving a blocked decision carried over /clear withdraws the ping the fi
   expect(pingRuns(runs)).toEqual([['shipyard', 'ping', 'withdraw', PING]])
 })
 
-test('review-later decisions and surprises send no ping, and resolving them withdraws nothing', async ($, on) => {
+test('before-settling decisions and surprises send no ping, and resolving them withdraws nothing', async ($, on) => {
   const { runs, clock } = world(on, { sessionId: SESSION })
   await start($)
 
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, surprise())
   await callStatusTool($, { action: 'resolve', id: 'D1' })
   await callStatusTool($, { action: 'dismiss', id: 'S1' })
@@ -156,24 +156,24 @@ test('a refused status call sends no ping', async ($, on) => {
   expect(pingRuns(runs)).toEqual([])
 })
 
-test('the end-of-work list sends one ping with the count of open decisions on it', async ($, on) => {
+test('the decide list sends one ping with the count of open decisions on it', async ($, on) => {
   const { runs, clock } = world(on, { sessionId: SESSION })
   await start($)
-  await callStatusTool($, reviewLaterDecision())
-  await callStatusTool($, reviewLaterDecision({ question: 'Which port?' }))
-  await callStatusTool($, reviewLaterDecision({ question: 'Which log level?' }))
+  await callStatusTool($, decisionBeforeSettling())
+  await callStatusTool($, decisionBeforeSettling({ question: 'Which port?' }))
+  await callStatusTool($, decisionBeforeSettling({ question: 'Which log level?' }))
   await callStatusTool($, { action: 'resolve', id: 'D2' })
 
-  await callStatusTool($, { action: 'post_end_list' })
+  await callStatusTool($, { action: 'post_decide_list' })
   await settle(clock)
 
   expect(pingRuns(runs)).toEqual([
     [
       'shipyard',
       'ping',
-      '2 decisions to review',
+      '2 decisions before settling',
       '--body',
-      'Open on the end-of-work list: D1, D3',
+      'To decide before the session settles: D1, D3',
       '--from',
       'session-status',
       '--id',
@@ -183,11 +183,11 @@ test('the end-of-work list sends one ping with the count of open decisions on it
   ])
 })
 
-test('an end-of-work list with no open decision sends no ping', async ($, on) => {
+test('a decide list with no open decision sends no ping', async ($, on) => {
   const { runs, clock } = world(on, { sessionId: SESSION })
   await start($)
 
-  await callStatusTool($, { action: 'post_end_list' })
+  await callStatusTool($, { action: 'post_decide_list' })
   await settle(clock)
 
   expect(pingRuns(runs)).toEqual([])

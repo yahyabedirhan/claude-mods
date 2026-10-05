@@ -43,7 +43,7 @@ import {
   emptyStatus,
   keysToPrune,
   onEndList,
-  openReviewLater,
+  openToDecide,
   readCarry,
   recordItem,
   savedStatus,
@@ -424,7 +424,7 @@ export const register: Register = on => {
   })
 
   // The status tool: the model records a decision or a surprise, closes one,
-  // marks the end-of-work list posted, or reports a ticket's state. The
+  // marks the decide list posted, or reports a ticket's state. The
   // matcher spells STATUS_TOOL out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
@@ -454,7 +454,7 @@ export const register: Register = on => {
 
     if ('postEndList' in input) {
       const current = await currentStatus($)
-      if (openReviewLater(current).length === 0) {
+      if (openToDecide(current).length === 0) {
         return { result: endListText([]) }
       }
       const posted = await changeStatus($, status => ({ ...status, endListPostedAt: now }))

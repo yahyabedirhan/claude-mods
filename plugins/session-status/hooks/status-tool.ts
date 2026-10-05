@@ -3,7 +3,7 @@
 // answering its calls live in register.tsx, where `$` is.
 //
 // One tool with an `action` field: it records decisions and surprises,
-// closes them, marks the end-of-work list as posted, and reports a ticket's
+// closes them, marks the decide list as posted, and reports a ticket's
 // or a session item's state.
 
 import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
@@ -22,10 +22,10 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_end_list', 'ticket', 'item'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
-const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
+const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
 
@@ -46,7 +46,8 @@ export const STATUS_TOOL_SPEC = {
     'Keeps the session status pane the user watches current. The pane is read-only: the user answers in the chat.',
     '`record_decision`: a choice the user must make. Give the question, two to four options,',
     'your default (the answer you recommend) and what unblocks it.',
-    'Choose a safe default and continue: use urgency `review_later`.',
+    'Choose a safe default and continue: use urgency `before_settling` when the user must decide before the session settles,',
+    'or `after_settling` when it can wait until after the session settles as a follow-up.',
     'Stop only when no safe default exists: use urgency `blocked`.',
     '`record_surprise`: something unexpected that changed the work or the plan.',
     'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
@@ -57,8 +58,8 @@ export const STATUS_TOOL_SPEC = {
     CONCISE_RULE,
     '`resolve` with `id`: the user answered that decision in the chat, or that blocker works now.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
-    '`post_end_list`: call it when, at the end of your work, you post one numbered list',
-    'of the open review-later decisions, each with its default and options.',
+    '`post_decide_list`: call it when, at the end of your work, you post one numbered list',
+    'of the open before-settling decisions, each with its default and options.',
     "The result names the item's id (D1, S1, ...).",
     '`ticket`: only for the session that orchestrates an effort\'s tickets, never for a delegate.',
     'Give the ticket\'s issue `number`, its `title` and its `state`:',
@@ -78,7 +79,7 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s or a session item\'s state.',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, or report a ticket\'s or a session item\'s state.',
       },
       id: {
         type: 'string',
@@ -89,7 +90,7 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...URGENCIES],
         description:
-          'record_decision: `blocked` when no safe default exists and the work stops; `review_later` when you continue with the default.',
+          'record_decision: `blocked` when no safe default exists and the work stops; `before_settling` when you continue with the default and the user decides before the session settles; `after_settling` when it can wait until after the session settles.',
       },
       question: { type: 'string', description: 'record_decision: the question for the user, in one short sentence.' },
       options: {
@@ -148,7 +149,7 @@ export type StatusToolRequest =
   | { draft: ItemDraft }
   /** Close an open item: resolve a decision or dismiss a surprise. */
   | { close: { kind: StatusItem['kind']; id: string } }
-  /** Mark the end-of-work list as posted. */
+  /** Mark the decide list as posted. */
   | { postEndList: true }
   /** Report a ticket's state. */
   | { ticket: TicketRequest }
@@ -167,9 +168,10 @@ export function readStatusToolInput(
 
   switch (input.action) {
     case 'record_decision': {
-      const urgency = input.urgency
+      // `review_later` is the name before 0.4.0 of `before_settling`.
+      const urgency = input.urgency === 'review_later' ? 'before_settling' : input.urgency
       if (!URGENCIES.includes(urgency as DecisionUrgency)) {
-        return { error: 'A decision needs an urgency: `blocked` or `review_later`.' }
+        return { error: 'A decision needs an urgency: `blocked`, `before_settling` or `after_settling`.' }
       }
       const question = text(input.question)
       if (question === null) {
@@ -241,6 +243,8 @@ export function readStatusToolInput(
 
       return { close: { kind, id } }
     }
+    case 'post_decide_list':
+    // The name before 0.4.0.
     case 'post_end_list':
       return { postEndList: true }
     case 'ticket': {
@@ -309,7 +313,9 @@ export function recordedText(item: StatusItem): string {
 
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id} (blocked on the user).`
-    : `Recorded decision ${item.id} (review later). Default: ${item.default}.`
+    : item.urgency === 'after_settling'
+      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${item.default}.`
+      : `Recorded decision ${item.id} (decide before settling). Default: ${item.default}.`
 }
 
 /** What the model reads after it closed an item. */
@@ -319,11 +325,11 @@ export function closedText(item: StatusItem): string {
   return `${done} ${item.kind} ${item.id}. It is in the answered history now.`
 }
 
-/** What the model reads after `post_end_list`, given the decisions the list holds. */
+/** What the model reads after `post_decide_list`, given the decisions the list holds. */
 export function endListText(listed: readonly Decision[]): string {
   return listed.length === 0
-    ? 'No open review-later decisions. No end-of-work list was marked as posted.'
-    : `End-of-work list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
+    ? 'No open decisions before settling. No decide list was marked as posted.'
+    : `Decide list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
 }
 
 /** How many tickets in progress a reply names; the rest show as `+N more`. */

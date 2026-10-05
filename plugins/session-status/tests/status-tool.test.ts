@@ -6,7 +6,7 @@ import {
   STATUS_TOOL,
   blockedDecision,
   callStatusTool,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   start,
   surprise,
   world,
@@ -22,7 +22,7 @@ test('the mod registers the status tool for the model when the session starts', 
   expect(tool?.inputSchema).toMatchObject({
     type: 'object',
     required: ['action'],
-    properties: { action: { enum: ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_end_list', 'ticket', 'item'] } },
+    properties: { action: { enum: ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item'] } },
   })
 })
 
@@ -50,14 +50,14 @@ test('the status tool records a blocked decision with a stable id', async ($, on
   })
 })
 
-test('the status tool records a review-later decision', async ($, on) => {
+test('the status tool records a decision to make before settling', async ($, on) => {
   const { saved } = world(on)
   await start($)
 
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
 
   expect(saved[SESSION_ID]).toMatchObject({
-    items: [{ kind: 'decision', id: 'D1', urgency: 'review_later', default: '--fast' }],
+    items: [{ kind: 'decision', id: 'D1', urgency: 'before_settling', default: '--fast' }],
   })
 })
 
@@ -87,7 +87,7 @@ test('each item keeps its own id: decisions count D1, D2 and surprises S1, S2', 
 
   await callStatusTool($, blockedDecision())
   await callStatusTool($, surprise())
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, surprise({ occurred: 'The cache is cold' }))
 
   const status = saved[SESSION_ID] as { items: { id: string }[] }

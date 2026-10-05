@@ -14,7 +14,7 @@ const TEXT = `# Session status
 The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool to keep it current.
 
 - When the work needs a choice from the user, record a decision: the question, two to four options, your default (the answer you recommend) and what unblocks it.
-- Choose a safe default and continue. Record that decision with urgency \`review_later\`. Do not stop the work for it.
+- Choose a safe default and continue. Do not stop the work for it. Record that decision with urgency \`before_settling\` when the user must decide before the session settles. Use \`after_settling\` when it can wait until after the session settles, as a follow-up.
 - Stop only when no safe default exists. Then record the decision with urgency \`blocked\`. Recommend one option, and say in \`unblocks\` the one thing the user must say or do.
 - When something unexpected changes the work or the plan, record a surprise: what occurred and what it changed. Do not record ordinary errors that you fixed yourself.
 - When you try something and it fails, and you cannot finish it yourself, record a blocker with action \`record_blocker\`. Give what failed and what the user can do to unblock you, such as run a command, restart Claude Code or allow an action. Examples: a denied action that has no other way, a test or check that cannot run, a tool that refuses to start. The user gets a ping. Do not record it as a surprise.
@@ -22,8 +22,8 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - ${CONCISE_RULE} The user reads the pane at a glance.
 - The pane is read-only. The user answers decisions in the chat. When you read the user's answer to a decision in the chat, call the tool with action \`resolve\` and the decision's id.
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
-- Collect review-later decisions while you work. Do not ask about them in the middle of the work.
-- At the end of your work, if review-later decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_end_list\`.
+- Collect before-settling decisions while you work. Do not ask about them in the middle of the work.
+- At the end of your work, if before-settling decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_decide_list\`.
 - Report the work this session must do before it settles with action \`item\`. The pane counts the items done of all.
   - Call it with state \`added\` and a short \`title\` for each request or sub-request from the user. Do this when the user asks, before you start the work.
   - Also add an item for follow-up work that you take on, and for each step left before the session settles: for example the review, the pull request, the user's approval, the merge and the settle.

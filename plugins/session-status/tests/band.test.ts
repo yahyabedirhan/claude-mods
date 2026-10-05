@@ -9,7 +9,7 @@ import {
   bandText,
   blockedDecision,
   callStatusTool,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   start,
   surprise,
   world,
@@ -20,7 +20,7 @@ test('below the width limit the band shows the counts in the agreed form', async
   await start($)
   await callStatusTool($, blockedDecision())
   await callStatusTool($, blockedDecision({ question: 'Which port?' }))
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, surprise())
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
   await $.classic.TaskCreated({ task_id: '2', task_subject: 'Draw the band' })
@@ -28,7 +28,7 @@ test('below the width limit the band shows the counts in the agreed form', async
   await $.classic.TaskCompleted({ task_id: '1', task_subject: 'Build the pane' })
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('2 blocked · 1 review · 1/3 done · 1 surprise')
+    expect(await bandText($, surface)).toBe('2 blocked · 1 decide · 1/3 done · 1 surprise')
   }
 })
 
@@ -38,7 +38,7 @@ test('the band counts zeros before any task', async ($, on) => {
   await callStatusTool($, surprise())
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('0 blocked · 0 review · 0/0 done · 1 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · 0/0 done · 1 surprise')
   }
 })
 
@@ -50,15 +50,15 @@ test('the band leaves resolved items out', () => {
     items: [
       { ...decision('D1', 'blocked'), resolvedAt: START },
       decision('D2', 'blocked'),
-      { ...decision('D3', 'review_later'), resolvedAt: START },
+      { ...decision('D3', 'before_settling'), resolvedAt: START },
       { kind: 'surprise', id: 'S1', occurred: 'x', changed: 'y', recordedAt: START, resolvedAt: START },
     ] as StatusItem[],
   }
 
-  expect(bandLine(status)).toBe('1 blocked · 0 review · 0/0 done · 0 surprise')
+  expect(bandLine(status)).toBe('1 blocked · 0 decide · 0/0 done · 0 surprise')
 })
 
-function decision(id: string, urgency: 'blocked' | 'review_later'): StatusItem {
+function decision(id: string, urgency: 'blocked' | 'before_settling'): StatusItem {
   return {
     kind: 'decision',
     id,

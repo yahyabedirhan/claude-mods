@@ -6,7 +6,7 @@ import type { RenderNode } from 'claude-code'
 
 import type { Decision, PaneView, SessionStatus, Surprise } from '../../types'
 import { COLOR } from '../palette'
-import { isOpen, openReviewLater } from '../status'
+import { isOpen, onEndList, openFollowUps, openToDecide } from '../status'
 import type { Ui } from './section'
 
 /** The surprises the agent recorded, open, oldest first. */
@@ -40,8 +40,8 @@ export function surpriseEntry(ui: Ui, surprise: Surprise, prefix: string): Rende
   )
 }
 
-/** One review-later decision: its id and question, then the default the agent goes on with. */
-export function reviewLaterEntry(ui: Ui, decision: Decision, prefix: string, color: string = COLOR.accent): RenderNode {
+/** One decision the agent went on with a default for: its id and question, then that default. */
+export function decisionEntry(ui: Ui, decision: Decision, prefix: string, color: string = COLOR.accent): RenderNode {
   const { Box, Text } = ui
 
   return (
@@ -80,9 +80,20 @@ export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: Sess
 
     return { title: `Observations (${all.length})`, entries: [...all].reverse().map(s => surpriseEntry(ui, s, 'all')) }
   },
-  'review-later': (ui, status) => {
-    const all = status === null ? [] : openReviewLater(status)
+  decide: (ui, status) => {
+    const all = status === null ? [] : openToDecide(status)
+    const asked = status === null ? [] : onEndList(status)
 
-    return { title: `Review later (${all.length})`, entries: [...all].reverse().map(d => reviewLaterEntry(ui, d, 'all')) }
+    return {
+      title: `Decide before settling (${all.length})`,
+      entries: [...all]
+        .reverse()
+        .map(d => decisionEntry(ui, d, 'all', asked.includes(d) ? COLOR.attention : COLOR.accent)),
+    }
+  },
+  'follow-up': (ui, status) => {
+    const all = status === null ? [] : openFollowUps(status)
+
+    return { title: `Follow-up after settling (${all.length})`, entries: [...all].reverse().map(d => decisionEntry(ui, d, 'all')) }
   },
 }

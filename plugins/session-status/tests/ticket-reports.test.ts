@@ -84,7 +84,7 @@ test('the Session section counts the landed tickets of all the tracker counted, 
   })
   for (const surface of SURFACES) {
     const session = (await sectionText($, surface, 'session')) ?? ''
-    expect(session).toContain('Items 1/13')
+    expect(session).toContain('Progress 1/13')
     expect(session).toContain('Building: #3')
     expect(session).not.toContain('#4')
     // The tracker's count stays in the Effort section: one closed before the run.
@@ -100,7 +100,7 @@ test('a ticket both closed and landed counts once in each section', async ($, on
   await settle(w.clock)
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 1/13')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 1/13')
     expect(await sectionText($, surface, 'effort')).toContain('Closed 1/13')
   }
 })
@@ -141,7 +141,7 @@ test('without gh the Session section still counts the reports, and no Effort sec
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: null })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Items 1/3')
+    expect(text).toContain('Progress 1/3')
     expect(text).toContain('Building: #3, #4')
     expect(await sectionText($, surface, 'effort')).toBeUndefined()
   }
@@ -189,13 +189,13 @@ test('a report naming another effort switches the session to it, and Session cou
     ],
   })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
   }
 
   // Back to the first effort: its reports count again.
   await ticket($, 'landed', 3, undefined, EFFORT)
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 2/2')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 2/2')
   }
 })
 
@@ -211,7 +211,7 @@ test('stopped takes a started ticket back and leaves a landed one landed', async
   expect(w.saved[SESSION_ID]).toMatchObject({ ticketReports: [{ number: 4, state: 'landed' }] })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Items 1/1')
+    expect(text).toContain('Progress 1/1')
     expect(text).not.toContain('Building')
   }
 })
@@ -223,7 +223,7 @@ test('stopped after rework puts the ticket back to landed', async ($, on) => {
   await w.clock.advance(60_000)
   await ticket($, 'started', 4)
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
   }
 
   expect((await ticket($, 'stopped', 4)).result).toContain('Ticket #4 Comment: Queue a comment is landed again')
@@ -231,7 +231,7 @@ test('stopped after rework puts the ticket back to landed', async ($, on) => {
   expect(w.saved[SESSION_ID]).toMatchObject({ ticketReports: [{ number: 4, state: 'landed', at: START }] })
   expect((w.saved[SESSION_ID] as { ticketReports: object[] }).ticketReports[0]).not.toHaveProperty('landedAt')
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 1/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 1/1')
   }
 })
 
@@ -262,7 +262,7 @@ test('a ticket without an issue number is reported by its title', async ($, on) 
   })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Items 1/2')
+    expect(text).toContain('Progress 1/2')
     expect(text).toContain('Building: Add the logout button')
   }
 })
@@ -303,7 +303,7 @@ test('the band shows the session and closed counts, never ticket names', async (
   await settle(w.clock)
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('0 blocked · 0 review · items 1/13 · closed 1/13 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/13 · closed 1/13 · 0 surprise')
   }
 })
 
@@ -344,7 +344,7 @@ test('/clear carries the Session progress over while the effort stays the same',
   })
   await ticket($, 'landed', 3, undefined, EFFORT)
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 2/2')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 2/2')
   }
 })
 
@@ -357,7 +357,7 @@ test('after /clear a report for a different effort starts the Session progress f
   await ticket($, 'started', 1, 'Search: Find a video', 'search-v1')
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Items 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
   }
 })
 

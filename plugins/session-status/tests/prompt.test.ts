@@ -62,7 +62,7 @@ test('the section gives a subagent the fallback: decisions and surprises go in i
   expect(text).toMatch(/orchestrator records them/i)
 })
 
-test('the section tells the agent to post one numbered end-of-work list and call post_end_list', async ($, on) => {
+test('the section tells the agent to post one numbered decide list and call post_decide_list', async ($, on) => {
   world(on)
   await start($)
 
@@ -71,7 +71,7 @@ test('the section tells the agent to post one numbered end-of-work list and call
   expect(text).toMatch(/end of (your|the) work/i)
   expect(text).toMatch(/one numbered list/i)
   expect(text).toMatch(/default and (its )?options/i)
-  expect(text).toContain('post_end_list')
+  expect(text).toContain('post_decide_list')
 })
 
 test('the section tells an orchestrator to report each ticket started and landed', async ($, on) => {

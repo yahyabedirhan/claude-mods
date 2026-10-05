@@ -4,7 +4,7 @@
 // marks only these.
 
 export const COLOR = {
-  /** What needs the person: blocked decisions, the end-of-work list, a blocked band. */
+  /** What needs the person: blocked decisions, blockers, the decisions asked before settling, a blocked band. */
   attention: 'warning',
   /** A session at work: the In progress state. The progress bars stay neutral. */
   done: 'success',

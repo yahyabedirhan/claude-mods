@@ -16,9 +16,11 @@ export type DoingNow = {
 
 /**
  * How a decision weighs on the work: `blocked` stops the agent until the
- * person answers; `review_later` goes on with its default meanwhile.
+ * person answers; `before_settling` goes on with its default, and the person
+ * decides before the session settles; `after_settling` goes on with its
+ * default and can wait until after the session settles, as a follow-up.
  */
-export type DecisionUrgency = 'blocked' | 'review_later'
+export type DecisionUrgency = 'blocked' | 'before_settling' | 'after_settling'
 
 /** A decision the agent recorded with the status tool. */
 export type Decision = {
@@ -171,7 +173,7 @@ export type PaneState = 'unopened' | 'open' | 'closed'
  * What the pane shows: every section (`main`), or one list in full after
  * the person pressed its "+N more".
  */
-export type PaneView = 'main' | 'surprises' | 'observations' | 'review-later'
+export type PaneView = 'main' | 'surprises' | 'observations' | 'decide' | 'follow-up'
 
 /** The effort's tickets, as `gh issue list` last counted them. */
 export type TicketCount = {
@@ -315,7 +317,7 @@ export type SessionStatus = {
   links: CreatedLink[]
   subagents: Subagents
   /**
-   * When the agent last posted the end-of-work list of open review-later
+   * When the agent last posted the decide list (the open decisions before settling, asked in the chat) of open before-settling
    * decisions; null before it posts one.
    */
   endListPostedAt: number | null

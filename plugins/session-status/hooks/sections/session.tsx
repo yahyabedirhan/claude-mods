@@ -43,7 +43,7 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
     lines.push(labelled(ui, 'Worktree', worktreeLabel(place.root), null))
   }
   if (progress !== null) {
-    lines.push(bar(ui, 'Items', progress.done, progress.total, columns))
+    lines.push(bar(ui, 'Progress', progress.done, progress.total, columns))
     lines.push(...openLines(ui, progress.open))
     if (progress.building.length > 0) {
       lines.push(building(ui, progress.building, repo === null ? null : number => issueUrl(repo, number)))
@@ -64,7 +64,7 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
   )
 }
 
-/** `Items 7/10 ██████████████░░░░░░`: the bar is neutral; colour marks only what needs the person. */
+/** `Progress 7/10 ██████████████░░░░░░`: the bar is neutral; colour marks only what needs the person. */
 function bar(ui: Ui, label: string, done: number, total: number, columns: number): RenderNode {
   const { Text } = ui
 
