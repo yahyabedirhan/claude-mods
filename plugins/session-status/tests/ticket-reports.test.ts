@@ -54,7 +54,7 @@ test('the status tool describes the ticket action and its fields', async ($, on)
   const tool = tools.get(STATUS_TOOL)
   expect(tool?.inputSchema).toMatchObject({
     properties: {
-      state: { enum: ['started', 'landed', 'stopped'] },
+      state: { enum: ['started', 'landed', 'stopped', 'added', 'done', 'dropped'] },
       number: { type: 'integer' },
       title: { type: 'string' },
       effort: { type: 'string' },
