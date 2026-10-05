@@ -228,19 +228,22 @@ export type Activity = 'working' | 'settling' | 'waiting' | 'settled'
 
 /**
  * A cron job the session scheduled with CronCreate: active until it fires
- * once (a one-shot job) or is cancelled with CronDelete.
+ * once (a one-shot job), expires 7 days after it was scheduled (a recurring
+ * job) or is cancelled with CronDelete.
  */
 export type CronJob = {
   /** CronCreate's id for it. */
   id: string
-  /** When it runs, as CronCreate put it: `every hour`, `at 01:53 on Oct 5`. */
+  /** When it runs, as short text: `every 5m`, `weekdays 09:00`, `Dec 25 03:07`, else the cron expression. */
   schedule: string
   /** The prompt it enqueues when it fires. */
   prompt: string
   recurring: boolean
-  state: 'active' | 'fired' | 'cancelled'
+  state: 'active' | 'fired' | 'expired' | 'cancelled'
   /** How many times it fired in this session. */
   fires: number
+  /** When CronCreate scheduled it, in `$.clock.now()` milliseconds; a job held from before 0.3.1 lacks it. */
+  createdAt?: number
   /** When it last changed, in `$.clock.now()` milliseconds. */
   at: number
 }

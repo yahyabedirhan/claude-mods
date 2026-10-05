@@ -1,4 +1,4 @@
-import { cronCounts } from '../crons'
+import { cronCounts, expireCrons } from '../crons'
 import { first } from '../lists'
 import type { Section } from './section'
 
@@ -6,18 +6,20 @@ import type { Section } from './section'
 const ACTIVE_SHOWN = 3
 
 /**
- * The cron jobs the session scheduled: `1 active · 1 fired · 1 cancelled`, a
- * zero part left out, then each active job's schedule and prompt, with its
- * fires when it has any. Drawn once a job is scheduled.
+ * The cron jobs the session scheduled: `1 active · 1 fired · 1 expired ·
+ * 1 cancelled`, a zero part left out, then each active job's schedule and
+ * prompt, with its fires when it has any. A recurring job past its 7 days
+ * counts as expired from the drawing's clock reading, before any event
+ * stores it so. Drawn once a job is scheduled.
  */
-export const cronsSection: Section = ({ ui, status }) => {
+export const cronsSection: Section = ({ ui, status, now }) => {
   const { Box, Text } = ui
-  const crons = status?.crons ?? []
+  const crons = expireCrons(status?.crons ?? [], now)
   if (crons.length === 0) {
     return null
   }
   const counts = cronCounts(crons)
-  const parts = (['active', 'fired', 'cancelled'] as const)
+  const parts = (['active', 'fired', 'expired', 'cancelled'] as const)
     .filter(state => counts[state] > 0)
     .map(state => `${counts[state]} ${state}`)
   const { shown, more } = first(

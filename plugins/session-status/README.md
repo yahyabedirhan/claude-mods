@@ -28,8 +28,8 @@ Places (2)       skills  3 files · 2 commands
 Surprises        the newest 2, then "+N more"
 Review later     the newest 3, then "+N more"
 Subagents        running · finished
-Cron jobs        1 active · 1 fired · 1 cancelled
-                 every hour · Check the build and report.
+Cron jobs        1 active · 1 fired · 1 expired · 1 cancelled
+                 weekdays 09:00 · Check the build and report.
 Answered (N) · Last update
 ```
 
@@ -66,10 +66,14 @@ Answered (N) · Last update
    that default.
 10. **Subagents**: running and finished.
 11. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
-    as active, fired or cancelled, then each active job's schedule and
-    prompt (the newest 3, then "+N more"). A job fires when a turn starts
-    with its prompt; a one-shot job is then done. `CronDelete` cancels a job,
-    and a one-shot job that `CronList` no longer lists has fired.
+    as active, fired, expired or cancelled, then each active job's schedule
+    and prompt (the newest 3, then "+N more"). The schedule is short text
+    (`every 5m`, `hourly`, `daily 09:00`, `weekdays 09:00`, `Mondays 08:00`,
+    `monthly on the 1st 09:00`, `Dec 25 03:07`), or the cron expression when
+    it has no short form. A job fires when a turn starts with its prompt; a
+    one-shot job is then done. A recurring job expires 7 days after
+    `CronCreate` scheduled it, as Claude Code expires it. `CronDelete` cancels
+    a job, and a one-shot job that `CronList` no longer lists has fired.
 12. **Answered**: how many decisions were resolved and surprises dismissed.
 13. **Last update**: its time and age.
 

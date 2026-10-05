@@ -7,6 +7,7 @@ import type { ToolCallInput, ToolCallResult } from 'claude-code'
 
 import type { SessionStatus } from '../types'
 import { findCreatedLinks, linksFound } from './links'
+import { formatCron } from './cron-schedule'
 import { cronCreated, cronDeleted, cronListed } from './crons'
 import { taskCreated, taskUpdated, todosWritten } from './tasks'
 
@@ -61,7 +62,7 @@ export function toolResultChange(
       }
       const job = {
         id,
-        schedule: text(result?.humanSchedule) ?? text(input.cron) ?? '',
+        schedule: scheduleText(text(input.cron), text(result?.humanSchedule)),
         prompt,
         recurring: result?.recurring === true,
       }
@@ -104,6 +105,15 @@ export function toolResultChange(
     default:
       return null
   }
+}
+
+/**
+ * A job's schedule as the pane shows it: the cron expression as short text;
+ * else CronCreate's `humanSchedule` (live, it is the expression itself); else
+ * the expression.
+ */
+function scheduleText(cron: string | undefined, human: string | undefined): string {
+  return (cron === undefined ? undefined : formatCron(cron)) ?? human ?? cron ?? ''
 }
 
 function todoItem(value: unknown): { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }[] {
