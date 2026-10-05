@@ -1,8 +1,15 @@
 // The cron jobs the session scheduled: what CronCreate made, CronDelete
-// cancelled and CronList still lists, and each fire, seen as a turn that
-// starts with the job's prompt. Nothing here calls `$`.
+// cancelled and CronList still lists, each fire, seen as a turn that starts
+// with the job's prompt, and each recurring job's expiry. Nothing here calls
+// `$`.
 
 import type { CronJob, SessionStatus } from '../types'
+
+/**
+ * How long a recurring job lives: CronCreate's `recurring` input says a
+ * recurring job fires "until deleted or auto-expired after 7 days".
+ */
+export const CRON_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
 /** A new job from CronCreate's result: active, never fired. */
 export function cronCreated(
@@ -14,12 +21,12 @@ export function cronCreated(
     return status
   }
 
-  return { ...status, crons: [...status.crons, { ...job, state: 'active', fires: 0, at }] }
+  return { ...status, crons: [...status.crons, { ...job, state: 'active', fires: 0, createdAt: at, at }] }
 }
 
 /** A job CronDelete removed: cancelled, unless it already ended. */
 export function cronDeleted(status: SessionStatus, id: string, at: number): SessionStatus {
-  return withJob(status, id, job => (job.state === 'active' ? { ...job, state: 'cancelled', at } : job))
+  return withJob(cronsExpired(status, at), id, job => (job.state === 'active' ? { ...job, state: 'cancelled', at } : job))
 }
 
 /**
@@ -27,26 +34,29 @@ export function cronDeleted(status: SessionStatus, id: string, at: number): Sess
  * longer lists has fired (it deletes itself once it has).
  */
 export function cronListed(status: SessionStatus, listed: readonly string[], at: number): SessionStatus {
-  const crons = status.crons.map(job =>
+  const current = cronsExpired(status, at)
+  const crons = current.crons.map(job =>
     job.state === 'active' && !job.recurring && !listed.includes(job.id)
       ? { ...job, state: 'fired' as const, fires: Math.max(job.fires, 1), at }
       : job,
   )
 
-  return crons.some((job, index) => job !== status.crons[index]) ? { ...status, crons } : status
+  return crons.some((job, index) => job !== current.crons[index]) ? { ...current, crons } : current
 }
 
 /**
  * A turn whose prompt is an active job's prompt is that job firing: a
- * one-shot job is then fired and done, a recurring one counts the fire.
+ * one-shot job is then fired and done, a recurring one counts the fire. An
+ * expired job no longer fires.
  */
 export function cronFired(status: SessionStatus, prompt: string, at: number): SessionStatus {
-  const job = status.crons.find(known => known.state === 'active' && known.prompt.trim() === prompt.trim())
+  const current = cronsExpired(status, at)
+  const job = current.crons.find(known => known.state === 'active' && known.prompt.trim() === prompt.trim())
   if (job === undefined) {
-    return status
+    return current
   }
 
-  return withJob(status, job.id, known => ({
+  return withJob(current, job.id, known => ({
     ...known,
     state: known.recurring ? 'active' : 'fired',
     fires: known.fires + 1,
@@ -54,14 +64,38 @@ export function cronFired(status: SessionStatus, prompt: string, at: number): Se
   }))
 }
 
-/** How many jobs are active, fired (done) and cancelled. */
+/**
+ * The jobs as they stand at `now`: an active recurring job scheduled 7 days
+ * or more before `now` is expired. The same array when none expired.
+ */
+export function expireCrons(crons: readonly CronJob[], now: number): readonly CronJob[] {
+  const next = crons.map(job => {
+    // A job held from before createdAt was kept counts from its last change.
+    const expiresAt = (job.createdAt ?? job.at) + CRON_EXPIRY_MS
+
+    return job.state === 'active' && job.recurring && now >= expiresAt
+      ? { ...job, state: 'expired' as const, at: expiresAt }
+      : job
+  })
+
+  return next.some((job, index) => job !== crons[index]) ? next : crons
+}
+
+/** How many jobs are active, fired (done), expired and cancelled. */
 export function cronCounts(crons: readonly CronJob[]): Record<CronJob['state'], number> {
-  const counts = { active: 0, fired: 0, cancelled: 0 }
+  const counts = { active: 0, fired: 0, expired: 0, cancelled: 0 }
   for (const job of crons) {
     counts[job.state] += 1
   }
 
   return counts
+}
+
+/** The status with its jobs expired as of `at`. */
+function cronsExpired(status: SessionStatus, at: number): SessionStatus {
+  const crons = expireCrons(status.crons, at)
+
+  return crons === status.crons ? status : { ...status, crons: [...crons] }
 }
 
 function withJob(status: SessionStatus, id: string, change: (job: CronJob) => CronJob): SessionStatus {
