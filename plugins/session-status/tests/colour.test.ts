@@ -9,7 +9,7 @@ import {
   callStatusTool,
   endTurn,
   mountPane,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   runCommand,
   start,
   startTurn,
@@ -27,7 +27,7 @@ async function styleOf($: Engine, surface: Surface, text: RegExp) {
   return { color, dimColor, bold }
 }
 
-test('blocked items take the warning colour, ids the accent, bars the success colour, labels dim', async ($, on) => {
+test('blocked items take the warning colour, ids the accent, labels dim, and bars no colour', async ($, on) => {
   const w = world(on, {
     cwd: '/home/dev/repo',
     branch: 'main',
@@ -37,7 +37,7 @@ test('blocked items take the warning colour, ids the accent, bars the success co
   await start($)
   await w.clock.advance(0)
   await callStatusTool($, blockedDecision())
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, { action: 'ticket', state: 'started', number: 3, title: 'Play', effort: 'e' })
   await callStatusTool($, { action: 'ticket', state: 'landed', number: 4, title: 'Queue' })
   for (let turn = 0; turn < 5; turn++) {
@@ -49,10 +49,11 @@ test('blocked items take the warning colour, ids the accent, bars the success co
     expect(await styleOf($, surface, /^Blocked on you \(1\)$/)).toMatchObject({ color: 'warning', bold: true })
     expect(await styleOf($, surface, /^D1$/)).toMatchObject({ color: 'warning' })
     expect(await styleOf($, surface, /^D2$/)).toMatchObject({ color: 'suggestion' })
-    expect(await styleOf($, surface, /^█+░+$/)).toMatchObject({ color: 'success' })
+    expect(await styleOf($, surface, /^Progress $/)).toMatchObject({ dimColor: true })
+    expect(await styleOf($, surface, /█+░+$/)).toMatchObject({ color: undefined, dimColor: undefined })
     expect(await styleOf($, surface, /^Branch\s+$/)).toMatchObject({ dimColor: true })
     expect(await styleOf($, surface, /^#3$/)).toMatchObject({ color: 'suggestion' })
-    expect(await styleOf($, surface, /^\[observer\] $/)).toMatchObject({ dimColor: true })
+    expect(await styleOf($, surface, /^Observations \(1\)$/)).toMatchObject({ dimColor: true, bold: true })
     expect(await styleOf($, surface, /^Session$/)).toMatchObject({ bold: true })
   }
 })

@@ -23,6 +23,7 @@ test('the status store saves the status to $.store with the session id as the ke
     effort: null,
     tickets: null,
     ticketReports: [],
+    sessionItems: [],
     place: null,
     places: [],
     crons: [],
@@ -73,7 +74,7 @@ test('a status keeps the newest 200 finished subagents, links and closed items o
   const decision = (n: number, isOpen: boolean): StatusItem => ({
     kind: 'decision',
     id: `D${n}`,
-    urgency: 'review_later',
+    urgency: 'before_settling',
     question: 'Which name?',
     options: ['a', 'b'],
     default: 'a',

@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
+import type { Blocker, Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
 import { cronFired } from './crons'
 import { meetsAutoOpenTrigger } from './auto-open'
@@ -18,16 +18,18 @@ import { INSTRUCTIONS } from './instructions'
 import { isCheckDue, observerRequest, parseFindings, recordCheck } from './observer'
 import type { Trigger } from './observer'
 import { AGE_TICK_MS, drawPane } from './pane'
-import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
+import { blockedPing, blockerPing, endListPing, pingId, withdrawPing } from './pings'
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { reportItem } from './session-items'
 import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
   closedText,
   endListText,
+  itemText,
   readStatusToolInput,
   recordedText,
   ticketText,
@@ -41,7 +43,7 @@ import {
   emptyStatus,
   keysToPrune,
   onEndList,
-  openReviewLater,
+  openToDecide,
   readCarry,
   recordItem,
   savedStatus,
@@ -71,6 +73,9 @@ const statusAtom = atom({ plugin: 'session-status', key: 'status' } as const, nu
  * pane, so a pane the person closed stays closed until they open it again.
  */
 const paneAtom = atom({ plugin: 'session-status', key: 'pane' } as const, 'unopened')
+
+/** What the pane shows: every section, or one list in full after its "+N more" was pressed. */
+const viewAtom = atom({ plugin: 'session-status', key: 'view' } as const, 'main')
 
 /** Moved by the age timer; the pane reads it only to draw again when it moves. */
 const tickAtom = atom({ plugin: 'session-status', key: 'tick' } as const, 0)
@@ -239,6 +244,7 @@ async function isPaneOpen($: EngineInterface): Promise<boolean> {
 async function togglePane($: EngineInterface): Promise<'opened' | 'closed'> {
   if ((await isPaneOpen($)) && !(await isPaneWaiting($))) {
     await update($, paneAtom, () => 'closed')
+    await update($, viewAtom, () => 'main')
     await $.ui.close({ id: PANE_ID })
 
     return 'closed'
@@ -418,7 +424,7 @@ export const register: Register = on => {
   })
 
   // The status tool: the model records a decision or a surprise, closes one,
-  // marks the end-of-work list posted, or reports a ticket's state. The
+  // marks the decide list posted, or reports a ticket's state. The
   // matcher spells STATUS_TOOL out, so `claude plugin validate` can read it.
   on('tool.call', { tool: 'mcp__session-status__status' }, async ($, e) => {
     const input = readStatusToolInput(e as unknown as Record<string, unknown>)
@@ -438,8 +444,8 @@ export const register: Register = on => {
 
         return 'error' in closed ? status : closed.status
       })
-      if (checked.item.kind === 'decision' && checked.item.urgency === 'blocked') {
-        // A decision carried over a /clear keeps the ping id its own session sent.
+      if (pings(checked.item)) {
+        // An item carried over a /clear keeps the ping id its own session sent.
         sendPing($, withdrawPing(checked.item.pingId ?? pingId(current.sessionId, checked.item.id)))
       }
 
@@ -448,7 +454,7 @@ export const register: Register = on => {
 
     if ('postEndList' in input) {
       const current = await currentStatus($)
-      if (openReviewLater(current).length === 0) {
+      if (openToDecide(current).length === 0) {
         return { result: endListText([]) }
       }
       const posted = await changeStatus($, status => ({ ...status, endListPostedAt: now }))
@@ -479,10 +485,25 @@ export const register: Register = on => {
       return { result: ticketText(request, outcome, sessionProgress(reported)) }
     }
 
+    if ('item' in input) {
+      const request = input.item
+      let outcome: ReturnType<typeof reportItem> | undefined
+      const reported = await changeStatus($, status => {
+        outcome = reportItem(status, request, now)
+
+        return 'error' in outcome ? status : outcome.status
+      })
+      if (outcome === undefined || 'error' in outcome) {
+        return { deny: outcome?.error ?? 'The item was not reported.' }
+      }
+
+      return { result: itemText(outcome.item, outcome.change, sessionProgress(reported)) }
+    }
+
     let recorded: StatusItem | undefined
     const after = await changeStatus($, status => {
       const { status: next, item } = recordItem(status, input.draft, now)
-      if (item.kind !== 'decision' || item.urgency !== 'blocked') {
+      if (!pings(item)) {
         recorded = item
 
         return next
@@ -496,6 +517,8 @@ export const register: Register = on => {
 
     if (recorded?.kind === 'decision' && recorded.urgency === 'blocked') {
       sendPing($, blockedPing(after.sessionId, recorded))
+    } else if (recorded?.kind === 'blocker') {
+      sendPing($, blockerPing(after.sessionId, recorded))
     }
 
     return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
@@ -610,6 +633,7 @@ export const register: Register = on => {
   on('ui.close', { id: 'session-status' }, async ($, e, next) => {
     if (e.origin.kind === 'person') {
       await update($, paneAtom, () => 'closed')
+      await update($, viewAtom, () => 'main')
     }
 
     return next(e)
@@ -633,8 +657,15 @@ export const register: Register = on => {
       status: withDefaults(await read($, statusAtom)),
       now: await $.clock.now(),
       columns: e.props.bodyColumns,
+      view: await read($, viewAtom),
+      show: view => update($, viewAtom, () => view),
     })
   })
+}
+
+/** Whether an item pings the person: a blocked decision or a blocker. */
+function pings(item: StatusItem): item is Decision | Blocker {
+  return item.kind === 'blocker' || (item.kind === 'decision' && item.urgency === 'blocked')
 }
 
 /**

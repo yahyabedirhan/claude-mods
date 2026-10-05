@@ -5,7 +5,7 @@ import {
   blockedDecision,
   callStatusTool,
   mountPane,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   runCommand,
   spawnSubagent,
   start,
@@ -93,8 +93,14 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
   await start($)
   await $.tool.call({ tool: 'Read', file_path: '/work/src/main.ts' })
   await callStatusTool($, surprise())
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
+  await callStatusTool($, decisionBeforeSettling({ urgency: 'after_settling' }))
   await callStatusTool($, blockedDecision())
+  await callStatusTool($, {
+    action: 'record_blocker',
+    failed: 'The tests do not start.',
+    needs: 'Start claude once.',
+  })
 
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
   await $.tool.call({ tool: 'Bash', command: 'gh pr create --fill' })
@@ -104,10 +110,12 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
     'state',
     'doing-now',
     'blocked',
+    'blockers',
     'session',
     'created',
+    'decide',
+    'follow-up',
     'surprises',
-    'review-later',
     'counters',
     'last-update',
   ]

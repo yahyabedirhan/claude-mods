@@ -5,7 +5,7 @@ import {
   blockedDecision,
   callStatusTool,
   mountPane,
-  reviewLaterDecision,
+  decisionBeforeSettling,
   start,
   surprise,
   world,
@@ -36,23 +36,23 @@ test('blocked on you shows every blocked decision with what unblocks it and the 
   }
 })
 
-test('review later shows the newest three decisions and "+N more"', async ($, on) => {
+test('decide before settling shows the newest five decisions and "+N more"', async ($, on) => {
   world(on)
   await start($)
-  for (let n = 1; n <= 5; n++) {
-    await callStatusTool($, reviewLaterDecision({ question: `Name ${n}?`, default: `name-${n}`, options: [`name-${n}`, 'other'] }))
+  for (let n = 1; n <= 7; n++) {
+    await callStatusTool($, decisionBeforeSettling({ question: `Name ${n}?`, default: `name-${n}`, options: [`name-${n}`, 'other'] }))
   }
 
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
-    const section = (await ui.find({ key: 'review-later' }))?.text ?? ''
-    expect(section).toContain('Review later (5)')
+    const section = (await ui.find({ key: 'decide' }))?.text ?? ''
+    expect(section).toContain('Decide before settling (7)')
     const shown = (await ui.findAll({ type: 'Box' }))
       .map(box => box.key)
-      .filter(key => key?.startsWith('review-later-D'))
-    expect(shown).toEqual(['review-later-D5', 'review-later-D4', 'review-later-D3'])
-    expect((await ui.find({ key: 'review-later-D5' }))?.text).toContain('Default: name-5')
-    expect((await ui.find({ key: 'review-later-more' }))?.text).toBe('+2 more')
+      .filter(key => key?.startsWith('decide-D'))
+    expect(shown).toEqual(['decide-D7', 'decide-D6', 'decide-D5', 'decide-D4', 'decide-D3'])
+    expect((await ui.find({ key: 'decide-D7' }))?.text).toContain('Default: name-7')
+    expect((await ui.find({ key: 'decide-more' }))?.text).toBe('+2 more')
     await ui.unmount()
   }
 })
@@ -82,28 +82,28 @@ test('surprises shows the newest two with what each changed, and "+N more"', asy
 test('a section within its limit shows no "+N more"', async ($, on) => {
   world(on)
   await start($)
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, surprise())
 
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
-    expect(await ui.find({ key: 'review-later-more' })).toBeUndefined()
+    expect(await ui.find({ key: 'decide-more' })).toBeUndefined()
     expect(await ui.find({ key: 'surprises-more' })).toBeUndefined()
     await ui.unmount()
   }
 })
 
-test('a blocked decision stays out of review later, and a review-later one out of blocked on you', async ($, on) => {
+test('a blocked decision stays out of decide before settling, and a before-settling one out of blocked on you', async ($, on) => {
   world(on)
   await start($)
   await callStatusTool($, blockedDecision())
-  await callStatusTool($, reviewLaterDecision())
+  await callStatusTool($, decisionBeforeSettling())
 
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     expect(await ui.find({ key: 'blocked-D1' })).toBeDefined()
-    expect(await ui.find({ key: 'review-later-D1' })).toBeUndefined()
-    expect(await ui.find({ key: 'review-later-D2' })).toBeDefined()
+    expect(await ui.find({ key: 'decide-D1' })).toBeUndefined()
+    expect(await ui.find({ key: 'decide-D2' })).toBeDefined()
     expect(await ui.find({ key: 'blocked-D2' })).toBeUndefined()
     await ui.unmount()
   }
@@ -116,7 +116,7 @@ test('the three sections stay out of the pane while they hold nothing', async ($
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     expect(await ui.find({ key: 'blocked' })).toBeUndefined()
-    expect(await ui.find({ key: 'review-later' })).toBeUndefined()
+    expect(await ui.find({ key: 'decide' })).toBeUndefined()
     expect(await ui.find({ key: 'surprises' })).toBeUndefined()
     await ui.unmount()
   }

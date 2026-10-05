@@ -1,42 +1,77 @@
-// Session progress as data: how far this session's own work is. During an
-// effort it counts the tickets the orchestrator reported (landed of all
-// reported); otherwise the task list. The tracker's count is the Effort
-// section's (see effort-progress.ts): the two never mix.
+// Session progress as data: how close the session is to settling. It counts
+// the session's items (see session-items.ts) and, during an effort, the
+// effort's tickets: done of all. The total grows as items are added. The
+// tracker's closed count is the Effort section's (see effort-progress.ts),
+// and the task list keeps a line of its own (see `taskProgress`).
 
-import type { SessionStatus, TicketReport } from '../types'
+import type { Progress, SessionItem, SessionStatus, TicketReport } from '../types'
+import { countedItems, openItems } from './session-items'
 import { effortReports, reportsIn } from './ticket-reports'
 
-/** The progress the Session section shows, and where it comes from. */
-export type SessionProgress =
-  | {
-      source: 'tickets'
-      /** Tickets reported landed. */
-      done: number
-      /** Tickets reported in this effort. */
-      total: number
-      /** The tickets the orchestrator builds now, oldest first. */
-      building: TicketReport[]
-    }
-  | { source: 'tasks'; done: number; total: number }
+/** The progress the Session section shows. */
+export type SessionProgress = {
+  /** Items done and tickets landed. */
+  done: number
+  /** Items not dropped, and the effort's tickets. */
+  total: number
+  /** The items still to do, oldest first. */
+  open: SessionItem[]
+  /** The tickets the orchestrator builds now, oldest first. */
+  building: TicketReport[]
+}
 
 /**
- * The session's progress: the current effort's reported tickets once the
- * orchestrator reported one; else the task list; null when neither has any.
+ * A ticket whose title starts with `QA:` is checked by the person, who
+ * closes it by hand: the orchestrator never lands it, so the session does
+ * not count it.
+ */
+const QA_TITLE = /^\s*qa:/i
+
+/** Whether a ticket title names a QA ticket. */
+export function isQaTitle(title: string): boolean {
+  return QA_TITLE.test(title)
+}
+
+/**
+ * The session's progress: its items, plus the current effort's tickets once
+ * the tracker counted them or the orchestrator reported one; null when the
+ * session has neither. The tickets' total is every ticket the tracker counted
+ * without the `QA:` ones, or the tickets reported when they are more; done
+ * is the tickets reported landed.
  */
 export function sessionProgress(status: SessionStatus | null): SessionProgress | null {
   if (status === null) {
     return null
   }
-  const reports = effortReports(status)
-  if (reports.length > 0) {
-    return {
-      source: 'tickets',
-      done: reportsIn(status, 'landed').length,
-      total: reports.length,
-      building: reportsIn(status, 'started'),
-    }
+  const items = countedItems(status)
+  const tickets = ticketProgress(status)
+  const total = items.length + tickets.total
+  if (total === 0) {
+    return null
   }
-  const tasks = status.progress
 
-  return tasks === null ? null : { source: 'tasks', done: tasks.done, total: tasks.total }
+  return {
+    done: items.filter(item => item.state === 'done').length + tickets.done,
+    total,
+    open: openItems(status),
+    building: reportsIn(status, 'started').filter(report => !isQaTitle(report.title)),
+  }
+}
+
+/** The task list's progress, shown on a line of its own; null before the first task. */
+export function taskProgress(status: SessionStatus | null): Progress | null {
+  return status?.progress ?? null
+}
+
+/** The current effort's tickets landed, of all its tickets, `QA:` ones left out. */
+function ticketProgress(status: SessionStatus): { done: number; total: number } {
+  const reports = effortReports(status).filter(report => !isQaTitle(report.title))
+  const count = status.tickets
+  const isCounted = count !== null && status.effort !== null && count.effort === status.effort.name
+  const tracked = isCounted ? (count.builds ?? count.total) : 0
+
+  return {
+    done: reports.filter(report => report.state === 'landed').length,
+    total: Math.max(reports.length, tracked),
+  }
 }

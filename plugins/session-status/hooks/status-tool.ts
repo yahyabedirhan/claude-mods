@@ -2,13 +2,16 @@
 // one call's input into what it asks for. Registering the tool and
 // answering its calls live in register.tsx, where `$` is.
 //
-// One tool with an `action` field: it records items, closes them, marks
-// the end-of-work list as posted and reports a ticket's state.
+// One tool with an `action` field: it records decisions and surprises,
+// closes them, marks the decide list as posted, and reports a ticket's
+// or a session item's state.
 
-import type { Decision, DecisionUrgency, StatusItem } from '../types'
+import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
 import { effortLabel } from './effort'
 import { joinFirst } from './lists'
+import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
+import { kindOfId } from './status'
 import type { ItemDraft } from './status'
 import { ticketName, ticketShortName } from './ticket-reports'
 import type { TicketOutcome, TicketRequest, TicketState } from './ticket-reports'
@@ -19,9 +22,10 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list', 'ticket'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
-const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
+const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
+const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
 
@@ -42,20 +46,31 @@ export const STATUS_TOOL_SPEC = {
     'Keeps the session status pane the user watches current. The pane is read-only: the user answers in the chat.',
     '`record_decision`: a choice the user must make. Give the question, two to four options,',
     'your default (the answer you recommend) and what unblocks it.',
-    'Choose a safe default and continue: use urgency `review_later`.',
+    'Choose a safe default and continue: use urgency `before_settling` when the user must decide before the session settles,',
+    'or `after_settling` when it can wait until after the session settles as a follow-up.',
     'Stop only when no safe default exists: use urgency `blocked`.',
     '`record_surprise`: something unexpected that changed the work or the plan.',
     'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
+    '`record_blocker`: you tried something, it failed, and you cannot finish it yourself:',
+    'a denied action, a check or test that cannot run, a tool that refuses to start.',
+    'Give what failed and what the user can do to unblock you (run a command, restart Claude Code, allow an action).',
+    'The user gets a ping. Call `resolve` with its id once it works.',
     CONCISE_RULE,
-    '`resolve` with `id`: the user answered that decision in the chat.',
+    '`resolve` with `id`: the user answered that decision in the chat, or that blocker works now.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
-    '`post_end_list`: call it when, at the end of your work, you post one numbered list',
-    'of the open review-later decisions, each with its default and options.',
+    '`post_decide_list`: call it when, at the end of your work, you post one numbered list',
+    'of the open before-settling decisions, each with its default and options.',
     "The result names the item's id (D1, S1, ...).",
     '`ticket`: only for the session that orchestrates an effort\'s tickets, never for a delegate.',
     'Give the ticket\'s issue `number`, its `title` and its `state`:',
     '`started` when you delegate the ticket, `landed` when its commit is on the effort branch',
     '(do not wait for the issue to close), `stopped` when a started ticket is no longer being built.',
+    '`item`: only for the main session, never for a subagent. It counts what this session must do before it settles.',
+    'State `added` with a `title`: one item for each request or sub-request from the user, for follow-up work you take on,',
+    'and for each step left before the session settles (for example the review, the PR, the user\'s approval, the merge, the settle).',
+    'The result names the item\'s id (I1, I2, ...). State `done` with `id`: the work is finished and verified.',
+    'State `dropped` with `id`: the item is no longer needed, or a later item replaced it.',
+    'Do not add an item for an effort ticket: the tickets count by themselves.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -64,17 +79,18 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record an item, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s state.',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, or report a ticket\'s or a session item\'s state.',
       },
       id: {
         type: 'string',
-        description: 'resolve: the decision id (D1, ...). dismiss: the surprise id (S1, ...).',
+        description:
+          'resolve: the decision id (D1, ...) or the blocker id (B1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
       },
       urgency: {
         type: 'string',
         enum: [...URGENCIES],
         description:
-          'record_decision: `blocked` when no safe default exists and the work stops; `review_later` when you continue with the default.',
+          'record_decision: `blocked` when no safe default exists and the work stops; `before_settling` when you continue with the default and the user decides before the session settles; `after_settling` when it can wait until after the session settles.',
       },
       question: { type: 'string', description: 'record_decision: the question for the user, in one short sentence.' },
       options: {
@@ -93,15 +109,20 @@ export const STATUS_TOOL_SPEC = {
         description: 'record_decision: the one thing the user must say or do to settle it, in one short sentence.',
       },
       occurred: { type: 'string', description: 'record_surprise: what occurred, in one short sentence.' },
+      failed: { type: 'string', description: 'record_blocker: what you tried that failed, in one short sentence.' },
+      needs: {
+        type: 'string',
+        description: 'record_blocker: what the user can do to unblock you, in one short sentence.',
+      },
       changed: {
         type: 'string',
         description: 'record_surprise: what it changed in the work or the plan, in one short sentence.',
       },
       state: {
         type: 'string',
-        enum: [...TICKET_STATES],
+        enum: [...TICKET_STATES, ...ITEM_STATES],
         description:
-          'ticket: `started` when you delegate it; `landed` when its commit is on the effort branch; `stopped` when a started ticket is no longer being built.',
+          'ticket: `started` when you delegate it; `landed` when its commit is on the effort branch; `stopped` when a started ticket is no longer being built. item: `added` for a new item; `done` when its work is finished and verified; `dropped` when it is no longer needed.',
       },
       number: {
         type: 'integer',
@@ -109,7 +130,8 @@ export const STATUS_TOOL_SPEC = {
       },
       title: {
         type: 'string',
-        description: "ticket: the ticket's title. Needed the first time you report the ticket.",
+        description:
+          "ticket: the ticket's title. Needed the first time you report the ticket. item: the item's title, in a few words, for `added`.",
       },
       effort: {
         type: 'string',
@@ -127,10 +149,12 @@ export type StatusToolRequest =
   | { draft: ItemDraft }
   /** Close an open item: resolve a decision or dismiss a surprise. */
   | { close: { kind: StatusItem['kind']; id: string } }
-  /** Mark the end-of-work list as posted. */
+  /** Mark the decide list as posted. */
   | { postEndList: true }
   /** Report a ticket's state. */
   | { ticket: TicketRequest }
+  /** Report a session item's state. */
+  | { item: ItemRequest }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -144,9 +168,10 @@ export function readStatusToolInput(
 
   switch (input.action) {
     case 'record_decision': {
-      const urgency = input.urgency
+      // `review_later` is the name before 0.4.0 of `before_settling`.
+      const urgency = input.urgency === 'review_later' ? 'before_settling' : input.urgency
       if (!URGENCIES.includes(urgency as DecisionUrgency)) {
-        return { error: 'A decision needs an urgency: `blocked` or `review_later`.' }
+        return { error: 'A decision needs an urgency: `blocked`, `before_settling` or `after_settling`.' }
       }
       const question = text(input.question)
       if (question === null) {
@@ -190,6 +215,18 @@ export function readStatusToolInput(
 
       return withAgent({ kind: 'surprise', occurred, changed })
     }
+    case 'record_blocker': {
+      const failed = text(input.failed)
+      if (failed === null) {
+        return { error: 'A blocker needs `failed`: what you tried that failed.' }
+      }
+      const needs = text(input.needs)
+      if (needs === null) {
+        return { error: 'A blocker needs `needs`: what the user can do to unblock you.' }
+      }
+
+      return withAgent({ kind: 'blocker', failed, needs })
+    }
     case 'resolve':
     case 'dismiss': {
       const id = text(input.id)
@@ -197,13 +234,17 @@ export function readStatusToolInput(
         return {
           error:
             input.action === 'resolve'
-              ? 'Resolve needs `id`: the decision id (D1, ...).'
+              ? 'Resolve needs `id`: the decision id (D1, ...) or the blocker id (B1, ...).'
               : 'Dismiss needs `id`: the surprise id (S1, ...).',
         }
       }
 
-      return { close: { kind: input.action === 'resolve' ? 'decision' : 'surprise', id } }
+      const kind = input.action === 'dismiss' ? 'surprise' : kindOfId(id) === 'blocker' ? 'blocker' : 'decision'
+
+      return { close: { kind, id } }
     }
+    case 'post_decide_list':
+    // The name before 0.4.0.
     case 'post_end_list':
       return { postEndList: true }
     case 'ticket': {
@@ -231,6 +272,26 @@ export function readStatusToolInput(
         },
       }
     }
+    case 'item': {
+      if (typeof input.agentId === 'string') {
+        return { error: 'Only the main session reports items. Put the work in your final report.' }
+      }
+      const state = input.state
+      if (!ITEM_STATES.includes(state as ItemState)) {
+        return { error: 'An item needs a state: `added`, `done` or `dropped`.' }
+      }
+      if (state === 'added') {
+        const title = text(input.title)
+
+        return title === null ? { error: 'A new item needs `title`: the work, in a few words.' } : { item: { state, title } }
+      }
+      const id = text(input.id)
+      if (id === null) {
+        return { error: `An item ${state as string} needs \`id\`: the item id (I1, ...).` }
+      }
+
+      return { item: { state: state as 'done' | 'dropped', id } }
+    }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }
@@ -246,24 +307,29 @@ export function recordedText(item: StatusItem): string {
   if (item.kind === 'surprise') {
     return `Recorded surprise ${item.id}.`
   }
+  if (item.kind === 'blocker') {
+    return `Recorded blocker ${item.id}. The user was pinged.`
+  }
 
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id} (blocked on the user).`
-    : `Recorded decision ${item.id} (review later). Default: ${item.default}.`
+    : item.urgency === 'after_settling'
+      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${item.default}.`
+      : `Recorded decision ${item.id} (decide before settling). Default: ${item.default}.`
 }
 
 /** What the model reads after it closed an item. */
 export function closedText(item: StatusItem): string {
-  return item.kind === 'decision'
-    ? `Resolved decision ${item.id}. It is in the answered history now.`
-    : `Dismissed surprise ${item.id}. It is in the answered history now.`
+  const done = item.kind === 'surprise' ? 'Dismissed' : 'Resolved'
+
+  return `${done} ${item.kind} ${item.id}. It is in the answered history now.`
 }
 
-/** What the model reads after `post_end_list`, given the decisions the list holds. */
+/** What the model reads after `post_decide_list`, given the decisions the list holds. */
 export function endListText(listed: readonly Decision[]): string {
   return listed.length === 0
-    ? 'No open review-later decisions. No end-of-work list was marked as posted.'
-    : `End-of-work list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
+    ? 'No open decisions before settling. No decide list was marked as posted.'
+    : `Decide list marked as posted with ${listed.map(d => d.id).join(', ')}. The pane highlights each until it is resolved.`
 }
 
 /** How many tickets in progress a reply names; the rest show as `+N more`. */
@@ -275,14 +341,35 @@ const BUILDING_NAMED = 4
  */
 export function ticketText(request: TicketRequest, outcome: TicketOutcome, progress: SessionProgress | null): string {
   const said = ticketSaid(request, outcome)
-  if (progress?.source !== 'tickets') {
+  if (progress === null) {
     return said
   }
   const building = progress.building.map(ticketShortName)
 
-  return `${said} Session: ${progress.done}/${progress.total} tickets landed${
+  return `${said} ${progressSaid(progress)}${
     building.length === 0 ? '' : `, building ${joinFirst(building, BUILDING_NAMED)}`
   }.`
+}
+
+/**
+ * What the model reads after an item report: what the call did to the item,
+ * then the Session progress the pane shows now.
+ */
+export function itemText(item: SessionItem, change: ItemChange, progress: SessionProgress | null): string {
+  const name = `${item.id} ${item.title}`
+  const said =
+    change === 'same'
+      ? `Item ${name} is ${item.state} already.`
+      : item.state === 'added'
+        ? `Added item ${name}.`
+        : `Item ${name} is ${item.state}.`
+
+  return progress === null ? said : `${said} ${progressSaid(progress)}.`
+}
+
+/** `Session: 7/10 done`: the progress the Session section shows. */
+function progressSaid(progress: SessionProgress): string {
+  return `Session: ${progress.done}/${progress.total} done`
 }
 
 /** One sentence on what a `ticket` call did to its ticket. */

@@ -16,9 +16,11 @@ export type DoingNow = {
 
 /**
  * How a decision weighs on the work: `blocked` stops the agent until the
- * person answers; `review_later` goes on with its default meanwhile.
+ * person answers; `before_settling` goes on with its default, and the person
+ * decides before the session settles; `after_settling` goes on with its
+ * default and can wait until after the session settles, as a follow-up.
  */
-export type DecisionUrgency = 'blocked' | 'review_later'
+export type DecisionUrgency = 'blocked' | 'before_settling' | 'after_settling'
 
 /** A decision the agent recorded with the status tool. */
 export type Decision = {
@@ -65,8 +67,31 @@ export type Surprise = {
   resolvedAt?: number
 }
 
-/** One item the agent recorded: a decision or a surprise. */
-export type StatusItem = Decision | Surprise
+/**
+ * Something the agent tried that failed and that it cannot finish alone:
+ * a denied action, a check that cannot run, a tool that refuses to start.
+ * The person can unblock it, so it pings them and stays until resolved.
+ */
+export type Blocker = {
+  kind: 'blocker'
+  /** Stable for the session: `B1`, `B2`, ... */
+  id: string
+  /** What the agent tried that failed. */
+  failed: string
+  /** What the person can do to unblock it. */
+  needs: string
+  /** When the agent recorded it, in `$.clock.now()` milliseconds. */
+  recordedAt: number
+  /** The subagent's id when a subagent recorded it; absent on the main loop. */
+  agentId?: string
+  /** When the agent marked it resolved; absent while it is open. */
+  resolvedAt?: number
+  /** The shipyard id of the ping sent for it; a `/clear` keeps it. */
+  pingId?: string
+}
+
+/** One item the agent recorded: a decision, a surprise or a blocker. */
+export type StatusItem = Decision | Surprise | Blocker
 /** One task of the session's task list, from the task tools and Task events. */
 export type Task = {
   /**
@@ -85,8 +110,8 @@ export type Task = {
 
 /**
  * How far the task list is: tasks done, the total and the task that runs
- * now. During an effort the Session section counts the reported tickets
- * instead, once the orchestrator reports one.
+ * now. The Session section shows it on a line of its own, apart from the
+ * session's items.
  */
 export type Progress = {
   done: number
@@ -144,6 +169,12 @@ export type Effort = {
  */
 export type PaneState = 'unopened' | 'open' | 'closed'
 
+/**
+ * What the pane shows: every section (`main`), or one list in full after
+ * the person pressed its "+N more".
+ */
+export type PaneView = 'main' | 'surprises' | 'observations' | 'decide' | 'follow-up'
+
 /** The effort's tickets, as `gh issue list` last counted them. */
 export type TicketCount = {
   /** The effort counted: a count for another effort is not shown. */
@@ -152,6 +183,11 @@ export type TicketCount = {
   done: number
   /** All tickets, open and closed; the spec issue is not one. */
   total: number
+  /**
+   * The tickets the orchestrator builds: all of them without the `QA:`
+   * tickets, which the person closes by hand. Absent on a count from before 0.4.0.
+   */
+  builds?: number
   /** When it was counted, in `$.clock.now()` milliseconds. */
   at: number
 }
@@ -179,6 +215,23 @@ export type TicketReport = {
    * it back to landed at this time. Absent on a ticket that never landed.
    */
   landedAt?: number
+}
+
+/**
+ * One piece of work the session is expected to do, reported by the main
+ * session with the status tool: a request or sub-request from the person,
+ * follow-up work the agent took on, or a step left before the session
+ * settles. `dropped` takes it out of the total.
+ */
+export type SessionItem = {
+  /** Stable for the session: `I1`, `I2`, ... */
+  id: string
+  title: string
+  state: 'added' | 'done' | 'dropped'
+  /** When it was added, in `$.clock.now()` milliseconds. */
+  addedAt: number
+  /** When it reached its state, in `$.clock.now()` milliseconds. */
+  at: number
 }
 
 /** A repository on GitHub. */
@@ -264,7 +317,7 @@ export type SessionStatus = {
   links: CreatedLink[]
   subagents: Subagents
   /**
-   * When the agent last posted the end-of-work list of open review-later
+   * When the agent last posted the decide list (the open decisions before settling, asked in the chat) of open before-settling
    * decisions; null before it posts one.
    */
   endListPostedAt: number | null
@@ -276,9 +329,15 @@ export type SessionStatus = {
   tickets: TicketCount | null
   /**
    * The tickets the orchestrator reported, in the order it first named them.
-   * The Session section counts the current effort's: landed of all reported.
+   * The Session section counts the current effort's landed tickets, of all
+   * its tickets the tracker counted or the orchestrator reported.
    */
   ticketReports: TicketReport[]
+  /**
+   * The session's items, in the order they were added. The Session section
+   * counts them with the current effort's tickets: done of all not dropped.
+   */
+  sessionItems: SessionItem[]
   /** Where the session works; null before git answers, and outside a repository. */
   place: SessionPlace | null
   /** The repositories the session changed, the first changed first; the Places section shows the others. */
@@ -302,6 +361,8 @@ declare module 'claude-code' {
       observerTurns: number
       /** Where the pane stands: auto-open opens only an `unopened` pane. */
       pane: PaneState
+      /** What the pane shows: every section, or one list in full. */
+      view: PaneView
     }
   }
 }

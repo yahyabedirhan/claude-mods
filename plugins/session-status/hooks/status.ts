@@ -3,7 +3,7 @@
 // register.tsx, because the engine follows `$` and the state library's
 // sources only within the hooks module's own file.
 
-import type { Decision, Effort, SessionStatus, StatusItem, TicketReport } from '../types'
+import type { Blocker, Decision, Effort, SessionItem, SessionStatus, StatusItem, TicketReport } from '../types'
 
 /** An item before it is recorded: `recordItem` adds its id and its time. */
 export type ItemDraft = StatusItem extends infer I
@@ -12,8 +12,23 @@ export type ItemDraft = StatusItem extends infer I
     : never
   : never
 
-/** Each kind's id prefix: decisions count `D1`, `D2`, ...; surprises `S1`, ... */
-const ID_PREFIX = { decision: 'D', surprise: 'S' } as const
+/** Each kind's id prefix: decisions count `D1`, `D2`, ...; surprises `S1`, ...; blockers `B1`, ... */
+const ID_PREFIX = { decision: 'D', surprise: 'S', blocker: 'B' } as const
+
+/** The kind an id names by its prefix (`B1` a blocker), or null for another prefix. */
+export function kindOfId(id: string): StatusItem['kind'] | null {
+  const prefix = id.trim().charAt(0).toUpperCase()
+  const found = (Object.keys(ID_PREFIX) as StatusItem['kind'][]).find(kind => ID_PREFIX[kind] === prefix)
+
+  return found ?? null
+}
+
+/** The action that closes each kind, and the word for it closed. */
+const CLOSING = {
+  decision: { action: 'resolve', closed: 'resolved' },
+  surprise: { action: 'dismiss', closed: 'dismissed' },
+  blocker: { action: 'resolve', closed: 'resolved' },
+} as const
 
 /**
  * The status with one more item, and that item: the draft given the next id
@@ -35,32 +50,46 @@ export function recordItem(
   return { status: { ...status, items: [...status.items, item] }, item }
 }
 
-/** Whether an item is open: not resolved (a decision) or dismissed (a surprise). */
+/** Whether an item is open: not resolved (a decision, a blocker) or dismissed (a surprise). */
 export function isOpen(item: StatusItem): boolean {
   return item.resolvedAt === undefined
 }
 
-/** The open review-later decisions, oldest first: what the end-of-work list holds. */
-export function openReviewLater(status: SessionStatus): Decision[] {
+/** The open decisions to make before the session settles, oldest first: what the decide list holds. */
+export function openToDecide(status: SessionStatus): Decision[] {
+  return openOfUrgency(status, 'before_settling')
+}
+
+/** The open decisions that can wait until after the session settles, oldest first. */
+export function openFollowUps(status: SessionStatus): Decision[] {
+  return openOfUrgency(status, 'after_settling')
+}
+
+function openOfUrgency(status: SessionStatus, urgency: Decision['urgency']): Decision[] {
   return status.items.filter(
-    (item): item is Decision => item.kind === 'decision' && item.urgency === 'review_later' && isOpen(item),
+    (item): item is Decision => item.kind === 'decision' && item.urgency === urgency && isOpen(item),
   )
 }
 
 /**
- * The decisions the last end-of-work list named that are still open, oldest
+ * The decisions the last decide list named that are still open, oldest
  * first; none before the agent posts a list. A decision recorded after the
  * list was posted is not on it.
  */
 export function onEndList(status: SessionStatus): Decision[] {
   const postedAt = status.endListPostedAt
 
-  return postedAt === null ? [] : openReviewLater(status).filter(item => item.recordedAt <= postedAt)
+  return postedAt === null ? [] : openToDecide(status).filter(item => item.recordedAt <= postedAt)
+}
+
+/** The open blockers, oldest first. */
+export function openBlockers(status: SessionStatus): Blocker[] {
+  return status.items.filter((item): item is Blocker => item.kind === 'blocker' && isOpen(item))
 }
 
 /**
- * The status with one open item closed at `now`: a decision resolved or a
- * surprise dismissed. Says what is wrong when no open item of that kind has
+ * The status with one open item closed at `now`: a decision or a blocker
+ * resolved, or a surprise dismissed. Says what is wrong when no open item of that kind has
  * the id, for the model to fix and call again.
  */
 export function closeItem(
@@ -68,21 +97,19 @@ export function closeItem(
   target: { kind: StatusItem['kind']; id: string },
   now: number,
 ): { status: SessionStatus; item: StatusItem } | { error: string } {
-  const item = status.items.find(candidate => candidate.id === target.id)
-  const noun = target.kind === 'decision' ? 'decision' : 'surprise'
-  const closed = target.kind === 'decision' ? 'resolved' : 'dismissed'
+  const id = target.id.trim().toUpperCase()
+  const item = status.items.find(candidate => candidate.id === id)
+  const noun = target.kind
   if (item === undefined || item.kind !== target.kind) {
     const hint =
       item === undefined
-        ? 'Use an id from the status (D1, S1, ...).'
-        : target.kind === 'decision'
-          ? `${target.id} is a surprise: use \`dismiss\`.`
-          : `${target.id} is a decision: use \`resolve\`.`
+        ? 'Use an id from the status (D1, S1, B1, ...).'
+        : `${id} is a ${item.kind}: use \`${CLOSING[item.kind].action}\`.`
 
-    return { error: `No ${noun} ${target.id}. ${hint}` }
+    return { error: `No ${noun} ${id}. ${hint}` }
   }
   if (!isOpen(item)) {
-    return { error: `${noun === 'decision' ? 'Decision' : 'Surprise'} ${item.id} is already ${closed}.` }
+    return { error: `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${item.id} is already ${CLOSING[item.kind].closed}.` }
   }
   const done = { ...item, resolvedAt: now }
 
@@ -108,6 +135,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     effort: null,
     tickets: null,
     ticketReports: [],
+    sessionItems: [],
     place: null,
     places: [],
     crons: [],
@@ -121,21 +149,42 @@ export function emptyStatus(sessionId: string): SessionStatus {
  * empty status; null stays null.
  */
 export function withDefaults(status: SessionStatus | null): SessionStatus | null {
-  return status === null ? null : { ...emptyStatus(status.sessionId), ...status }
+  if (status === null) {
+    return null
+  }
+  const full = { ...emptyStatus(status.sessionId), ...status }
+
+  return full.items.some(isOldUrgency) ? { ...full, items: full.items.map(withNewUrgency) } : full
+}
+
+/** A decision saved before 0.4.0 with `review_later`: it reads as `before_settling`. */
+function isOldUrgency(item: StatusItem): boolean {
+  return item.kind === 'decision' && (item.urgency as string) === 'review_later'
+}
+
+function withNewUrgency<T extends StatusItem>(item: T): T {
+  return isOldUrgency(item) ? { ...item, urgency: 'before_settling' } : item
 }
 
 /**
  * The status a session starts with after `/clear`: empty for the new
  * session, but with the previous session's open decisions, ids unchanged, so
- * the person can still answer them by the same id, and its effort and
- * reported tickets: the new session still runs in the same effort. The
- * Session section counts the carried tickets while the effort stays; a
- * report for another effort starts it from zero (see `effortReports`).
+ * the person can still answer them by the same id, its open blockers, its effort and reported
+ * tickets, and its session items: the new session goes on with the same
+ * work. The Session section counts the carried tickets while the effort
+ * stays; a report for another effort starts them from zero (see
+ * `effortReports`). The items carry whole, so their count goes on.
  */
 export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
-  const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
+  const open = previous.items.filter(item => item.kind !== 'surprise' && isOpen(item))
 
-  return { ...emptyStatus(sessionId), items: open, effort: previous.effort, ticketReports: previous.ticketReports }
+  return {
+    ...emptyStatus(sessionId),
+    items: open,
+    effort: previous.effort,
+    ticketReports: previous.ticketReports,
+    sessionItems: previous.sessionItems,
+  }
 }
 
 /**
@@ -151,27 +200,29 @@ export const CARRY_KEY = 'clear-carry'
  */
 export const CARRY_WINDOW_MS = 60_000
 
-/** What a `/clear` carries over: the ended session's open decisions, effort and reported tickets. */
+/** What a `/clear` carries over: the ended session's open decisions, effort, reported tickets and items. */
 export type ClearCarry = {
   kind: 'clear-carry'
   /** The session that ended. */
   from: string
   /** When it ended, in `$.clock.now()` milliseconds. */
   at: number
-  items: Decision[]
+  /** The open decisions and blockers. */
+  items: (Decision | Blocker)[]
   effort: Effort | null
   ticketReports: TicketReport[]
+  sessionItems: SessionItem[]
 }
 
 /** What a session that ends by `/clear` carries over; null when it has nothing to carry. */
 export function clearCarry(status: SessionStatus, now: number): ClearCarry | null {
-  const { items, effort, ticketReports } = carryOver(status, status.sessionId)
-  const decisions = items.filter((item): item is Decision => item.kind === 'decision')
-  if (decisions.length === 0 && effort === null && ticketReports.length === 0) {
+  const { items, effort, ticketReports, sessionItems } = carryOver(status, status.sessionId)
+  const decisions = items.filter((item): item is Decision | Blocker => item.kind !== 'surprise')
+  if (decisions.length === 0 && effort === null && ticketReports.length === 0 && sessionItems.length === 0) {
     return null
   }
 
-  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports }
+  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports, sessionItems }
 }
 
 /**
@@ -194,15 +245,17 @@ export function readCarry(value: unknown, sessionId: string, now: number): Clear
 
   return {
     ...(carry as ClearCarry),
+    items: (carry.items ?? []).map(withNewUrgency),
     effort: carry.effort ?? null,
     ticketReports: Array.isArray(carry.ticketReports) ? carry.ticketReports : [],
+    sessionItems: Array.isArray(carry.sessionItems) ? carry.sessionItems : [],
   }
 }
 
 /**
  * The status with a carry's decisions added before its own items, each id
- * once, and the carry's effort and reported tickets while the status has
- * none. A status that the carried state already reached (`$.state` kept
+ * once, and the carry's effort, reported tickets and session items while the
+ * status has none. A status that the carried state already reached (`$.state` kept
  * across the `/clear`) stays as it is.
  */
 export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStatus {
@@ -211,11 +264,13 @@ export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStat
   const effort = status.effort ?? carry.effort
   const own = status.ticketReports
   const ticketReports = own.length > 0 ? own : carry.ticketReports
-  if (carried.length === 0 && effort === status.effort && ticketReports === own) {
+  const ownItems = status.sessionItems
+  const sessionItems = ownItems.length > 0 ? ownItems : carry.sessionItems
+  if (carried.length === 0 && effort === status.effort && ticketReports === own && sessionItems === ownItems) {
     return status
   }
 
-  return { ...status, items: [...carried, ...status.items], effort, ticketReports }
+  return { ...status, items: [...carried, ...status.items], effort, ticketReports, sessionItems }
 }
 
 /**
@@ -260,9 +315,9 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, reported tickets, the files of each place, and closed items of
- * each kind. The oldest drop first (reported tickets and files by their last
- * change); an open item never drops.
+ * ids, links, reported tickets, session items, the files of each place, and
+ * closed items of each kind. The oldest drop first (reported tickets and
+ * files by their last change); an open item never drops.
  */
 export const CAP = 200
 
@@ -274,7 +329,7 @@ export const PLACES_KEPT = 50
  * kind always stays, so the next id of that kind never repeats an old one.
  */
 export function withinBounds(status: SessionStatus): SessionStatus {
-  const closedCount = { decision: 0, surprise: 0 }
+  const closedCount = { decision: 0, surprise: 0, blocker: 0 }
   for (const item of status.items) {
     if (!isOpen(item)) {
       closedCount[item.kind] += 1
@@ -284,15 +339,21 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     status.subagents.finished.length > CAP ||
     status.links.length > CAP ||
     status.ticketReports.length > CAP ||
+    status.sessionItems.length > CAP ||
     status.crons.length > CAP ||
     status.places.length > PLACES_KEPT ||
     status.places.some(place => place.files.length > CAP) ||
     closedCount.decision > CAP ||
-    closedCount.surprise > CAP
+    closedCount.surprise > CAP ||
+    closedCount.blocker > CAP
   if (!isOver) {
     return status
   }
-  const toDrop = { decision: closedCount.decision - CAP, surprise: closedCount.surprise - CAP }
+  const toDrop = {
+    decision: closedCount.decision - CAP,
+    surprise: closedCount.surprise - CAP,
+    blocker: closedCount.blocker - CAP,
+  }
   const items = status.items.filter(item => {
     if (isOpen(item) || toDrop[item.kind] <= 0) {
       return true
@@ -307,6 +368,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     items,
     links: status.links.slice(-CAP),
     ticketReports: newestByChange(status.ticketReports, CAP),
+    sessionItems: newestSessionItems(status.sessionItems),
     crons: newestByChange(status.crons, CAP),
     places: newestByChange(status.places, PLACES_KEPT).map(place => ({ ...place, files: place.files.slice(-CAP) })),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
@@ -331,6 +393,22 @@ function newestByChange<T extends { at: number }>(reports: readonly T[], limit: 
   )
 
   return reports.filter((_report, index) => kept.has(index))
+}
+
+/**
+ * The session items within CAP: open items always stay; done and dropped
+ * ones drop by their last change. The newest item always stays, so the
+ * next id never repeats an old one.
+ */
+function newestSessionItems(items: readonly SessionItem[]): SessionItem[] {
+  if (items.length <= CAP) {
+    return [...items]
+  }
+  const last = items[items.length - 1]
+  const closed = items.filter(item => item.state !== 'added' && item !== last)
+  const kept = new Set(newestByChange(closed, Math.max(CAP - (items.length - closed.length), 0)))
+
+  return items.filter(item => item.state === 'added' || item === last || kept.has(item))
 }
 
 /** How many sessions' statuses `$.store` keeps; older ones are dropped. */

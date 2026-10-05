@@ -4,7 +4,7 @@
 
 import type { ElementTable, RenderNode } from 'claude-code'
 
-import type { SessionStatus } from '../../types'
+import type { PaneView, SessionStatus } from '../../types'
 
 /** The elements every surface draws: a section uses no others. */
 export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Link' | 'Button' | 'Code' | 'Markdown'>
@@ -17,6 +17,10 @@ export type SectionContext = {
   now: number
   /** Cells across the pane's body. */
   columns: number
+  /** What the pane shows: every section, or one list in full. */
+  view: PaneView
+  /** Switches the pane to another view: a "+N more" opens its list, Back returns to `main`. */
+  show: (view: PaneView) => void
 }
 
 /**

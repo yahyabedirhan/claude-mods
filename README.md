@@ -34,13 +34,17 @@ Long sessions, especially ones that run many subagents, hide their state in the 
 
 ```text
 opens        by itself on the first subagent, task list, effort or recorded item; /session-status toggles it
-pane         state · now · blocked on you · session · effort · created · places · surprises · review later · subagents · cron jobs · last update
-narrow       a one-line band above the prompt: 2 blocked · 1 review · landed 4/9 · closed 1/13 · 1 surprise
+pane         state · now · blocked on you · you should know · session · effort · created · places · decide before settling · follow-up after settling · surprises · observations · subagents · cron jobs · last update
+progress     every session counts its items done of all, effort tickets included; the total grows as you ask for more
+narrow       a one-line band above the prompt: 2 blocked · 1 decide · 1 follow-up · progress 4/9 · closed 1/13 · 1 surprise
 you answer   in the chat; the agent resolves the decision, and the pane moves it to the history
-end of work  one numbered list of open review-later decisions, highlighted in the pane
-pings        a shipyard ping for each blocked decision, withdrawn once it's answered (optional)
-observer     a Haiku check every few turns for loops, time sinks and off-flow steps, shown as [observer] surprises
-survives     resume, /clear (open decisions carry over) and /compact
+decide       decisions to answer before settling; the ones asked in the chat are highlighted
+follow-up    decisions that can wait until after settling
+more         a pressable "+N more" turns the pane into the whole list, with a Back button
+stuck        what the agent tried that failed and you can unblock, under "You should know", with a ping
+pings        a shipyard ping for each blocked decision or blocker, withdrawn once it's resolved (optional)
+observer     a Haiku check every few turns for loops and time sinks the agent misses, kept apart as Observations
+survives     resume, /clear (open decisions, blockers and items carry over) and /compact
 ```
 
 An example pane, midway through an effort, with one decision waiting on you:
@@ -57,19 +61,21 @@ D3 · Should the band show cron jobs too?
 Session
 Branch   cron-readable
 Worktree claude-mods-8ec7ac/1
-Landed 3/5 ████████████░░░░░░░░
+Progress 4/9 █████████░░░░░░░░░░░
+○ I2 Open the pull request
+○ I3 Settle
 Building: #21, #22
 Effort  session-status-v2
 Closed 2/7 ██████░░░░░░░░░░░░░░
 Created
 PR claude-mods#18 · issue claude-mods#19 · issue skills#163
 skills  2 files · 1 command
+Decide before settling (1)
+D2 · Which word marks a week-old recurring job?
+  Default: expired
 Surprises (1)
 S1 · CronCreate's result has no readable schedule.
   Changed: The mod formats the cron expression itself.
-Review later (1)
-D2 · Which word marks a week-old recurring job?
-  Default: expired
 Subagents
 1 running · 2 finished
 Cron jobs

@@ -60,8 +60,8 @@ test('the count is closed tickets of all tickets, without the spec issue', () =>
     ghIssue(4, 'Effort progress from tickets'),
     ghIssue(5, 'SPEC: an older spec', 'CLOSED'),
   ]
-  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3 })
-  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0 })
+  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3, builds: 3 })
+  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0, builds: 0 })
   expect(parseTicketList('not json')).toBeNull()
   expect(parseTicketList('{"number":1}')).toBeNull()
 })
@@ -98,6 +98,17 @@ test('without a count for the effort, a read is due again after thirty seconds',
   const last = { effort: 'e', at: 1000 }
   expect(isTicketReadDue(status, last, { tool: 'Read' }, 1000 + TICKET_RETRY_MS - 1)).toBe(false)
   expect(isTicketReadDue(status, last, { tool: 'Read' }, 1000 + TICKET_RETRY_MS)).toBe(true)
+})
+
+test('the effort count keeps the QA tickets; the tickets to build leave them out', () => {
+  const issues = [
+    ghIssue(1, 'Spec: the session status', 'OPEN'),
+    ghIssue(2, 'The pane', 'CLOSED'),
+    ghIssue(3, 'The band'),
+    ghIssue(4, 'QA: Check the pane by hand'),
+    ghIssue(5, 'qa: check the band'),
+  ]
+  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 1, total: 4, builds: 2 })
 })
 
 test('the effort count shows only for the effort it was counted for, and only with tickets', () => {

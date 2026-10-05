@@ -477,11 +477,11 @@ export function blockedDecision(fields: Record<string, unknown> = {}) {
   }
 }
 
-/** A review-later decision's input, with the given fields changed. */
-export function reviewLaterDecision(fields: Record<string, unknown> = {}) {
+/** A before-settling decision's input, with the given fields changed. */
+export function decisionBeforeSettling(fields: Record<string, unknown> = {}) {
   return {
     action: 'record_decision',
-    urgency: 'review_later',
+    urgency: 'before_settling',
     question: 'Which name does the flag get?',
     options: ['--fast', '--quick'],
     default: '--fast',
