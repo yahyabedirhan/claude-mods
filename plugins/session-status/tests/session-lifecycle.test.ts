@@ -137,6 +137,7 @@ test('/clear starts a new status that keeps only the open decisions', async ($, 
     ticketReports: [],
     place: null,
     places: [],
+    crons: [],
     activity: null,
     updatedAt: START,
   })

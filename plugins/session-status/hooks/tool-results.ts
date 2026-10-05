@@ -1,11 +1,13 @@
 // What a finished tool call changes in the status: the task tools' results
-// change the task list, and `gh pr create` / `gh issue create` add links.
+// change the task list, the Cron tools the cron jobs, and `gh pr create` /
+// `gh issue create` add links.
 // A subagent's calls count as the main loop's do.
 
 import type { ToolCallInput, ToolCallResult } from 'claude-code'
 
 import type { SessionStatus } from '../types'
 import { findCreatedLinks, linksFound } from './links'
+import { cronCreated, cronDeleted, cronListed } from './crons'
 import { taskCreated, taskUpdated, todosWritten } from './tasks'
 
 type Fields = Record<string, unknown>
@@ -50,6 +52,34 @@ export function toolResultChange(
           { id, status: next, subject: text(input.subject), activeForm: text(input.activeForm) },
           at,
         )
+    }
+    case 'CronCreate': {
+      const id = text(result?.id)
+      const prompt = text(input.prompt)
+      if (id === undefined || prompt === undefined) {
+        return null
+      }
+      const job = {
+        id,
+        schedule: text(result?.humanSchedule) ?? text(input.cron) ?? '',
+        prompt,
+        recurring: result?.recurring === true,
+      }
+
+      return status => cronCreated(status, job, at)
+    }
+    case 'CronDelete': {
+      const id = text(result?.id) ?? text(input.id)
+
+      return id === undefined ? null : status => cronDeleted(status, id, at)
+    }
+    case 'CronList': {
+      if (!Array.isArray(result?.jobs)) {
+        return null
+      }
+      const listed = result.jobs.flatMap(job => text(asFields(job)?.id) ?? [])
+
+      return status => cronListed(status, listed, at)
     }
     case 'TodoWrite': {
       const todos = Array.isArray(result?.newTodos) ? result.newTodos : input.todos

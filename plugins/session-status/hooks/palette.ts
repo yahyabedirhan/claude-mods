@@ -10,4 +10,6 @@ export const COLOR = {
   done: 'success',
   /** What names a thing: item ids and the tickets being built. */
   accent: 'suggestion',
+  /** A session wrapping up: the Settling state. */
+  closing: 'planMode',
 } as const

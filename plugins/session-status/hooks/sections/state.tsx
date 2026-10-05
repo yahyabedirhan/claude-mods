@@ -3,18 +3,19 @@ import type { Headline } from '../activity'
 import { COLOR } from '../palette'
 import type { Section } from './section'
 
-/** The colour each state draws in; Settled is dim. */
+/** The colour each state draws in, a different one for each; Settled is dim. */
 const STATE_COLOR: Record<Headline, string | null> = {
   blocked: COLOR.attention,
   working: COLOR.done,
+  settling: COLOR.closing,
   waiting: COLOR.accent,
   settled: null,
 }
 
 /**
  * The session's state in one word, at the top of the pane: `● Blocked`,
- * `● In progress`, `● Waiting for reply` or `● Settled`. Drawn once the
- * session has a state.
+ * `● In progress`, `● Settling`, `● Waiting for reply` or `● Settled`.
+ * Drawn once the session has a state.
  */
 export const stateSection: Section = ({ ui, status }) => {
   const { Box, Text } = ui

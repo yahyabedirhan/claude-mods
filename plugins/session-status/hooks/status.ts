@@ -110,6 +110,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     ticketReports: [],
     place: null,
     places: [],
+    crons: [],
     activity: null,
     updatedAt: null,
   }
@@ -283,6 +284,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     status.subagents.finished.length > CAP ||
     status.links.length > CAP ||
     status.ticketReports.length > CAP ||
+    status.crons.length > CAP ||
     status.places.length > PLACES_KEPT ||
     status.places.some(place => place.files.length > CAP) ||
     closedCount.decision > CAP ||
@@ -305,6 +307,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     items,
     links: status.links.slice(-CAP),
     ticketReports: newestByChange(status.ticketReports, CAP),
+    crons: newestByChange(status.crons, CAP),
     places: newestByChange(status.places, PLACES_KEPT).map(place => ({ ...place, files: place.files.slice(-CAP) })),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
   }

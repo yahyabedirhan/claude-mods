@@ -13,7 +13,7 @@ claude plugin install session-status@claude-mods
 Sections, top to bottom. An empty section is not drawn.
 
 ```text
-● In progress    the session's state: Blocked, In progress, Waiting for reply or Settled
+● In progress    the session's state: Blocked, In progress, Settling, Waiting for reply or Settled
 Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
 Session          Branch    pane-width
@@ -28,15 +28,20 @@ Places (2)       skills  3 files · 2 commands
 Surprises        the newest 2, then "+N more"
 Review later     the newest 3, then "+N more"
 Subagents        running · finished
+Cron jobs        1 active · 1 fired · 1 cancelled
+                 every hour · Check the build and report.
 Answered (N) · Last update
 ```
 
 1. **State**: one word for the whole session, by priority.
    - **Blocked** while a blocked decision is open.
    - **In progress** while a turn or a subagent runs.
+   - **Settling** while a turn that runs `settle-session` or `settle-effort`
+     runs.
    - **Waiting for reply** once the turn ended.
    - **Settled** once a turn that ran `settle-session` or `settle-effort`
-     ended; the next turn clears it.
+     ended, as a Skill call or as the slash command you typed; the next turn
+     clears it.
 2. **Now**: the current task, or the last tool call (its description, file
    name or programs).
 3. **Blocked on you**: decisions that stop the work until you answer.
@@ -60,8 +65,13 @@ Answered (N) · Last update
 9. **Review later**: decisions the agent made with a safe default, each with
    that default.
 10. **Subagents**: running and finished.
-11. **Answered**: how many decisions were resolved and surprises dismissed.
-12. **Last update**: its time and age.
+11. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
+    as active, fired or cancelled, then each active job's schedule and
+    prompt (the newest 3, then "+N more"). A job fires when a turn starts
+    with its prompt; a one-shot job is then done. `CronDelete` cancels a job,
+    and a one-shot job that `CronList` no longer lists has fired.
+12. **Answered**: how many decisions were resolved and surprises dismissed.
+13. **Last update**: its time and age.
 
 Links go to GitHub when the repository's `origin` remote is there: the effort
 links its issues list (`label:effort:<name>`), the branch its tree, each

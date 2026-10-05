@@ -226,6 +226,25 @@ export type Place = {
  */
 export type Activity = 'working' | 'settling' | 'waiting' | 'settled'
 
+/**
+ * A cron job the session scheduled with CronCreate: active until it fires
+ * once (a one-shot job) or is cancelled with CronDelete.
+ */
+export type CronJob = {
+  /** CronCreate's id for it. */
+  id: string
+  /** When it runs, as CronCreate put it: `every hour`, `at 01:53 on Oct 5`. */
+  schedule: string
+  /** The prompt it enqueues when it fires. */
+  prompt: string
+  recurring: boolean
+  state: 'active' | 'fired' | 'cancelled'
+  /** How many times it fired in this session. */
+  fires: number
+  /** When it last changed, in `$.clock.now()` milliseconds. */
+  at: number
+}
+
 export type SessionStatus = {
   /** The shape's version, raised when a saved status no longer reads as this one. */
   version: 1
@@ -261,6 +280,8 @@ export type SessionStatus = {
   place: SessionPlace | null
   /** The repositories the session changed, the first changed first; the Places section shows the others. */
   places: Place[]
+  /** The cron jobs the session scheduled, oldest first. */
+  crons: CronJob[]
   /** What the session does: null before its first turn. */
   activity: Activity | null
   /** When the status last changed, in `$.clock.now()` milliseconds. */
