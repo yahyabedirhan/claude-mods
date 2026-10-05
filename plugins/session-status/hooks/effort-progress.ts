@@ -6,6 +6,7 @@
 // count in the status.
 
 import type { SessionStatus, TicketCount } from '../types'
+import { isQaTitle } from './session-progress'
 
 /** The least time between two ticket reads that no ticket change asked for. */
 export const TICKET_REFRESH_MS = 2 * 60_000
@@ -46,10 +47,13 @@ export function ticketListArgv(effort: string): string[] {
 }
 
 /**
- * The tickets closed and the total from `gh issue list --json` output; null
- * when the output is not such a list, so the last good count holds.
+ * The tickets closed, the total and the tickets to build from `gh issue list
+ * --json` output; null when the output is not such a list, so the last good
+ * count holds. The total keeps the `QA:` tickets: the effort is not finished
+ * until they close. The tickets to build leave them out: the orchestrator
+ * never lands one, so the session's count would stop short of them.
  */
-export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'total'> | null {
+export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'total' | 'builds'> | null {
   let issues: unknown
   try {
     issues = JSON.parse(stdout)
@@ -65,7 +69,9 @@ export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'tot
   )
   const closed = tickets.filter(issue => typeof issue.state === 'string' && issue.state.toUpperCase() === 'CLOSED')
 
-  return { done: closed.length, total: tickets.length }
+  const qa = tickets.filter(issue => typeof issue.title === 'string' && isQaTitle(issue.title))
+
+  return { done: closed.length, total: tickets.length, builds: tickets.length - qa.length }
 }
 
 /** Whether a tool call likely changed the effort's tickets. */

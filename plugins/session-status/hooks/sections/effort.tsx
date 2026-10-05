@@ -1,5 +1,4 @@
 import { effortProgress } from '../effort-progress'
-import { COLOR } from '../palette'
 import { effortUrl } from '../place'
 import { barCells, progressBar } from './bar'
 import type { Section } from './section'
@@ -28,8 +27,7 @@ export const effortSection: Section = ({ ui, status, columns }) => {
       {progress === null ? null : (
         <Text>
           <Text dimColor>Closed </Text>
-          {`${progress.closed}/${progress.total} `}
-          <Text color={COLOR.done}>{progressBar(progress.closed, progress.total, barCells(columns))}</Text>
+          {`${progress.closed}/${progress.total} ${progressBar(progress.closed, progress.total, barCells(columns))}`}
         </Text>
       )}
     </Box>

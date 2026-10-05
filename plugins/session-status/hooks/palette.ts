@@ -6,7 +6,7 @@
 export const COLOR = {
   /** What needs the person: blocked decisions, the end-of-work list, a blocked band. */
   attention: 'warning',
-  /** Work done: the progress bars. */
+  /** A session at work: the In progress state. The progress bars stay neutral. */
   done: 'success',
   /** What names a thing: item ids and the tickets being built. */
   accent: 'suggestion',

@@ -27,7 +27,7 @@ async function styleOf($: Engine, surface: Surface, text: RegExp) {
   return { color, dimColor, bold }
 }
 
-test('blocked items take the warning colour, ids the accent, bars the success colour, labels dim', async ($, on) => {
+test('blocked items take the warning colour, ids the accent, labels dim, and bars no colour', async ($, on) => {
   const w = world(on, {
     cwd: '/home/dev/repo',
     branch: 'main',
@@ -49,7 +49,8 @@ test('blocked items take the warning colour, ids the accent, bars the success co
     expect(await styleOf($, surface, /^Blocked on you \(1\)$/)).toMatchObject({ color: 'warning', bold: true })
     expect(await styleOf($, surface, /^D1$/)).toMatchObject({ color: 'warning' })
     expect(await styleOf($, surface, /^D2$/)).toMatchObject({ color: 'suggestion' })
-    expect(await styleOf($, surface, /^█+░+$/)).toMatchObject({ color: 'success' })
+    expect(await styleOf($, surface, /^Items $/)).toMatchObject({ dimColor: true })
+    expect(await styleOf($, surface, /█+░+$/)).toMatchObject({ color: undefined, dimColor: undefined })
     expect(await styleOf($, surface, /^Branch\s+$/)).toMatchObject({ dimColor: true })
     expect(await styleOf($, surface, /^#3$/)).toMatchObject({ color: 'suggestion' })
     expect(await styleOf($, surface, /^\[observer\] $/)).toMatchObject({ dimColor: true })

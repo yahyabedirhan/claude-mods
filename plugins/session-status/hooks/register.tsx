@@ -22,12 +22,14 @@ import { blockedPing, endListPing, pingId, withdrawPing } from './pings'
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { reportItem } from './session-items'
 import { sessionProgress } from './session-progress'
 import {
   STATUS_TOOL,
   STATUS_TOOL_SPEC,
   closedText,
   endListText,
+  itemText,
   readStatusToolInput,
   recordedText,
   ticketText,
@@ -477,6 +479,21 @@ export const register: Register = on => {
       await countTicketsIfDue($, e)
 
       return { result: ticketText(request, outcome, sessionProgress(reported)) }
+    }
+
+    if ('item' in input) {
+      const request = input.item
+      let outcome: ReturnType<typeof reportItem> | undefined
+      const reported = await changeStatus($, status => {
+        outcome = reportItem(status, request, now)
+
+        return 'error' in outcome ? status : outcome.status
+      })
+      if (outcome === undefined || 'error' in outcome) {
+        return { deny: outcome?.error ?? 'The item was not reported.' }
+      }
+
+      return { result: itemText(outcome.item, outcome.change, sessionProgress(reported)) }
     }
 
     let recorded: StatusItem | undefined

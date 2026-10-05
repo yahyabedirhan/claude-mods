@@ -22,6 +22,13 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
 - Collect review-later decisions while you work. Do not ask about them in the middle of the work.
 - At the end of your work, if review-later decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_end_list\`.
+- Report the work this session must do before it settles with action \`item\`. The pane counts the items done of all.
+  - Call it with state \`added\` and a short \`title\` for each request or sub-request from the user. Do this when the user asks, before you start the work.
+  - Also add an item for follow-up work that you take on, and for each step left before the session settles: for example the review, the pull request, the user's approval, the merge and the settle.
+  - Call it with state \`done\` and the item's \`id\` (I1, ...) when its work is finished and verified.
+  - Call it with state \`dropped\` and the item's \`id\` when the item is no longer needed, or a later item replaced it.
+  - Do not add an item for an effort ticket. The tickets count by themselves.
+  - Only the main session reports items. A subagent does not.
 - When you orchestrate an effort's tickets, report each ticket with action \`ticket\`. Give the ticket's issue \`number\` and its \`title\`. On your first ticket call, also give \`effort\`: the name in the effort's \`effort:<name>\` issue label.
   - Call it with state \`started\` when you delegate the ticket.
   - Call it with state \`landed\` when the ticket's commit is on the effort branch. Do not wait for the issue to close: a ticket that waits for QA or for the merge has landed.

@@ -18,8 +18,10 @@ Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
 Session          Branch    pane-width
                  Worktree  claude-mods-8ec7ac/1
-                 Landed 4/9 ████████░░░░          Tasks 2/5 outside an effort
+                 Items 7/19 ███████░░░░░          the session's items and effort tickets
+                 ○ I8 Open the pull request       the open items, the first 4
                  Building: #3, #5
+                 Tasks 2/5 ████████░░░░░          while a task list exists
 Effort           video-review-v1                  during an effort
                  Closed 1/13 █░░░░░░░░░░░         once the tracker counted it
 Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
@@ -49,13 +51,16 @@ Answered (N) · Last update
    - **Branch** and **Worktree** (the two folders above the repository
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
      The full path stays in the status.
-   - **Landed** during an effort: the tickets the orchestrator reported
-     landed, of all it reported in this session. **Tasks** outside an
-     effort: the task list's tasks done.
+   - **Items**: how close the session is to settling, as done of all (see
+     [Session progress](#session-progress)). The total grows as the session
+     takes on more work.
+   - The open items, each with its id: the first 4, then "+N more".
    - **Building**: the tickets the orchestrator builds now.
+   - **Tasks**: the task list's tasks done, on a line of its own. It never
+     mixes into Items.
 5. **Effort**, during an effort: its name, then the tracker's count once it
-   has one: closed tickets of all the effort's issues. It never mixes in the
-   orchestrator's reports.
+   has one: closed tickets of all the effort's issues, `QA:` tickets
+   included. It never mixes in the orchestrator's reports.
 6. **Created**: the pull requests and issues the session made, in every
    repository, newest 5 first, then "+N more".
 7. **Places**: the other repositories the session changed (see
@@ -85,21 +90,23 @@ Colour carries meaning, from Claude Code's theme, so it reads in light and
 dark themes: headings are bold and labels dim; the state line takes the
 warning colour when blocked, the success colour in progress, the accent
 colour waiting for a reply, and is dim when settled; blocked decisions and
-the end-of-work list take the warning colour, the bars the success colour,
-and item ids and the tickets being built the accent colour.
+the end-of-work list take the warning colour, and decision, surprise and
+session item ids and the tickets being built the accent colour. The progress
+bars stay neutral.
 
 When the terminal is too narrow for the pane, a one-line band above the
 prompt shows the counts instead:
-`<n> blocked · <n> review · landed 4/9 · closed 1/13 · <n> surprise`. Outside
-an effort the session figure is the tasks' `<done>/<total> done`, and the
-effort figure is left out.
+`<n> blocked · <n> review · items 7/19 · tasks 2/5 · closed 1/13 · <n> surprise`.
+`tasks` shows while a task list exists, and `closed` during an effort.
+Without items or effort tickets the session figure is the tasks'
+`<done>/<total> done`.
 
 ## Opening it
 
 - `/session-status` opens or closes the pane.
 - The pane opens by itself, once per session, when a subagent starts, a task
-  list is made, an effort is found, a ticket is reported, or a decision or
-  surprise is recorded.
+  list is made, an effort is found, a ticket or a session item is reported,
+  or a decision or surprise is recorded.
   A pane you closed stays closed until you open it again.
 
 ## The status tool
@@ -115,6 +122,7 @@ prompt section that tells the agent how to use it. Actions:
 | `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. |
 | `post_end_list` | Marks the end-of-work list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
+| `item` | Reports a session item: `state` `added` with a `title` (the reply names its id, `I1`, ...), or `done` or `dropped` with its `id`. |
 
 **Short items.** The prompt section, the tool's description and the
 observer's instructions ask for the same style: each field one short, clear
@@ -126,14 +134,43 @@ works. At the end, it posts one numbered list of the open ones in the chat
 and calls `post_end_list`. The pane highlights each listed decision until it
 is resolved.
 
+## Session progress
+
+Every session shows how close it is to settling: `Items 7/19`, done of all.
+The total is the session's items plus, during an effort, the effort's
+tickets.
+
+**Items.** The main session reports each piece of work it must do before it
+settles with the `item` action. The total grows as the session goes on.
+
+| State | When the agent reports it | What Items does |
+| --- | --- | --- |
+| `added` | You ask for something: one item for each request or sub-request. Also follow-up work the agent takes on, and each step left before the session settles (review, pull request, your approval, merge, settle). | Counts one more item and lists it as open. |
+| `done` | The item's work is finished and verified. | Counts it as done. |
+| `dropped` | The item is no longer needed, or a later item replaced it. | Takes it out of the total, even after it was done. |
+
+- An item is never reopened: rework is a new item. A dropped item stays
+  dropped.
+- Only the main session reports items; a subagent's `item` call is refused.
+- The task list (`TaskCreate`, `TodoWrite`) keeps its own **Tasks** line and
+  never mixes into Items.
+
+**Effort tickets.** During an effort, Items also counts the effort's
+tickets: every ticket the tracker counted, or the tickets reported when they
+are more. A ticket counts as done once the orchestrator reports it landed.
+`Spec:` and `QA:` issues are left out: you close a QA ticket by hand, so the
+orchestrator never lands one. The agent adds no item for a ticket.
+
 ## Effort progress
 
 During an effort the pane shows two counts that never mix:
 
-- **Session** (`Landed 4/9`): what the orchestrator reported in this session.
-- **Effort** (`Closed 1/13`): what the tracker says. An issue often closes
+- **Session** (`Items 7/19`): the session's items and the tickets the
+  orchestrator reported landed, of every ticket of the effort.
+- **Effort** (`Closed 1/14`): what the tracker says. An issue often closes
   long after its ticket is built: when the pull request merges, after QA,
-  or never in a run that shares its issues.
+  or never in a run that shares its issues. It counts the `QA:` tickets: the
+  effort is not finished until they close.
 
 The orchestrator reports each ticket with the `ticket` action:
 
@@ -143,8 +180,8 @@ The orchestrator reports each ticket with the `ticket` action:
 | `landed` | The ticket's commit is on the effort branch. | Counts the ticket as landed. |
 | `stopped` | A started ticket is no longer being built. | Removes the ticket. A ticket started again after it landed (rework) goes back to landed. |
 
-- **Landed** is the tickets reported landed, of all the tickets reported for
-  the current effort. Both can grow.
+- **Session** counts the tickets reported landed, of all the effort's
+  tickets without `QA:` ones.
 - **Closed** is the closed issues with the label `effort:<name>`, of all of
   them, without the `Spec:` issue.
 - **The effort's name** comes from the `effort` field of a `ticket` call,
@@ -182,9 +219,9 @@ out of the line.
 - **Resume** restores the session's saved status. A session with no saved
   status starts empty.
 - **`/clear`** starts a new status and carries the open decisions (same ids),
-  the effort and the reported tickets over to it. Session progress goes on
-  while the effort stays the same; a report for a different effort starts it
-  from zero.
+  the effort, the reported tickets and the session items over to it. The
+  item count goes on, and so do the tickets while the effort stays the same;
+  a report for a different effort starts the tickets from zero.
 - **`/compact`** keeps the status as it is.
 
 ## Optional tools

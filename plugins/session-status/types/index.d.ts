@@ -85,8 +85,8 @@ export type Task = {
 
 /**
  * How far the task list is: tasks done, the total and the task that runs
- * now. During an effort the Session section counts the reported tickets
- * instead, once the orchestrator reports one.
+ * now. The Session section shows it on a line of its own, apart from the
+ * session's items.
  */
 export type Progress = {
   done: number
@@ -152,6 +152,11 @@ export type TicketCount = {
   done: number
   /** All tickets, open and closed; the spec issue is not one. */
   total: number
+  /**
+   * The tickets the orchestrator builds: all of them without the `QA:`
+   * tickets, which the person closes by hand. Absent on a count from before 0.4.0.
+   */
+  builds?: number
   /** When it was counted, in `$.clock.now()` milliseconds. */
   at: number
 }
@@ -179,6 +184,23 @@ export type TicketReport = {
    * it back to landed at this time. Absent on a ticket that never landed.
    */
   landedAt?: number
+}
+
+/**
+ * One piece of work the session is expected to do, reported by the main
+ * session with the status tool: a request or sub-request from the person,
+ * follow-up work the agent took on, or a step left before the session
+ * settles. `dropped` takes it out of the total.
+ */
+export type SessionItem = {
+  /** Stable for the session: `I1`, `I2`, ... */
+  id: string
+  title: string
+  state: 'added' | 'done' | 'dropped'
+  /** When it was added, in `$.clock.now()` milliseconds. */
+  addedAt: number
+  /** When it reached its state, in `$.clock.now()` milliseconds. */
+  at: number
 }
 
 /** A repository on GitHub. */
@@ -276,9 +298,15 @@ export type SessionStatus = {
   tickets: TicketCount | null
   /**
    * The tickets the orchestrator reported, in the order it first named them.
-   * The Session section counts the current effort's: landed of all reported.
+   * The Session section counts the current effort's landed tickets, of all
+   * its tickets the tracker counted or the orchestrator reported.
    */
   ticketReports: TicketReport[]
+  /**
+   * The session's items, in the order they were added. The Session section
+   * counts them with the current effort's tickets: done of all not dropped.
+   */
+  sessionItems: SessionItem[]
   /** Where the session works; null before git answers, and outside a repository. */
   place: SessionPlace | null
   /** The repositories the session changed, the first changed first; the Places section shows the others. */

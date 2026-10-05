@@ -2,12 +2,14 @@
 // one call's input into what it asks for. Registering the tool and
 // answering its calls live in register.tsx, where `$` is.
 //
-// One tool with an `action` field: it records items, closes them, marks
-// the end-of-work list as posted and reports a ticket's state.
+// One tool with an `action` field: it records decisions and surprises,
+// closes them, marks the end-of-work list as posted, and reports a ticket's
+// or a session item's state.
 
-import type { Decision, DecisionUrgency, StatusItem } from '../types'
+import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
 import { effortLabel } from './effort'
 import { joinFirst } from './lists'
+import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
 import type { ItemDraft } from './status'
 import { ticketName, ticketShortName } from './ticket-reports'
@@ -19,8 +21,9 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list', 'ticket'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list', 'ticket', 'item'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
+const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 4
@@ -56,6 +59,12 @@ export const STATUS_TOOL_SPEC = {
     'Give the ticket\'s issue `number`, its `title` and its `state`:',
     '`started` when you delegate the ticket, `landed` when its commit is on the effort branch',
     '(do not wait for the issue to close), `stopped` when a started ticket is no longer being built.',
+    '`item`: only for the main session, never for a subagent. It counts what this session must do before it settles.',
+    'State `added` with a `title`: one item for each request or sub-request from the user, for follow-up work you take on,',
+    'and for each step left before the session settles (for example the review, the PR, the user\'s approval, the merge, the settle).',
+    'The result names the item\'s id (I1, I2, ...). State `done` with `id`: the work is finished and verified.',
+    'State `dropped` with `id`: the item is no longer needed, or a later item replaced it.',
+    'Do not add an item for an effort ticket: the tickets count by themselves.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -64,11 +73,12 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record an item, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s state.',
+          'What to do: record a decision or a surprise, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s or a session item\'s state.',
       },
       id: {
         type: 'string',
-        description: 'resolve: the decision id (D1, ...). dismiss: the surprise id (S1, ...).',
+        description:
+          'resolve: the decision id (D1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
       },
       urgency: {
         type: 'string',
@@ -99,9 +109,9 @@ export const STATUS_TOOL_SPEC = {
       },
       state: {
         type: 'string',
-        enum: [...TICKET_STATES],
+        enum: [...TICKET_STATES, ...ITEM_STATES],
         description:
-          'ticket: `started` when you delegate it; `landed` when its commit is on the effort branch; `stopped` when a started ticket is no longer being built.',
+          'ticket: `started` when you delegate it; `landed` when its commit is on the effort branch; `stopped` when a started ticket is no longer being built. item: `added` for a new item; `done` when its work is finished and verified; `dropped` when it is no longer needed.',
       },
       number: {
         type: 'integer',
@@ -109,7 +119,8 @@ export const STATUS_TOOL_SPEC = {
       },
       title: {
         type: 'string',
-        description: "ticket: the ticket's title. Needed the first time you report the ticket.",
+        description:
+          "ticket: the ticket's title. Needed the first time you report the ticket. item: the item's title, in a few words, for `added`.",
       },
       effort: {
         type: 'string',
@@ -131,6 +142,8 @@ export type StatusToolRequest =
   | { postEndList: true }
   /** Report a ticket's state. */
   | { ticket: TicketRequest }
+  /** Report a session item's state. */
+  | { item: ItemRequest }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -231,6 +244,26 @@ export function readStatusToolInput(
         },
       }
     }
+    case 'item': {
+      if (typeof input.agentId === 'string') {
+        return { error: 'Only the main session reports items. Put the work in your final report.' }
+      }
+      const state = input.state
+      if (!ITEM_STATES.includes(state as ItemState)) {
+        return { error: 'An item needs a state: `added`, `done` or `dropped`.' }
+      }
+      if (state === 'added') {
+        const title = text(input.title)
+
+        return title === null ? { error: 'A new item needs `title`: the work, in a few words.' } : { item: { state, title } }
+      }
+      const id = text(input.id)
+      if (id === null) {
+        return { error: `An item ${state as string} needs \`id\`: the item id (I1, ...).` }
+      }
+
+      return { item: { state: state as 'done' | 'dropped', id } }
+    }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }
@@ -275,14 +308,35 @@ const BUILDING_NAMED = 4
  */
 export function ticketText(request: TicketRequest, outcome: TicketOutcome, progress: SessionProgress | null): string {
   const said = ticketSaid(request, outcome)
-  if (progress?.source !== 'tickets') {
+  if (progress === null) {
     return said
   }
   const building = progress.building.map(ticketShortName)
 
-  return `${said} Session: ${progress.done}/${progress.total} tickets landed${
+  return `${said} ${progressSaid(progress)}${
     building.length === 0 ? '' : `, building ${joinFirst(building, BUILDING_NAMED)}`
   }.`
+}
+
+/**
+ * What the model reads after an item report: what the call did to the item,
+ * then the Session progress the pane shows now.
+ */
+export function itemText(item: SessionItem, change: ItemChange, progress: SessionProgress | null): string {
+  const name = `${item.id} ${item.title}`
+  const said =
+    change === 'same'
+      ? `Item ${name} is ${item.state} already.`
+      : item.state === 'added'
+        ? `Added item ${name}.`
+        : `Item ${name} is ${item.state}.`
+
+  return progress === null ? said : `${said} ${progressSaid(progress)}.`
+}
+
+/** `Session: 7/10 done`: the progress the Session section shows. */
+function progressSaid(progress: SessionProgress): string {
+  return `Session: ${progress.done}/${progress.total} done`
 }
 
 /** One sentence on what a `ticket` call did to its ticket. */

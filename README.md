@@ -35,12 +35,13 @@ Long sessions, especially ones that run many subagents, hide their state in the 
 ```text
 opens        by itself on the first subagent, task list, effort or recorded item; /session-status toggles it
 pane         state · now · blocked on you · session · effort · created · places · surprises · review later · subagents · cron jobs · last update
-narrow       a one-line band above the prompt: 2 blocked · 1 review · landed 4/9 · closed 1/13 · 1 surprise
+progress     every session counts its items done of all, effort tickets included; the total grows as you ask for more
+narrow       a one-line band above the prompt: 2 blocked · 1 review · items 4/9 · closed 1/13 · 1 surprise
 you answer   in the chat; the agent resolves the decision, and the pane moves it to the history
 end of work  one numbered list of open review-later decisions, highlighted in the pane
 pings        a shipyard ping for each blocked decision, withdrawn once it's answered (optional)
 observer     a Haiku check every few turns for loops, time sinks and off-flow steps, shown as [observer] surprises
-survives     resume, /clear (open decisions carry over) and /compact
+survives     resume, /clear (open decisions and items carry over) and /compact
 ```
 
 An example pane, midway through an effort, with one decision waiting on you:
@@ -57,7 +58,9 @@ D3 · Should the band show cron jobs too?
 Session
 Branch   cron-readable
 Worktree claude-mods-8ec7ac/1
-Landed 3/5 ████████████░░░░░░░░
+Items 4/9 █████████░░░░░░░░░░░
+○ I2 Open the pull request
+○ I3 Settle
 Building: #21, #22
 Effort  session-status-v2
 Closed 2/7 ██████░░░░░░░░░░░░░░

@@ -3,7 +3,7 @@
 // register.tsx, because the engine follows `$` and the state library's
 // sources only within the hooks module's own file.
 
-import type { Decision, Effort, SessionStatus, StatusItem, TicketReport } from '../types'
+import type { Decision, Effort, SessionItem, SessionStatus, StatusItem, TicketReport } from '../types'
 
 /** An item before it is recorded: `recordItem` adds its id and its time. */
 export type ItemDraft = StatusItem extends infer I
@@ -108,6 +108,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     effort: null,
     tickets: null,
     ticketReports: [],
+    sessionItems: [],
     place: null,
     places: [],
     crons: [],
@@ -127,15 +128,22 @@ export function withDefaults(status: SessionStatus | null): SessionStatus | null
 /**
  * The status a session starts with after `/clear`: empty for the new
  * session, but with the previous session's open decisions, ids unchanged, so
- * the person can still answer them by the same id, and its effort and
- * reported tickets: the new session still runs in the same effort. The
- * Session section counts the carried tickets while the effort stays; a
- * report for another effort starts it from zero (see `effortReports`).
+ * the person can still answer them by the same id, its effort and reported
+ * tickets, and its session items: the new session goes on with the same
+ * work. The Session section counts the carried tickets while the effort
+ * stays; a report for another effort starts them from zero (see
+ * `effortReports`). The items carry whole, so their count goes on.
  */
 export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
   const open = previous.items.filter(item => item.kind === 'decision' && isOpen(item))
 
-  return { ...emptyStatus(sessionId), items: open, effort: previous.effort, ticketReports: previous.ticketReports }
+  return {
+    ...emptyStatus(sessionId),
+    items: open,
+    effort: previous.effort,
+    ticketReports: previous.ticketReports,
+    sessionItems: previous.sessionItems,
+  }
 }
 
 /**
@@ -151,7 +159,7 @@ export const CARRY_KEY = 'clear-carry'
  */
 export const CARRY_WINDOW_MS = 60_000
 
-/** What a `/clear` carries over: the ended session's open decisions, effort and reported tickets. */
+/** What a `/clear` carries over: the ended session's open decisions, effort, reported tickets and items. */
 export type ClearCarry = {
   kind: 'clear-carry'
   /** The session that ended. */
@@ -161,17 +169,18 @@ export type ClearCarry = {
   items: Decision[]
   effort: Effort | null
   ticketReports: TicketReport[]
+  sessionItems: SessionItem[]
 }
 
 /** What a session that ends by `/clear` carries over; null when it has nothing to carry. */
 export function clearCarry(status: SessionStatus, now: number): ClearCarry | null {
-  const { items, effort, ticketReports } = carryOver(status, status.sessionId)
+  const { items, effort, ticketReports, sessionItems } = carryOver(status, status.sessionId)
   const decisions = items.filter((item): item is Decision => item.kind === 'decision')
-  if (decisions.length === 0 && effort === null && ticketReports.length === 0) {
+  if (decisions.length === 0 && effort === null && ticketReports.length === 0 && sessionItems.length === 0) {
     return null
   }
 
-  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports }
+  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports, sessionItems }
 }
 
 /**
@@ -196,13 +205,14 @@ export function readCarry(value: unknown, sessionId: string, now: number): Clear
     ...(carry as ClearCarry),
     effort: carry.effort ?? null,
     ticketReports: Array.isArray(carry.ticketReports) ? carry.ticketReports : [],
+    sessionItems: Array.isArray(carry.sessionItems) ? carry.sessionItems : [],
   }
 }
 
 /**
  * The status with a carry's decisions added before its own items, each id
- * once, and the carry's effort and reported tickets while the status has
- * none. A status that the carried state already reached (`$.state` kept
+ * once, and the carry's effort, reported tickets and session items while the
+ * status has none. A status that the carried state already reached (`$.state` kept
  * across the `/clear`) stays as it is.
  */
 export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStatus {
@@ -211,11 +221,13 @@ export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStat
   const effort = status.effort ?? carry.effort
   const own = status.ticketReports
   const ticketReports = own.length > 0 ? own : carry.ticketReports
-  if (carried.length === 0 && effort === status.effort && ticketReports === own) {
+  const ownItems = status.sessionItems
+  const sessionItems = ownItems.length > 0 ? ownItems : carry.sessionItems
+  if (carried.length === 0 && effort === status.effort && ticketReports === own && sessionItems === ownItems) {
     return status
   }
 
-  return { ...status, items: [...carried, ...status.items], effort, ticketReports }
+  return { ...status, items: [...carried, ...status.items], effort, ticketReports, sessionItems }
 }
 
 /**
@@ -260,9 +272,9 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, reported tickets, the files of each place, and closed items of
- * each kind. The oldest drop first (reported tickets and files by their last
- * change); an open item never drops.
+ * ids, links, reported tickets, session items, the files of each place, and
+ * closed items of each kind. The oldest drop first (reported tickets and
+ * files by their last change); an open item never drops.
  */
 export const CAP = 200
 
@@ -284,6 +296,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     status.subagents.finished.length > CAP ||
     status.links.length > CAP ||
     status.ticketReports.length > CAP ||
+    status.sessionItems.length > CAP ||
     status.crons.length > CAP ||
     status.places.length > PLACES_KEPT ||
     status.places.some(place => place.files.length > CAP) ||
@@ -307,6 +320,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     items,
     links: status.links.slice(-CAP),
     ticketReports: newestByChange(status.ticketReports, CAP),
+    sessionItems: newestSessionItems(status.sessionItems),
     crons: newestByChange(status.crons, CAP),
     places: newestByChange(status.places, PLACES_KEPT).map(place => ({ ...place, files: place.files.slice(-CAP) })),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
@@ -331,6 +345,22 @@ function newestByChange<T extends { at: number }>(reports: readonly T[], limit: 
   )
 
   return reports.filter((_report, index) => kept.has(index))
+}
+
+/**
+ * The session items within CAP: open items always stay; done and dropped
+ * ones drop by their last change. The newest item always stays, so the
+ * next id never repeats an old one.
+ */
+function newestSessionItems(items: readonly SessionItem[]): SessionItem[] {
+  if (items.length <= CAP) {
+    return [...items]
+  }
+  const last = items[items.length - 1]
+  const closed = items.filter(item => item.state !== 'added' && item !== last)
+  const kept = new Set(newestByChange(closed, Math.max(CAP - (items.length - closed.length), 0)))
+
+  return items.filter(item => item.state === 'added' || item === last || kept.has(item))
 }
 
 /** How many sessions' statuses `$.store` keeps; older ones are dropped. */

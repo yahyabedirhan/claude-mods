@@ -124,10 +124,11 @@ Answer with strict JSON only, no other text, in this shape:
 {"findings":[{"occurred":"what you saw, one short sentence","changed":"what it costs or what to change, one short sentence"}]}
 Give at most ${FINDING_LIMIT} findings.`
 
-/** The model request for one check: the recent steps, the tasks and the effort phase. */
+/** The model request for one check: the recent steps, the tasks, the session items and the effort phase. */
 export function observerRequest(status: SessionStatus, messages: readonly SessionMessage[]): ModelCompleteRequest {
   const steps = newestWithin(messages.slice(-STEP_LIMIT).flatMap(stepLines), STEPS_LIMIT)
   const tasks = status.tasks.map(task => `- [${task.status}] ${clip(task.subject, 120)}`)
+  const items = status.sessionItems.map(item => `- [${item.state}] ${item.id} ${clip(item.title, 120)}`)
   const effort = status.effort?.name
   const shown = observerSurprises(status).map(item => `- ${clip(item.occurred, 160)}`)
   const prompt = [
@@ -135,6 +136,8 @@ export function observerRequest(status: SessionStatus, messages: readonly Sessio
     `Progress: ${status.progress === null ? 'no tasks' : `${status.progress.done} of ${status.progress.total} done`}`,
     'Task list:',
     ...(tasks.length === 0 ? ['(none)'] : tasks),
+    'Session items:',
+    ...(items.length === 0 ? ['(none)'] : items),
     'Findings already shown:',
     ...(shown.length === 0 ? ['(none)'] : shown),
     `Recent steps, oldest first:`,

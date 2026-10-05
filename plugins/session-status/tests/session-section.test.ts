@@ -59,7 +59,7 @@ test('during an effort the Effort section links the effort and Session the ticke
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toMatch(/^Session\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Landed 0\/1/)
+    expect(text).toMatch(/^Session\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Items 0\/1/)
     expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+video-review-v1$/)
     expect(text).toContain('Building: #3')
     expect(await paneLinks($, surface)).toEqual([
