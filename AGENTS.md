@@ -10,8 +10,8 @@ Mods run only in Claude Code; other harnesses don't load them.
   `claude plugin test <folder>` for its `*.test.ts` files.
 - Mods are not sandboxed: they run with Claude Code's access. Keep secrets
   and personal details out of mod code and tests.
-- The repo is private for now and may become public later, so write
-  everything as if it were public.
+- The repo is public under the MIT license (`LICENSE`). Write everything
+  for public readers.
 
 ## Agent skills
 
