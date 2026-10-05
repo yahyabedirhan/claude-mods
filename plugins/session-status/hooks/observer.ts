@@ -26,7 +26,7 @@ export const TEXT_LIMIT = 300
 /** How much of the recent steps a check reads in all; the oldest lines drop first. */
 export const STEPS_LIMIT = 12_000
 /** How many findings one check may add. */
-export const FINDING_LIMIT = 3
+export const FINDING_LIMIT = 1
 /** How many finding keys the status keeps; the oldest drop first. */
 export const SEEN_LIMIT = 200
 /** The reply's token cap: a few short findings in JSON. */
@@ -112,11 +112,12 @@ function newestWithin(lines: readonly string[], limit: number): string[] {
 }
 
 const SYSTEM = `You watch a coding agent's session for the user. You never talk to the agent.
-Find only these problems:
-- inefficient work: loops, the same step repeated, work done twice;
-- time sinks: steps that take far more turns or time than they are worth;
-- steps that do not agree with the effort phase or the task list.
-Ordinary errors that the agent fixed itself are not findings.
+The agent reports what it is stuck on by itself. Find only what it does not see:
+- a loop: the same failing step tried three or more times with no change;
+- a time sink: many turns spent on a side issue that the task does not need;
+- work against the plan: steps that contradict the effort phase, the task list or the session items.
+Small details, style, single errors and errors the agent fixed are not findings.
+When you are not sure, give no findings.
 ${CONCISE_RULE}
 Do not repeat a finding that was already shown, even in other words.
 When you find nothing, give no findings. Most checks find nothing.

@@ -1,6 +1,6 @@
 // The session's state in one word, for the top of the pane: Blocked, In
 // progress, Settling, Waiting for reply or Settled. The turn events and the settle
-// skills set what the session does; an open blocked decision wins over it.
+// skills set what the session does; an open blocked decision or blocker wins over it.
 
 import type { Activity, SessionStatus } from '../types'
 import { isOpen } from './status'
@@ -21,13 +21,15 @@ export const HEADLINE_TEXT: Record<Headline, string> = {
 }
 
 /**
- * The session's state: Blocked while a blocked decision is open; Settling
+ * The session's state: Blocked while a blocked decision or a blocker is open; Settling
  * while a turn that runs a settle skill runs; In progress while another turn
  * or a subagent runs; else what the last turn left, waiting for a reply or
  * settled.
  */
 export function headline(status: SessionStatus): Headline | null {
-  const isBlocked = status.items.some(item => item.kind === 'decision' && item.urgency === 'blocked' && isOpen(item))
+  const isBlocked = status.items.some(
+    item => (item.kind === 'blocker' || (item.kind === 'decision' && item.urgency === 'blocked')) && isOpen(item),
+  )
   if (isBlocked) {
     return 'blocked'
   }

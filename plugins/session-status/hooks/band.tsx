@@ -9,15 +9,19 @@ import { COLOR } from './palette'
 import { sessionProgress, taskProgress } from './session-progress'
 import { isOpen } from './status'
 
-/** The open decisions of each urgency and the open surprises; resolved items are left out. */
+/**
+ * The open blocked decisions and blockers, review-later decisions, and the
+ * agent's surprises (the observer's findings are left out); closed items too.
+ */
 function openCounts(status: SessionStatus | null): { blocked: number; review: number; surprises: number } {
   const open = (status?.items ?? []).filter(isOpen)
   const decisions = open.filter(item => item.kind === 'decision')
 
   return {
-    blocked: decisions.filter(item => item.urgency === 'blocked').length,
+    blocked:
+      decisions.filter(item => item.urgency === 'blocked').length + open.filter(item => item.kind === 'blocker').length,
     review: decisions.filter(item => item.urgency === 'review_later').length,
-    surprises: open.filter(item => item.kind === 'surprise').length,
+    surprises: open.filter(item => item.kind === 'surprise' && item.source !== 'observer').length,
   }
 }
 

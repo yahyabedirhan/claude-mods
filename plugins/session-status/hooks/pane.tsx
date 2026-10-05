@@ -4,15 +4,22 @@
 import type { RenderElement } from 'claude-code'
 
 import { SECTIONS } from './sections'
+import { drawListView } from './sections/list-view'
 import type { SectionContext } from './sections/section'
 
 /** How often an open pane draws again, so the ages it shows stay current. */
 export const AGE_TICK_MS = 15_000
 
-/** The pane's tree: every section in order, the ones with nothing left out. */
+/**
+ * The pane's tree: every section in order, the ones with nothing left out;
+ * or, after a "+N more" was pressed, that list in full.
+ */
 export function drawPane(context: SectionContext): RenderElement {
   const { Box } = context.ui
-  const drawn = SECTIONS.map(section => section(context)).filter(node => node !== null)
+  const drawn =
+    context.view === 'main'
+      ? SECTIONS.map(section => section(context)).filter(node => node !== null)
+      : [drawListView(context)].filter(node => node !== null)
 
   return (
     <Box flexDirection="column" gap={1}>

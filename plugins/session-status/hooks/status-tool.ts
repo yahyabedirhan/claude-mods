@@ -11,6 +11,7 @@ import { effortLabel } from './effort'
 import { joinFirst } from './lists'
 import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
+import { kindOfId } from './status'
 import type { ItemDraft } from './status'
 import { ticketName, ticketShortName } from './ticket-reports'
 import type { TicketOutcome, TicketRequest, TicketState } from './ticket-reports'
@@ -21,7 +22,7 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'resolve', 'dismiss', 'post_end_list', 'ticket', 'item'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_end_list', 'ticket', 'item'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'review_later']
@@ -49,8 +50,12 @@ export const STATUS_TOOL_SPEC = {
     'Stop only when no safe default exists: use urgency `blocked`.',
     '`record_surprise`: something unexpected that changed the work or the plan.',
     'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
+    '`record_blocker`: you tried something, it failed, and you cannot finish it yourself:',
+    'a denied action, a check or test that cannot run, a tool that refuses to start.',
+    'Give what failed and what the user can do to unblock you (run a command, restart Claude Code, allow an action).',
+    'The user gets a ping. Call `resolve` with its id once it works.',
     CONCISE_RULE,
-    '`resolve` with `id`: the user answered that decision in the chat.',
+    '`resolve` with `id`: the user answered that decision in the chat, or that blocker works now.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
     '`post_end_list`: call it when, at the end of your work, you post one numbered list',
     'of the open review-later decisions, each with its default and options.',
@@ -73,12 +78,12 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision or a surprise, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s or a session item\'s state.',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the end-of-work list posted, or report a ticket\'s or a session item\'s state.',
       },
       id: {
         type: 'string',
         description:
-          'resolve: the decision id (D1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
+          'resolve: the decision id (D1, ...) or the blocker id (B1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
       },
       urgency: {
         type: 'string',
@@ -103,6 +108,11 @@ export const STATUS_TOOL_SPEC = {
         description: 'record_decision: the one thing the user must say or do to settle it, in one short sentence.',
       },
       occurred: { type: 'string', description: 'record_surprise: what occurred, in one short sentence.' },
+      failed: { type: 'string', description: 'record_blocker: what you tried that failed, in one short sentence.' },
+      needs: {
+        type: 'string',
+        description: 'record_blocker: what the user can do to unblock you, in one short sentence.',
+      },
       changed: {
         type: 'string',
         description: 'record_surprise: what it changed in the work or the plan, in one short sentence.',
@@ -203,6 +213,18 @@ export function readStatusToolInput(
 
       return withAgent({ kind: 'surprise', occurred, changed })
     }
+    case 'record_blocker': {
+      const failed = text(input.failed)
+      if (failed === null) {
+        return { error: 'A blocker needs `failed`: what you tried that failed.' }
+      }
+      const needs = text(input.needs)
+      if (needs === null) {
+        return { error: 'A blocker needs `needs`: what the user can do to unblock you.' }
+      }
+
+      return withAgent({ kind: 'blocker', failed, needs })
+    }
     case 'resolve':
     case 'dismiss': {
       const id = text(input.id)
@@ -210,12 +232,14 @@ export function readStatusToolInput(
         return {
           error:
             input.action === 'resolve'
-              ? 'Resolve needs `id`: the decision id (D1, ...).'
+              ? 'Resolve needs `id`: the decision id (D1, ...) or the blocker id (B1, ...).'
               : 'Dismiss needs `id`: the surprise id (S1, ...).',
         }
       }
 
-      return { close: { kind: input.action === 'resolve' ? 'decision' : 'surprise', id } }
+      const kind = input.action === 'dismiss' ? 'surprise' : kindOfId(id) === 'blocker' ? 'blocker' : 'decision'
+
+      return { close: { kind, id } }
     }
     case 'post_end_list':
       return { postEndList: true }
@@ -279,6 +303,9 @@ export function recordedText(item: StatusItem): string {
   if (item.kind === 'surprise') {
     return `Recorded surprise ${item.id}.`
   }
+  if (item.kind === 'blocker') {
+    return `Recorded blocker ${item.id}. The user was pinged.`
+  }
 
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id} (blocked on the user).`
@@ -287,9 +314,9 @@ export function recordedText(item: StatusItem): string {
 
 /** What the model reads after it closed an item. */
 export function closedText(item: StatusItem): string {
-  return item.kind === 'decision'
-    ? `Resolved decision ${item.id}. It is in the answered history now.`
-    : `Dismissed surprise ${item.id}. It is in the answered history now.`
+  const done = item.kind === 'surprise' ? 'Dismissed' : 'Resolved'
+
+  return `${done} ${item.kind} ${item.id}. It is in the answered history now.`
 }
 
 /** What the model reads after `post_end_list`, given the decisions the list holds. */

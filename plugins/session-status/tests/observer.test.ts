@@ -51,7 +51,7 @@ async function surpriseCount($: Engine) {
   const counts: (string | undefined)[] = []
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
-    counts.push((await ui.find({ key: 'surprises' }))?.text)
+    counts.push((await ui.find({ key: 'observations' }))?.text)
     await ui.unmount()
   }
 
@@ -151,7 +151,8 @@ test('a check asks a small model with the recent steps, the task list and the ef
   expect(request?.prompt).toContain('[pending] Fix the build')
   expect(request?.prompt).toContain('user: Fix the build')
   expect(request?.prompt).toContain('tool Bash {"command":"npm test"} -> error: 1 failed')
-  expect(request?.system).toContain('Ordinary errors that the agent fixed itself are not findings')
+  expect(request?.system).toContain('Small details, style, single errors and errors the agent fixed are not findings')
+  expect(request?.system).toContain('When you are not sure, give no findings')
   expect(request?.system).toMatch(/one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is)
 })
 
@@ -185,7 +186,7 @@ test('a check reads at most 12000 characters of steps, the newest kept', async (
   expect(prompt.length).toBeLessThan(13_000)
 })
 
-test('findings show as surprises with the observer tag', async ($, on) => {
+test("findings show as observations, apart from the agent's surprises", async ($, on) => {
   const w = world(on)
   w.model(() => findings(LOOP))
   await start($)
@@ -195,12 +196,13 @@ test('findings show as surprises with the observer tag', async ($, on) => {
 
   for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
-    expect((await ui.find({ key: 'surprises' }))?.text).toContain('Surprises (2)')
-    const found = (await ui.find({ key: 'surprise-S2' }))?.text ?? ''
-    expect(found).toContain('[observer]')
+    const surprises = (await ui.find({ key: 'surprises' }))?.text ?? ''
+    expect(surprises).toContain('Surprises (1)')
+    expect(surprises).not.toContain(LOOP.occurred)
+    expect((await ui.find({ key: 'observations' }))?.text).toContain('Observations (1)')
+    const found = (await ui.find({ key: 'observation-S2' }))?.text ?? ''
     expect(found).toContain(LOOP.occurred)
     expect(found).toContain(`Changed: ${LOOP.changed}`)
-    expect((await ui.find({ key: 'surprise-S1' }))?.text).not.toContain('observer')
     await ui.unmount()
   }
 })
@@ -229,7 +231,7 @@ test('a reply in a code fence still counts', async ($, on) => {
   await session($, w).stop('agent-1')
 
   for (const text of await surpriseCount($)) {
-    expect(text).toContain('Surprises (1)')
+    expect(text).toContain('Observations (1)')
   }
 })
 
@@ -259,7 +261,7 @@ test('the observer does not repeat a finding it showed', async ($, on) => {
   expect(w.modelCalls).toHaveLength(2)
   expect(w.modelCalls[1]?.prompt).toContain(`- ${LOOP.occurred}`)
   for (const text of await surpriseCount($)) {
-    expect(text).toContain('Surprises (1)')
+    expect(text).toContain('Observations (1)')
   }
   expect((w.saved['session-a'] as SessionStatus).observer.seen).toEqual(['the agent ran the same failing test times'])
 })

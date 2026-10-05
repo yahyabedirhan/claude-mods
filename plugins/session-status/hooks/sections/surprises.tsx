@@ -1,20 +1,18 @@
-import type { Surprise } from '../../types'
-import { isOpen } from '../status'
 import { newest } from '../lists'
-import { COLOR } from '../palette'
+import { moreButton, openSurprises, surpriseEntry } from './entries'
 import type { Section } from './section'
 
 /** How many surprises the pane shows; the rest are "+N more". */
 const LIMIT = 2
 
 /**
- * Surprises: the newest two, each with what it changed, then "+N more".
- * The observer agent's findings carry an "observer" tag.
- * Drawn only when there is one.
+ * Surprises the agent recorded: the newest two, each with what it changed,
+ * then a "+N more" that opens them all. The observer's findings are the
+ * Observations section's. Drawn only when there is one.
  */
-export const surprisesSection: Section = ({ ui, status }) => {
+export const surprisesSection: Section = ({ ui, status, show }) => {
   const { Box, Text } = ui
-  const surprises = (status?.items ?? []).filter((item): item is Surprise => item.kind === 'surprise' && isOpen(item))
+  const surprises = openSurprises(status)
   if (surprises.length === 0) {
     return null
   }
@@ -23,24 +21,8 @@ export const surprisesSection: Section = ({ ui, status }) => {
   return (
     <Box key="surprises" flexDirection="column">
       <Text bold>Surprises ({surprises.length})</Text>
-      {shown.map(surprise => (
-        <Box key={`surprise-${surprise.id}`} flexDirection="column">
-          <Text>
-            <Text color={COLOR.accent}>{surprise.id}</Text>
-            {' · '}
-            {surprise.source === 'observer' ? <Text dimColor>[observer] </Text> : null}
-            {surprise.occurred}
-          </Text>
-          <Box paddingLeft={2}>
-            <Text dimColor>Changed: {surprise.changed}</Text>
-          </Box>
-        </Box>
-      ))}
-      {more > 0 ? (
-        <Box key="surprises-more">
-          <Text dimColor>+{more} more</Text>
-        </Box>
-      ) : null}
+      {shown.map(surprise => surpriseEntry(ui, surprise, 'surprise'))}
+      {more > 0 ? moreButton(ui, 'surprises', more, () => show('surprises')) : null}
     </Box>
   )
 }

@@ -65,8 +65,31 @@ export type Surprise = {
   resolvedAt?: number
 }
 
-/** One item the agent recorded: a decision or a surprise. */
-export type StatusItem = Decision | Surprise
+/**
+ * Something the agent tried that failed and that it cannot finish alone:
+ * a denied action, a check that cannot run, a tool that refuses to start.
+ * The person can unblock it, so it pings them and stays until resolved.
+ */
+export type Blocker = {
+  kind: 'blocker'
+  /** Stable for the session: `B1`, `B2`, ... */
+  id: string
+  /** What the agent tried that failed. */
+  failed: string
+  /** What the person can do to unblock it. */
+  needs: string
+  /** When the agent recorded it, in `$.clock.now()` milliseconds. */
+  recordedAt: number
+  /** The subagent's id when a subagent recorded it; absent on the main loop. */
+  agentId?: string
+  /** When the agent marked it resolved; absent while it is open. */
+  resolvedAt?: number
+  /** The shipyard id of the ping sent for it; a `/clear` keeps it. */
+  pingId?: string
+}
+
+/** One item the agent recorded: a decision, a surprise or a blocker. */
+export type StatusItem = Decision | Surprise | Blocker
 /** One task of the session's task list, from the task tools and Task events. */
 export type Task = {
   /**
@@ -143,6 +166,12 @@ export type Effort = {
  * (by the person or by an auto-open trigger), or closed by the person.
  */
 export type PaneState = 'unopened' | 'open' | 'closed'
+
+/**
+ * What the pane shows: every section (`main`), or one list in full after
+ * the person pressed its "+N more".
+ */
+export type PaneView = 'main' | 'surprises' | 'observations' | 'review-later'
 
 /** The effort's tickets, as `gh issue list` last counted them. */
 export type TicketCount = {
@@ -330,6 +359,8 @@ declare module 'claude-code' {
       observerTurns: number
       /** Where the pane stands: auto-open opens only an `unopened` pane. */
       pane: PaneState
+      /** What the pane shows: every section, or one list in full. */
+      view: PaneView
     }
   }
 }

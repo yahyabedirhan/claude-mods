@@ -1,9 +1,9 @@
 // Shipyard pings: the `shipyard ping` commands the mod runs, as argv. A
-// blocked decision pings the person, resolving it withdraws that ping, and
+// blocked decision or a blocker pings the person, resolving it withdraws that ping, and
 // the end-of-work list sends one ping with the count of open decisions.
 // register.tsx runs them; this module only builds them.
 
-import type { Decision } from '../types'
+import type { Blocker, Decision } from '../types'
 
 const FROM = 'session-status'
 /** The longest title a ping gets; a longer question is cut and ends in "…". */
@@ -43,6 +43,11 @@ export function blockedPing(
     `Recommended: ${decision.default}. To unblock: ${decision.unblocks}`,
     pingId(sessionId, decision.id),
   )
+}
+
+/** The ping for a blocker: what failed and what unblocks it. */
+export function blockerPing(sessionId: string, blocker: Pick<Blocker, 'id' | 'failed' | 'needs'>): string[] {
+  return ping(`Stuck: ${blocker.failed}`, `To unblock: ${blocker.needs}`, pingId(sessionId, blocker.id))
 }
 
 /** Withdraws a ping by its shipyard id (see `pingId`). */

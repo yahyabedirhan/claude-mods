@@ -53,7 +53,7 @@ test('blocked items take the warning colour, ids the accent, labels dim, and bar
     expect(await styleOf($, surface, /█+░+$/)).toMatchObject({ color: undefined, dimColor: undefined })
     expect(await styleOf($, surface, /^Branch\s+$/)).toMatchObject({ dimColor: true })
     expect(await styleOf($, surface, /^#3$/)).toMatchObject({ color: 'suggestion' })
-    expect(await styleOf($, surface, /^\[observer\] $/)).toMatchObject({ dimColor: true })
+    expect(await styleOf($, surface, /^Observations \(1\)$/)).toMatchObject({ dimColor: true, bold: true })
     expect(await styleOf($, surface, /^Session$/)).toMatchObject({ bold: true })
   }
 })

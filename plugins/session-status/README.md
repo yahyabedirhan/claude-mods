@@ -16,6 +16,7 @@ Sections, top to bottom. An empty section is not drawn.
 ● In progress    the session's state: Blocked, In progress, Settling, Waiting for reply or Settled
 Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
+You should know  every open blocker: what failed and what unblocks it
 Session          Branch    pane-width
                  Worktree  claude-mods-8ec7ac/1
                  Items 7/19 ███████░░░░░          the session's items and effort tickets
@@ -27,8 +28,9 @@ Effort           video-review-v1                  during an effort
 Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
-Surprises        the newest 2, then "+N more"
-Review later     the newest 3, then "+N more"
+Surprises        the newest 2, then a pressable "+N more"
+Review later     the newest 3, then a pressable "+N more"
+Observations     the observer's findings, dim: the newest 2, then "+N more"
 Subagents        running · finished
 Cron jobs        1 active · 1 fired · 1 expired · 1 cancelled
                  weekdays 09:00 · Check the build and report.
@@ -36,7 +38,7 @@ Answered (N) · Last update
 ```
 
 1. **State**: one word for the whole session, by priority.
-   - **Blocked** while a blocked decision is open.
+   - **Blocked** while a blocked decision or a blocker is open.
    - **In progress** while a turn or a subagent runs.
    - **Settling** while a turn that runs `settle-session` or `settle-effort`
      runs.
@@ -47,7 +49,12 @@ Answered (N) · Last update
 2. **Now**: the current task, or the last tool call (its description, file
    name or programs).
 3. **Blocked on you**: decisions that stop the work until you answer.
-4. **Session**: this session's own work, in every session.
+4. **You should know**: what the agent tried that failed and that it cannot
+   finish alone: a denied action, a check that cannot run, a tool that
+   refuses to start. Each says what you can do to unblock it (run a command,
+   restart Claude Code, allow an action), pings you, and stays until the
+   agent resolves it.
+5. **Session**: this session's own work, in every session.
    - **Branch** and **Worktree** (the two folders above the repository
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
      The full path stays in the status.
@@ -58,19 +65,20 @@ Answered (N) · Last update
    - **Building**: the tickets the orchestrator builds now.
    - **Tasks**: the task list's tasks done, on a line of its own. It never
      mixes into Items.
-5. **Effort**, during an effort: its name, then the tracker's count once it
+6. **Effort**, during an effort: its name, then the tracker's count once it
    has one: closed tickets of all the effort's issues, `QA:` tickets
    included. It never mixes in the orchestrator's reports.
-6. **Created**: the pull requests and issues the session made, in every
+7. **Created**: the pull requests and issues the session made, in every
    repository, newest 5 first, then "+N more".
-7. **Places**: the other repositories the session changed (see
+8. **Places**: the other repositories the session changed (see
    [Places](#places)).
-8. **Surprises**: unexpected things and what they changed. Observer findings
-   carry an `[observer]` tag.
-9. **Review later**: decisions the agent made with a safe default, each with
+9. **Surprises**: unexpected things the agent recorded and what they changed.
+10. **Review later**: decisions the agent made with a safe default, each with
    that default.
-10. **Subagents**: running and finished.
-11. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
+11. **Observations**: the observer's findings (see [The observer](#the-observer)),
+    kept apart from what the agent itself knows, under a dim heading.
+12. **Subagents**: running and finished.
+13. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
     as active, fired, expired or cancelled, then each active job's schedule
     and prompt (the newest 3, then "+N more"). The schedule is short text
     (`every 5m`, `hourly`, `daily 09:00`, `weekdays 09:00`, `Mondays 08:00`,
@@ -79,8 +87,14 @@ Answered (N) · Last update
     one-shot job is then done. A recurring job expires 7 days after
     `CronCreate` scheduled it, as Claude Code expires it. `CronDelete` cancels
     a job, and a one-shot job that `CronList` no longer lists has fired.
-12. **Answered**: how many decisions were resolved and surprises dismissed.
-13. **Last update**: its time and age.
+14. **Answered**: how many decisions and blockers were resolved and surprises
+    dismissed.
+15. **Last update**: its time and age.
+
+**"+N more"** under Surprises, Review later and Observations is a button:
+pressing it turns the pane into that whole list, newest first, with a
+**← Back** button (or the `b` key) to return. Closing the pane returns it to
+every section.
 
 Links go to GitHub when the repository's `origin` remote is there: the effort
 links its issues list (`label:effort:<name>`), the branch its tree, each
@@ -89,14 +103,16 @@ ticket being built its issue, and each pull request, issue and place its page.
 Colour carries meaning, from Claude Code's theme, so it reads in light and
 dark themes: headings are bold and labels dim; the state line takes the
 warning colour when blocked, the success colour in progress, the accent
-colour waiting for a reply, and is dim when settled; blocked decisions and
-the end-of-work list take the warning colour, and decision, surprise and
+colour waiting for a reply, and is dim when settled; blocked decisions,
+blockers and the end-of-work list take the warning colour, and decision, surprise and
 session item ids and the tickets being built the accent colour. The progress
 bars stay neutral.
 
 When the terminal is too narrow for the pane, a one-line band above the
 prompt shows the counts instead:
 `<n> blocked · <n> review · items 7/19 · tasks 2/5 · closed 1/13 · <n> surprise`.
+`blocked` counts blocked decisions and blockers; `surprise` leaves the
+observer's findings out.
 `tasks` shows while a task list exists, and `closed` during an effort.
 Without items or effort tickets the session figure is the tasks'
 `<done>/<total> done`.
@@ -118,7 +134,8 @@ prompt section that tells the agent how to use it. Actions:
 | --- | --- |
 | `record_decision` | Records a decision: question, two to four options, a default, what unblocks it, and urgency `blocked` or `review_later`. |
 | `record_surprise` | Records a surprise: what occurred and what it changed. |
-| `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat. |
+| `record_blocker` | Records a blocker: what failed (`failed`) and what you can do to unblock it (`needs`). It pings you. |
+| `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat, or a blocker (`B1`, ...) resolved once it works. |
 | `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. |
 | `post_end_list` | Marks the end-of-work list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
@@ -240,9 +257,13 @@ All are skipped silently when they are missing.
 ## The observer
 
 While the pane is open, a small model (Haiku) checks the recent work for
-loops, repeated work, time sinks and steps that don't match the task list or
-the effort. Its findings show as surprises tagged `[observer]`; they never
-reach the main agent.
+what the agent does not see itself: the same failing step tried three or
+more times, many turns spent on a side issue, and steps that contradict the
+effort, the task list or the session items. Small details and single errors
+are not findings, and an unsure check gives none; one check adds at most
+one finding. Findings show under **Observations**; they never reach the
+main agent. What the agent knows it is stuck on is a blocker, under **You
+should know**.
 
 - It checks every 5 main-loop turns and when a subagent finishes.
 - Each finding you dismiss doubles the turn interval, up to 40 turns. After

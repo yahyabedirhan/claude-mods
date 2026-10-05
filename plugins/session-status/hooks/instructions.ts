@@ -17,6 +17,8 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - Choose a safe default and continue. Record that decision with urgency \`review_later\`. Do not stop the work for it.
 - Stop only when no safe default exists. Then record the decision with urgency \`blocked\`. Recommend one option, and say in \`unblocks\` the one thing the user must say or do.
 - When something unexpected changes the work or the plan, record a surprise: what occurred and what it changed. Do not record ordinary errors that you fixed yourself.
+- When you try something and it fails, and you cannot finish it yourself, record a blocker with action \`record_blocker\`. Give what failed and what the user can do to unblock you, such as run a command, restart Claude Code or allow an action. Examples: a denied action that has no other way, a test or check that cannot run, a tool that refuses to start. The user gets a ping. Do not record it as a surprise.
+- When a blocker works again, call the tool with action \`resolve\` and the blocker's id.
 - ${CONCISE_RULE} The user reads the pane at a glance.
 - The pane is read-only. The user answers decisions in the chat. When you read the user's answer to a decision in the chat, call the tool with action \`resolve\` and the decision's id.
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
