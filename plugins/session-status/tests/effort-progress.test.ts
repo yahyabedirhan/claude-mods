@@ -60,8 +60,8 @@ test('the count is closed tickets of all tickets, without the spec issue', () =>
     ghIssue(4, 'Effort progress from tickets'),
     ghIssue(5, 'SPEC: an older spec', 'CLOSED'),
   ]
-  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 2, total: 3, builds: 3 })
-  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0, builds: 0 })
+  expect(parseTicketList(JSON.stringify(issues))).toMatchObject({ done: 2, total: 3, builds: 3 })
+  expect(parseTicketList('[]')).toEqual({ done: 0, total: 0, builds: 0, list: [] })
   expect(parseTicketList('not json')).toBeNull()
   expect(parseTicketList('{"number":1}')).toBeNull()
 })
@@ -108,7 +108,7 @@ test('the effort count keeps the QA tickets; the tickets to build leave them out
     ghIssue(4, 'QA: Check the pane by hand'),
     ghIssue(5, 'qa: check the band'),
   ]
-  expect(parseTicketList(JSON.stringify(issues))).toEqual({ done: 1, total: 4, builds: 2 })
+  expect(parseTicketList(JSON.stringify(issues))).toMatchObject({ done: 1, total: 4, builds: 2 })
 })
 
 test('the effort count shows only for the effort it was counted for, and only with tickets', () => {
@@ -138,7 +138,7 @@ test("during an effort the Effort section counts the effort's closed tickets, ap
   expect(ticketReads(w.runs)).toEqual([ticketListArgv('session-status')])
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { effort: 'session-status', done: 2, total: 3 } })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+session-status\s*Closed 2\/3 █+░+$/)
+    expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+session-status\s*Closed 2\/3 █+░+○ #4 Effort progress✓ #2 The pane\+1 more$/)
     expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
   }
 })

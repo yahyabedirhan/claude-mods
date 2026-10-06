@@ -4,8 +4,10 @@
 
 import type { RenderNode } from 'claude-code'
 
-import type { Decision, PaneView, SessionItem, SessionStatus, Surprise } from '../../types'
+import type { Decision, GitHubRepo, PaneView, SessionItem, SessionStatus, Surprise, TrackedTicket } from '../../types'
+import { effortTickets } from '../effort-progress'
 import { COLOR } from '../palette'
+import { issueUrl } from '../place'
 import { listedItems } from '../session-items'
 import { isOpen, onEndList, openFollowUps, openToDecide } from '../status'
 import type { Ui } from './section'
@@ -71,6 +73,23 @@ export function itemEntry(ui: Ui, item: SessionItem, prefix: string): RenderNode
   )
 }
 
+/**
+ * One of the effort's tickets: `○ #3 Play a video` while open, `✓ #3 ...`
+ * once closed; the number links to its issue when the repository is known.
+ */
+export function ticketEntry(ui: Ui, ticket: TrackedTicket, repo: GitHubRepo | null, prefix: string): RenderNode {
+  const { Link, Text } = ui
+  const name = `#${ticket.number}`
+
+  return (
+    <Text key={`${prefix}-${ticket.number}`}>
+      <Text dimColor>{ticket.isClosed ? '✓ ' : '○ '}</Text>
+      <Text color={COLOR.accent}>{repo === null ? name : <Link href={issueUrl(repo, ticket.number)} label={name} />}</Text>
+      {` ${ticket.title}`}
+    </Text>
+  )
+}
+
 /** `+N more`, pressable: it opens the list in full. Keyed `<key>-more`. */
 export function moreButton(ui: Ui, key: string, more: number, open: () => void): RenderNode {
   const { Box, Button } = ui
@@ -110,6 +129,16 @@ export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: Sess
     const done = all.filter(item => item.state === 'done').length
 
     return { title: `Session items (${done}/${all.length} done)`, entries: all.map(item => itemEntry(ui, item, 'all')) }
+  },
+  tickets: (ui, status) => {
+    const all = effortTickets(status)
+    const repo = status?.place?.repo ?? null
+    const closed = all.filter(ticket => ticket.isClosed).length
+
+    return {
+      title: `${status?.effort?.name ?? 'Effort'} tickets (${closed}/${all.length} closed)`,
+      entries: all.map(ticket => ticketEntry(ui, ticket, repo, 'all')),
+    }
   },
   'follow-up': (ui, status) => {
     const all = status === null ? [] : openFollowUps(status)

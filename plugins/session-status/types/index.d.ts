@@ -175,6 +175,13 @@ export type PaneState = 'unopened' | 'open' | 'closed'
  */
 export type PaneView = 'main' | 'surprises' | 'observations' | 'decide' | 'follow-up' | 'items' | 'tickets'
 
+/** One of the effort's tickets, as `gh issue list` last read it. */
+export type TrackedTicket = {
+  number: number
+  title: string
+  isClosed: boolean
+}
+
 /** The effort's tickets, as `gh issue list` last counted them. */
 export type TicketCount = {
   /** The effort counted: a count for another effort is not shown. */
@@ -188,6 +195,8 @@ export type TicketCount = {
    * tickets, which the person closes by hand. Absent on a count from before 0.4.0.
    */
   builds?: number
+  /** Each ticket, in the order `gh` listed it. Absent on a count from before 0.5.0. */
+  list?: TrackedTicket[]
   /** When it was counted, in `$.clock.now()` milliseconds. */
   at: number
 }

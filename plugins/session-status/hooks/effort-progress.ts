@@ -5,7 +5,7 @@
 // and says when to read again; register.tsx runs the command and keeps the
 // count in the status.
 
-import type { SessionStatus, TicketCount } from '../types'
+import type { SessionStatus, TicketCount, TrackedTicket } from '../types'
 import { isQaTitle } from './session-progress'
 
 /** The least time between two ticket reads that no ticket change asked for. */
@@ -47,13 +47,13 @@ export function ticketListArgv(effort: string): string[] {
 }
 
 /**
- * The tickets closed, the total and the tickets to build from `gh issue list
- * --json` output; null when the output is not such a list, so the last good
+ * The tickets closed, the total, the tickets to build and each ticket from
+ * `gh issue list --json` output; null when the output is not such a list, so the last good
  * count holds. The total keeps the `QA:` tickets: the effort is not finished
  * until they close. The tickets to build leave them out: the orchestrator
  * never lands one, so the session's count would stop short of them.
  */
-export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'total' | 'builds'> | null {
+export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'total' | 'builds' | 'list'> | null {
   let issues: unknown
   try {
     issues = JSON.parse(stdout)
@@ -64,14 +64,20 @@ export function parseTicketList(stdout: string): Pick<TicketCount, 'done' | 'tot
     return null
   }
   const tickets = issues.filter(
-    (issue): issue is { title?: unknown; state?: unknown } =>
+    (issue): issue is { number?: unknown; title?: unknown; state?: unknown } =>
       typeof issue === 'object' && issue !== null && !(typeof issue.title === 'string' && SPEC_TITLE.test(issue.title)),
   )
   const closed = tickets.filter(issue => typeof issue.state === 'string' && issue.state.toUpperCase() === 'CLOSED')
 
   const qa = tickets.filter(issue => typeof issue.title === 'string' && isQaTitle(issue.title))
 
-  return { done: closed.length, total: tickets.length, builds: tickets.length - qa.length }
+  const list = tickets.flatMap((issue): TrackedTicket[] =>
+    typeof issue.number === 'number' && typeof issue.title === 'string'
+      ? [{ number: issue.number, title: issue.title, isClosed: closed.includes(issue) }]
+      : [],
+  )
+
+  return { done: closed.length, total: tickets.length, builds: tickets.length - qa.length, list }
 }
 
 /** Whether a tool call likely changed the effort's tickets. */
@@ -118,6 +124,22 @@ export function effortProgress(status: SessionStatus | null): { closed: number; 
   }
 
   return { closed: count.done, total: count.total }
+}
+
+/**
+ * The effort's tickets the Effort section lists: the open ones first, then
+ * the closed ones, each in issue-number order. Empty outside an effort and
+ * before a count for it.
+ */
+export function effortTickets(status: SessionStatus | null): TrackedTicket[] {
+  const effort = status?.effort?.name
+  const count = status?.tickets ?? null
+  if (effort === undefined || count === null || count.effort !== effort) {
+    return []
+  }
+  const byNumber = [...(count.list ?? [])].sort((a, b) => a.number - b.number)
+
+  return [...byNumber.filter(ticket => !ticket.isClosed), ...byNumber.filter(ticket => ticket.isClosed)]
 }
 
 /** The status with a new ticket count. */

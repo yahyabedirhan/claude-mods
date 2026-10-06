@@ -5,7 +5,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { githubRepo, worktreeLabel } from '../hooks/place'
-import { SESSION_ID, SURFACES, callStatusTool, mountPane, sectionText, start, world } from './world'
+import { SESSION_ID, SURFACES, callStatusTool, ghIssue, mountPane, sectionText, start, world } from './world'
 import type { Surface, World } from './world'
 
 const ROOT = '/home/dev/.treehouse/claude-mods-8ec7ac/1/claude-mods'
@@ -67,6 +67,46 @@ test('during an effort the Effort section links the effort and Session the ticke
       ['#3', `${REPO_URL}/issues/3`],
       ['video-review-v1', `${REPO_URL}/issues?q=label%3Aeffort%3Avideo-review-v1`],
     ])
+  }
+})
+
+test('the Effort section lists two tickets, open ones first, each linked, and "+N more" opens them all', async ($, on) => {
+  const effort = 'launch'
+  const w = inWorktree(on, {
+    issues: [
+      ghIssue(1, 'Spec: Launch', 'OPEN', effort),
+      ghIssue(2, 'Pick a name', 'CLOSED', effort),
+      ghIssue(5, 'Write the page', 'OPEN', effort),
+      ghIssue(3, 'Draw the logo', 'OPEN', effort),
+      ghIssue(4, 'Book the room', 'CLOSED', effort),
+    ],
+  })
+  await start($)
+  await settle(w)
+  await $.tool.call({ tool: 'Bash', command: `gh issue list --label effort:${effort}` })
+  await settle(w)
+
+  for (const surface of SURFACES) {
+    const text = (await sectionText($, surface, 'effort')) ?? ''
+    expect(text).toContain('Closed 2/4')
+    expect(text).toContain('○ #3 Draw the logo')
+    expect(text).toContain('○ #5 Write the page')
+    expect(text).not.toContain('Spec')
+    expect(text).not.toContain('#2')
+    expect(text).toContain('+2 more')
+
+    const ui = await mountPane($, surface)
+    await ui.press({ key: 'tickets-more' })
+    const list = (await ui.find({ key: 'list-view' }))?.text ?? ''
+    expect(list).toContain('launch tickets (2/4 closed)')
+    expect(['#3', '#5', '#2', '#4'].map(name => list.indexOf(name))).toEqual(
+      [...['#3', '#5', '#2', '#4'].map(name => list.indexOf(name))].sort((a, b) => a - b),
+    )
+    expect(list).toContain('✓ #4 Book the room')
+    const links = (await ui.findAll({ type: 'Link' })).map(link => [link.text, link.props.href])
+    expect(links).toEqual([3, 5, 2, 4].map(n => [`#${n}`, `${REPO_URL}/issues/${n}`]))
+    await ui.press({ key: 'back' })
+    await ui.unmount()
   }
 })
 

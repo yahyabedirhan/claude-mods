@@ -26,6 +26,9 @@ Session          Branch    pane-width
                  Tasks 2/5 ████████░░░░░          while a task list exists
 Effort           video-review-v1                  during an effort
                  Closed 1/13 █░░░░░░░░░░░         once the tracker counted it
+                 ○ #4 Effort progress             2 tickets, open ones first, each a link
+                 ○ #5 Observer agent
+                 +11 more
 Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
@@ -71,7 +74,10 @@ Answered (N) · Last update
      mixes into Progress.
 6. **Effort**, during an effort: its name, then the tracker's count once it
    has one: closed tickets of all the effort's issues, `QA:` tickets
-   included. It never mixes in the orchestrator's reports.
+   included. It never mixes in the orchestrator's reports. Below it, two
+   tickets, the open ones first (`○`), then the closed ones (`✓`), each in
+   issue-number order; each number links to its issue. A pressable
+   "+N more" lists every ticket of the effort.
 7. **Created**: the pull requests and issues the session made, in every
    repository, newest 5 first, then "+N more".
 8. **Places**: the other repositories the session changed (see
@@ -100,10 +106,10 @@ Answered (N) · Last update
     dismissed.
 16. **Last update**: its time and age.
 
-**"+N more"** under the session items, Decide before settling, Follow-up
+**"+N more"** under the session items, the effort's tickets, Decide before settling, Follow-up
 after settling, Surprises and Observations is a button:
 pressing it turns the pane into that whole list, newest first (the items:
-open ones first), with a
+and the tickets: open ones first), with a
 **← Back** button (or the `b` key) to return. Closing the pane returns it to
 every section.
 
