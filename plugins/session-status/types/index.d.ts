@@ -173,7 +173,7 @@ export type PaneState = 'unopened' | 'open' | 'closed'
  * What the pane shows: every section (`main`), or one list in full after
  * the person pressed its "+N more".
  */
-export type PaneView = 'main' | 'surprises' | 'observations' | 'decide' | 'follow-up'
+export type PaneView = 'main' | 'surprises' | 'observations' | 'decide' | 'follow-up' | 'items' | 'tickets'
 
 /** The effort's tickets, as `gh issue list` last counted them. */
 export type TicketCount = {

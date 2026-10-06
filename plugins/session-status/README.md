@@ -20,7 +20,8 @@ You should know  every open blocker: what failed and what unblocks it
 Session          Branch    pane-width
                  Worktree  claude-mods-8ec7ac/1
                  Progress 7/19 ███████░░░░░       the session's items and effort tickets
-                 ○ I8 Open the pull request       the open items, the first 4
+                 ○ I8 Open the pull request       2 items, open ones first, then "+N more"
+                 ✓ I7 Run the tests
                  Building: #3, #5
                  Tasks 2/5 ████████░░░░░          while a task list exists
 Effort           video-review-v1                  during an effort
@@ -62,7 +63,9 @@ Answered (N) · Last update
    - **Progress**: how close the session is to settling, as done of all (see
      [Session progress](#session-progress)). The total grows as the session
      takes on more work.
-   - The open items, each with its id: the first 4, then "+N more".
+   - The items, each with its id: two of them, the open ones first (`○`,
+     oldest first), then the done ones (`✓`, newest first), then a pressable
+     "+N more" for every item behind Progress. Dropped items are left out.
    - **Building**: the tickets the orchestrator builds now.
    - **Tasks**: the task list's tasks done, on a line of its own. It never
      mixes into Progress.
@@ -97,9 +100,10 @@ Answered (N) · Last update
     dismissed.
 16. **Last update**: its time and age.
 
-**"+N more"** under Decide before settling, Follow-up after settling,
-Surprises and Observations is a button:
-pressing it turns the pane into that whole list, newest first, with a
+**"+N more"** under the session items, Decide before settling, Follow-up
+after settling, Surprises and Observations is a button:
+pressing it turns the pane into that whole list, newest first (the items:
+open ones first), with a
 **← Back** button (or the `b` key) to return. Closing the pane returns it to
 every section.
 

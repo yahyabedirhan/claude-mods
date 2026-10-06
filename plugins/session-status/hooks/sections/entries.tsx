@@ -4,8 +4,9 @@
 
 import type { RenderNode } from 'claude-code'
 
-import type { Decision, PaneView, SessionStatus, Surprise } from '../../types'
+import type { Decision, PaneView, SessionItem, SessionStatus, Surprise } from '../../types'
 import { COLOR } from '../palette'
+import { listedItems } from '../session-items'
 import { isOpen, onEndList, openFollowUps, openToDecide } from '../status'
 import type { Ui } from './section'
 
@@ -57,6 +58,19 @@ export function decisionEntry(ui: Ui, decision: Decision, prefix: string, color:
   )
 }
 
+/** One session item: `○ I3 Write the parser` while open, `✓ I1 ...` once done. */
+export function itemEntry(ui: Ui, item: SessionItem, prefix: string): RenderNode {
+  const { Text } = ui
+
+  return (
+    <Text key={`${prefix}-${item.id}`}>
+      <Text dimColor>{item.state === 'done' ? '✓ ' : '○ '}</Text>
+      <Text color={COLOR.accent}>{item.id}</Text>
+      {` ${item.title}`}
+    </Text>
+  )
+}
+
 /** `+N more`, pressable: it opens the list in full. Keyed `<key>-more`. */
 export function moreButton(ui: Ui, key: string, more: number, open: () => void): RenderNode {
   const { Box, Button } = ui
@@ -68,7 +82,7 @@ export function moreButton(ui: Ui, key: string, more: number, open: () => void):
   )
 }
 
-/** Each list the full-list view shows: its heading and its entries, newest first. */
+/** Each list the full-list view shows: its heading and its entries, newest first (items: open first). */
 export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: SessionStatus | null) => { title: string; entries: RenderNode[] }> = {
   surprises: (ui, status) => {
     const all = openSurprises(status)
@@ -90,6 +104,12 @@ export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: Sess
         .reverse()
         .map(d => decisionEntry(ui, d, 'all', asked.includes(d) ? COLOR.attention : COLOR.accent)),
     }
+  },
+  items: (ui, status) => {
+    const all = status === null ? [] : listedItems(status)
+    const done = all.filter(item => item.state === 'done').length
+
+    return { title: `Session items (${done}/${all.length} done)`, entries: all.map(item => itemEntry(ui, item, 'all')) }
   },
   'follow-up': (ui, status) => {
     const all = status === null ? [] : openFollowUps(status)

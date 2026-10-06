@@ -1,32 +1,34 @@
 import type { RenderNode } from 'claude-code'
 
-import type { SessionItem, TicketReport } from '../../types'
+import type { TicketReport } from '../../types'
 import { first } from '../lists'
 import { COLOR } from '../palette'
 import { branchUrl, issueUrl, worktreeLabel } from '../place'
+import { listedItems } from '../session-items'
 import { sessionProgress, taskProgress } from '../session-progress'
 import { ticketShortName } from '../ticket-reports'
 import { barCells, progressBar } from './bar'
+import { itemEntry, moreButton } from './entries'
 import type { Section, Ui } from './section'
 
 /** How many tickets in progress the section names; the rest show as "+N more". */
 const BUILDING_SHOWN = 4
 
-/** How many open items the section names; the rest show as "+N more". */
-const OPEN_SHOWN = 4
+/** How many session items the section lists; the rest open with "+N more". */
+const ITEMS_SHOWN = 2
 
 /** The label column's width, in cells: the longest label, `Worktree`, and a space. */
 const LABEL_CELLS = 9
 
 /**
  * This session's own work, in every session: the branch and the worktree;
- * the items done of all, the effort's tickets among them, then the open
- * items and the tickets the orchestrator builds now; and the task list's
+ * the items done of all, the effort's tickets among them, then the first
+ * two items (open ones first) and the tickets the orchestrator builds now; and the task list's
  * tasks done, on a line of its own. The effort's name and the tracker's
  * closed count are the Effort section's, the created pages the Created
  * section's. Drawn once any of it is known.
  */
-export const sessionSection: Section = ({ ui, status, columns }) => {
+export const sessionSection: Section = ({ ui, status, columns, show }) => {
   const { Box, Text } = ui
   if (status === null) {
     return null
@@ -44,7 +46,11 @@ export const sessionSection: Section = ({ ui, status, columns }) => {
   }
   if (progress !== null) {
     lines.push(bar(ui, 'Progress', progress.done, progress.total, columns))
-    lines.push(...openLines(ui, progress.open))
+    const { shown, more } = first(listedItems(status), ITEMS_SHOWN)
+    lines.push(...shown.map(item => itemEntry(ui, item, 'item')))
+    if (more > 0) {
+      lines.push(moreButton(ui, 'items', more, () => show('items')))
+    }
     if (progress.building.length > 0) {
       lines.push(building(ui, progress.building, repo === null ? null : number => issueUrl(repo, number)))
     }
@@ -74,21 +80,6 @@ function bar(ui: Ui, label: string, done: number, total: number, columns: number
       {`${done}/${total} ${progressBar(done, total, barCells(columns))}`}
     </Text>
   )
-}
-
-/** One line for each open item, `○ I3 Write the parser`, the first OPEN_SHOWN, then `+N more`. */
-function openLines(ui: Ui, items: readonly SessionItem[]): RenderNode[] {
-  const { Text } = ui
-  const { shown, more } = first(items, OPEN_SHOWN)
-  const lines = shown.map(item => (
-    <Text key={`open-${item.id}`}>
-      <Text dimColor>{'○ '}</Text>
-      <Text color={COLOR.accent}>{item.id}</Text>
-      {` ${item.title}`}
-    </Text>
-  ))
-
-  return more > 0 ? [...lines, <Text key="open-more" dimColor>{`+${more} more`}</Text>] : lines
 }
 
 /** One `Label    value` line; the value is a link when it has a page. */

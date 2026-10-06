@@ -25,6 +25,17 @@ export function countedItems(status: SessionStatus): SessionItem[] {
   return status.sessionItems.filter(item => item.state !== 'dropped')
 }
 
+/**
+ * The items the pane lists: the open ones first, oldest first, as the work
+ * to do next; then the done ones, newest first. Dropped items are left out,
+ * as the count leaves them out.
+ */
+export function listedItems(status: SessionStatus): SessionItem[] {
+  const done = status.sessionItems.filter(item => item.state === 'done').reverse()
+
+  return [...openItems(status), ...done]
+}
+
 /** The items still to do, oldest first. */
 export function openItems(status: SessionStatus): SessionItem[] {
   return status.sessionItems.filter(item => item.state === 'added')

@@ -15,6 +15,7 @@ import {
   callStatusTool,
   endSession,
   ghIssue,
+  mountPane,
   sectionText,
   start,
   subagentToolCall,
@@ -87,6 +88,7 @@ test('items added one by one grow the total, and done ones count as done', async
     expect(text).toContain('○ I2 Open each count chip on GitHub')
     expect(text).toContain('○ I3 Commit the work')
     expect(text).not.toContain('I1')
+    expect(text).toContain('+1 more')
   }
   expect(w.panes.has('session-status')).toBe(true)
 })
@@ -180,18 +182,49 @@ test('the task list keeps a line of its own beside the items', async ($, on) => 
   }
 })
 
-test('the section names at most four open items, then how many more', async ($, on) => {
+test('the section lists two items, open ones first, then a "+N more" that opens them all', async ($, on) => {
   world(on)
   await start($)
-  for (const n of [1, 2, 3, 4, 5, 6]) {
+  for (const n of [1, 2, 3, 4]) {
     await add($, `Item ${n}`)
   }
+  await mark($, 'done', 'I1')
+  await mark($, 'done', 'I2')
+  await mark($, 'dropped', 'I4')
+
+  for (const surface of SURFACES) {
+    const ui = await mountPane($, surface)
+    const text = (await ui.find({ key: 'session' }))?.text ?? ''
+    expect(text).toContain('Progress 2/3')
+    expect(text).toContain('○ I3 Item 3')
+    expect(text).toContain('✓ I2 Item 2')
+    expect(text).not.toContain('I1')
+    expect(text).not.toContain('I4')
+    expect((await ui.find({ key: 'items-more' }))?.text).toBe('+1 more')
+
+    await ui.press({ key: 'items-more' })
+    const list = (await ui.find({ key: 'list-view' }))?.text ?? ''
+    expect(list).toContain('Session items (2/3 done)')
+    expect(list.indexOf('○ I3 Item 3')).toBeLessThan(list.indexOf('✓ I2 Item 2'))
+    expect(list.indexOf('✓ I2 Item 2')).toBeLessThan(list.indexOf('✓ I1 Item 1'))
+    expect(list).not.toContain('I4')
+    await ui.press({ key: 'back' })
+    await ui.unmount()
+  }
+})
+
+test('with two items or fewer the section shows no "+N more"', async ($, on) => {
+  world(on)
+  await start($)
+  await add($, 'One')
+  await add($, 'Two')
+  await mark($, 'done', 'I1')
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('○ I4 Item 4')
-    expect(text).not.toContain('I5')
-    expect(text).toContain('+2 more')
+    expect(text).toContain('○ I2 Two')
+    expect(text).toContain('✓ I1 One')
+    expect(text).not.toContain('more')
   }
 })
 
