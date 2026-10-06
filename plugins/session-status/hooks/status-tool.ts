@@ -73,8 +73,8 @@ export const STATUS_TOOL_SPEC = {
     'Do not add an item for an effort ticket: the tickets count by themselves.',
     '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
     'Use it to find an id you no longer have, for example after `/clear`. It changes nothing.',
-    '`reset`: only when the user asks for it. It removes the session items, the reported tickets and the effort;',
-    'open decisions and blockers stay.',
+    '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
+    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the created links, the reported tickets and the effort.',
   ].join(' '),
   inputSchema: {
     type: 'object',

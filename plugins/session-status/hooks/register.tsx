@@ -338,7 +338,7 @@ async function reset($: EngineInterface): Promise<string> {
     return outcome.status
   })
 
-  return resetText(removed ?? { items: 0, tickets: 0, effort: null })
+  return resetText(removed ?? { items: 0, entries: 0, links: 0, tickets: 0, effort: null })
 }
 
 /**
@@ -366,7 +366,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: COMMAND,
-      description: 'Open or close the session status pane; `reset` clears the session progress',
+      description: 'Open or close the session status pane; `reset` clears the whole session status',
     })
     await $.tool.register(STATUS_TOOL_SPEC)
     clearedFrom = null
@@ -434,7 +434,7 @@ export const register: Register = on => {
       return { text: await reset($) }
     }
     if (arg !== '') {
-      return { text: `Unknown argument "${e.args.trim()}". Use /${COMMAND} to open or close the pane, or /${COMMAND} reset to clear the session progress.` }
+      return { text: `Unknown argument "${e.args.trim()}". Use /${COMMAND} to open or close the pane, or /${COMMAND} reset to clear the whole session status.` }
     }
     const done = await togglePane($)
 

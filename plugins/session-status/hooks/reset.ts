@@ -1,7 +1,8 @@
 // Resetting the session's progress, and listing what is open, as data. A
 // `/clear` carries the session items, the reported tickets and the effort
 // over (see `carryOver`); `/session-status reset` and the status tool's
-// `reset` action take them out in one step. The `list` action names every
+// `reset` action clear the whole record in one step, so an unrelated task
+// starts from nothing. The `list` action names every
 // open id, which a `/clear` leaves out of the model's context.
 // register.tsx runs both; nothing here calls `$`.
 
@@ -14,6 +15,10 @@ import { ticketName } from './ticket-reports'
 export type ResetRemoved = {
   /** Session items, dropped ones too. */
   items: number
+  /** Decisions, surprises and blockers, open and closed. */
+  entries: number
+  /** Pull requests and issues the Created section listed. */
+  links: number
   /** Reported tickets, of every effort. */
   tickets: number
   /** The effort's name; null when the session ran none. */
@@ -21,15 +26,28 @@ export type ResetRemoved = {
 }
 
 /**
- * The status without its session items, reported tickets, effort and ticket
- * count, and what it took out. Decisions, blockers and surprises stay, open
- * and closed: an open decision still waits for its answer by the same id.
+ * The status without its record: the session items, the decisions,
+ * surprises and blockers, the created links, the reported tickets, the
+ * effort and its ticket count; and what it took out. Ids start over at 1.
+ * What the session runs now stays: its tasks, crons, subagents, place and
+ * activity.
  */
 export function resetProgress(status: SessionStatus): { status: SessionStatus; removed: ResetRemoved } {
   return {
-    status: { ...status, sessionItems: [], ticketReports: [], effort: null, tickets: null },
+    status: {
+      ...status,
+      items: [],
+      links: [],
+      endListPostedAt: null,
+      sessionItems: [],
+      ticketReports: [],
+      effort: null,
+      tickets: null,
+    },
     removed: {
       items: status.sessionItems.length,
+      entries: status.items.length,
+      links: status.links.length,
       tickets: status.ticketReports.length,
       effort: status.effort?.name ?? null,
     },
@@ -40,14 +58,16 @@ export function resetProgress(status: SessionStatus): { status: SessionStatus; r
 export function resetText(removed: ResetRemoved): string {
   const parts = [
     ...(removed.items > 0 ? [count(removed.items, 'session item')] : []),
+    ...(removed.entries > 0 ? [count(removed.entries, 'decision, surprise or blocker', 'decisions, surprises and blockers')] : []),
+    ...(removed.links > 0 ? [count(removed.links, 'created link')] : []),
     ...(removed.tickets > 0 ? [count(removed.tickets, 'ticket report')] : []),
     ...(removed.effort === null ? [] : [`the effort ${removed.effort}`]),
   ]
   if (parts.length === 0) {
-    return 'Session progress was empty already. Nothing changed.'
+    return 'Session status was empty already. Nothing changed.'
   }
 
-  return `Session progress reset: removed ${joinAnd(parts)}. Open decisions and blockers stay.`
+  return `Session status reset: removed ${joinAnd(parts)}. Everything starts over.`
 }
 
 /**
@@ -84,8 +104,8 @@ export function listText(status: SessionStatus): string {
   return lines.length === 0 ? 'Nothing is open, and the session has no progress.' : lines.join('\n')
 }
 
-function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? '' : 's'}`
+function count(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n} ${n === 1 ? noun : plural}`
 }
 
 function joinAnd(parts: readonly string[]): string {

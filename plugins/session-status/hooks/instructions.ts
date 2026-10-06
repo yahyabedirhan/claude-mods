@@ -37,7 +37,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
   - Call it with state \`stopped\` when a started ticket is no longer being built.
   - Only the orchestrator reports tickets. A delegate that builds one ticket does not.
 - When you need an id that is no longer in your context, for example after \`/clear\`, call the tool with action \`list\`. It names every open id.
-- When the user asks you to reset or clean up the session progress, call the tool with action \`reset\`. It removes the session items, the reported tickets and the effort. Do not reset on your own.
+- Only when the user explicitly asks you to reset, clear or start the session status over, call the tool with action \`reset\`. It removes everything the status recorded, open decisions and blockers too. Never reset on your own or because of \`/clear\`.
 - If you are a subagent and cannot call the status tool, put your decisions and surprises in your final report, with the same fields. The orchestrator records them with the status tool.`
 
 /** The section, added after the engine's own on the session side. */

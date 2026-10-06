@@ -137,7 +137,7 @@ Without items or effort tickets the session figure is the tasks'
 
 ## Opening it
 
-- `/session-status` opens or closes the pane; `/session-status reset` clears the session progress (see below).
+- `/session-status` opens or closes the pane; `/session-status reset` clears the whole session status (see below).
 - The pane opens by itself, once per session, when a subagent starts, a task
   list is made, an effort is found, a ticket or a session item is reported,
   or a decision or surprise is recorded.
@@ -259,10 +259,13 @@ out of the line.
   a report for a different effort starts the tickets from zero.
 - **`/compact`** keeps the status as it is.
 
-To start clean after `/clear`, type **`/session-status reset`**. It removes
-the session items, the reported tickets, the effort and its ticket count; the
-open decisions and blockers stay, with the same ids. The model can do the same
-with the status tool's `reset` action, which it calls only when you ask. Its
+To start an unrelated task from nothing, type **`/session-status reset`**. It
+removes everything the status recorded: the session items, the decisions,
+surprises and blockers (open ones too), the created links, the reported
+tickets, the effort and its ticket count. Ids start over at 1. What the session
+runs now stays: its tasks, crons, subagents and place. The model can do the
+same with the status tool's `reset` action, which it calls only when you
+explicitly ask for a reset, never on its own or because of `/clear`. Its
 `list` action names every open item, decision, blocker and surprise with its
 id, so the model can close them after `/clear` took the ids out of its context.
 
