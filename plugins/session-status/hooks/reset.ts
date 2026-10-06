@@ -3,7 +3,7 @@
 // whole record in one step, so an unrelated task starts from nothing within
 // the same session (a `/clear` starts a new session, and so an empty status).
 // The `list` action names every open id, which a `/compact` can leave out of
-// the model's context.
+// the model's context; its filter names only the entries the model asks for.
 // register.tsx runs both; nothing here calls `$`.
 
 import type { SessionItem, SessionStatus, StatusItem } from '../types'
@@ -114,9 +114,9 @@ export function matchesFilter(entry: ListEntry, filter: ListFilter): boolean {
   return true
 }
 
-/** An id as `matchesFilter` compares it: `#3`, `3` and ` #3 ` are the same, and so are `d1` and `D1`. */
+/** An id as `matchesFilter` compares it: ticket `#3` is `3`, and `d1` is `D1`. */
 function sameId(id: string): string {
-  return id.trim().replace(/^#/, '').toUpperCase()
+  return id.trim().replace(/^#(?=\d+$)/, '').toUpperCase()
 }
 
 /**
@@ -135,10 +135,10 @@ export function listText(status: SessionStatus, filter: ListFilter | null): stri
     }
   }
   const closed = (item: StatusItem, word: string) => (isOpen(item) ? '' : ` (${word})`)
-  const ITEM_ORDER: readonly SessionItem['state'][] = ['added', 'done', 'dropped']
+  const itemOrder: readonly SessionItem['state'][] = ['added', 'done', 'dropped']
   group(
     'Session items',
-    ITEM_ORDER.flatMap(state => status.sessionItems.filter(item => item.state === state)).map(item => ({
+    itemOrder.flatMap(state => status.sessionItems.filter(item => item.state === state)).map(item => ({
       kind: 'item',
       id: item.id,
       open: item.state === 'added',
@@ -164,7 +164,7 @@ export function listText(status: SessionStatus, filter: ListFilter | null): stri
   )
   const surprises = (kind: 'surprise' | 'observation') =>
     status.items.flatMap(item =>
-      item.kind === 'surprise' && (item.source === 'observer') === (kind === 'observation')
+      item.kind === 'surprise' && (item.source === 'observer' ? 'observation' : 'surprise') === kind
         ? [{ kind, id: item.id, open: isOpen(item), line: `${item.id} ${item.occurred}${closed(item, 'dismissed')}` }]
         : [],
     )

@@ -322,6 +322,15 @@ test('the list action refuses an unknown kind or state and names the allowed val
   expect(readStatusToolInput({ action: 'list', filter: 'open' })).toEqual({
     error: 'A filter is an object with `kind`, `state` and `id`, each optional.',
   })
+  expect(readStatusToolInput({ action: 'list', filter: { kind: [5] } })).toEqual({
+    error: "A filter's `kind` is an array of kinds: item, decision, blocker, surprise, observation, ticket, effort.",
+  })
+  expect(readStatusToolInput({ action: 'list', filter: { id: [''] } })).toEqual({
+    error: "A filter's `id` is an array of ids, such as D1, S2 or #3.",
+  })
+  expect(readStatusToolInput({ action: 'list', filter: { kind: [] } })).toEqual({
+    list: { kinds: null, state: 'open', ids: null },
+  })
   expect(readStatusToolInput({ action: 'list' })).toEqual({ list: null })
   expect(readStatusToolInput({ action: 'list', filter: { kind: 'blocker', id: ['B1'] } })).toEqual({
     list: { kinds: new Set(['blocker']), state: 'open', ids: new Set(['B1']) },

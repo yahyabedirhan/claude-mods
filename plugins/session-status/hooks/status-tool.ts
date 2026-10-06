@@ -9,10 +9,10 @@
 import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
 import { effortLabel } from './effort'
 import { readPageUrl } from './links'
-import { LIST_KINDS, LIST_STATES } from './reset'
-import type { ListFilter, ListKind, ListState } from './reset'
 import type { FoundLink } from './links'
 import { joinFirst } from './lists'
+import { LIST_KINDS, LIST_STATES } from './reset'
+import type { ListFilter, ListKind, ListState } from './reset'
 import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
 import { kindOfId } from './status'
@@ -462,7 +462,10 @@ function readListFilter(filter: unknown): { list: ListFilter | null } | { error:
     return { error: 'A filter is an object with `kind`, `state` and `id`, each optional.' }
   }
   const { kind, state = 'open', id } = filter as Record<string, unknown>
-  const kinds = strings(kind)
+  const kinds = filterValues(kind)
+  if (kinds === undefined) {
+    return { error: `A filter's \`kind\` is an array of kinds: ${LIST_KINDS.join(', ')}.` }
+  }
   const unknownKind = kinds?.find(k => !LIST_KINDS.includes(k as ListKind))
   if (unknownKind !== undefined) {
     return { error: `Unknown filter kind "${unknownKind}". Use some of: ${LIST_KINDS.join(', ')}.` }
@@ -470,7 +473,10 @@ function readListFilter(filter: unknown): { list: ListFilter | null } | { error:
   if (!LIST_STATES.includes(state as ListState)) {
     return { error: `Unknown filter state "${String(state)}". Use one of: ${LIST_STATES.join(', ')}.` }
   }
-  const ids = strings(id)
+  const ids = filterValues(id)
+  if (ids === undefined) {
+    return { error: "A filter's `id` is an array of ids, such as D1, S2 or #3." }
+  }
 
   return {
     list: {
@@ -481,11 +487,17 @@ function readListFilter(filter: unknown): { list: ListFilter | null } | { error:
   }
 }
 
-/** The non-empty strings of an array or of one string; null when there is none, which keeps all. */
-function strings(value: unknown): string[] | null {
-  const list = (Array.isArray(value) ? value : [value]).map(text).filter((v): v is string => v !== null)
+/**
+ * The values of a filter key, an array or one string: null when it is left
+ * out or empty, which keeps all; undefined when a value is no non-empty string.
+ */
+function filterValues(value: unknown): string[] | null | undefined {
+  if (value === undefined || value === null) {
+    return null
+  }
+  const list = (Array.isArray(value) ? value : [value]).map(text)
 
-  return list.length === 0 ? null : list
+  return list.some(v => v === null) ? undefined : list.length === 0 ? null : (list as string[])
 }
 
 /**
