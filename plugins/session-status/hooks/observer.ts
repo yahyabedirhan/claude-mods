@@ -82,15 +82,57 @@ function clip(text: string, limit = TEXT_LIMIT): string {
   return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat
 }
 
-/** One transcript message as the lines a check reads. */
+/** The text inside each `<tag>…</tag>` of `text`, in order. */
+function tagged(text: string, tag: string): string[] {
+  return [...text.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'))].map(match => match[1] ?? '')
+}
+
+/**
+ * The lines for a user message that records what the person ran in Claude
+ * Code itself, not a request to the agent: a slash command (`<command-name>`)
+ * or a `!` shell command (`<bash-input>`), and their output. The caveat
+ * Claude Code puts before them gives no line. Undefined for any other message.
+ */
+function userCommandLines(text: string): string[] | undefined {
+  const lines: string[] = []
+  for (const name of tagged(text, 'command-name')) {
+    const args = tagged(text, 'command-args').join(' ').trim()
+    lines.push(`user ran ${clip(args === '' ? name : `${name} ${args}`)}`)
+  }
+  for (const command of tagged(text, 'bash-input')) {
+    lines.push(`user ran !${clip(command)}`)
+  }
+  const output = ['local-command-stdout', 'local-command-stderr', 'bash-stdout', 'bash-stderr']
+    .flatMap(tag => tagged(text, tag))
+    .join(' ')
+    .trim()
+  if (output !== '') {
+    lines.push(`user's command output: ${clip(output)}`)
+  }
+  const isCommand = lines.length > 0 || /<(local-command-[a-z]+|bash-[a-z]+)>/.test(text)
+
+  return isCommand ? lines : undefined
+}
+
+/**
+ * One transcript message as the lines a check reads, each naming who did
+ * it: the user, the agent, or a subagent the agent started.
+ */
 function stepLines(message: SessionMessage): string[] {
+  if (message.text !== '' && message.role === 'user') {
+    const commandLines = userCommandLines(message.text)
+    if (commandLines !== undefined) {
+      return commandLines
+    }
+  }
   const lines: string[] = []
   if (message.text !== '') {
-    lines.push(`${message.role}: ${clip(message.text)}`)
+    lines.push(`${message.role === 'user' ? 'user' : 'agent'}: ${clip(message.text)}`)
   }
   for (const use of message.toolUses) {
     const outcome = use.text === undefined ? 'running' : `${use.isError === true ? 'error: ' : ''}${clip(use.text)}`
-    lines.push(`tool ${use.tool} ${clip(JSON.stringify(use.input))} -> ${outcome}`)
+    const who = use.agentId === undefined ? `agent tool ${use.tool}` : 'subagent'
+    lines.push(`${who} ${clip(JSON.stringify(use.input))} -> ${outcome}`)
   }
 
   return lines
@@ -116,6 +158,9 @@ The agent reports what it is stuck on by itself. Find only what it does not see:
 - a loop: the same failing step tried three or more times with no change;
 - a time sink: many turns spent on a side issue that the task does not need;
 - work against the plan: steps that contradict the effort phase, the task list or the session items.
+Each step starts with who did it: the user, the agent or a subagent.
+The user runs slash commands and shell commands in Claude Code itself; "user ran" marks them and their output.
+Never report the user's own actions as the agent's, and do not find fault with the agent for them.
 Small details, style, single errors and errors the agent fixed are not findings.
 When you are not sure, give no findings.
 ${CONCISE_RULE}
