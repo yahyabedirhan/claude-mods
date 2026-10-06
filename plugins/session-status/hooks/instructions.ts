@@ -29,7 +29,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
   - Also add an item for follow-up work that you take on, and for each step left before the session settles: for example the review, the pull request, the user's approval, the merge and the settle.
   - Call it with state \`done\` and the item's \`id\` (I1, ...) when its work is finished and verified.
   - Call it with state \`dropped\` and the item's \`id\` when the item is no longer needed, or a later item replaced it.
-  - Do not add an item for an effort ticket. The tickets count by themselves.
+  - Add an item for each effort ticket you take on, and mark it done when its work lands. The Session bar counts only items; the Effort bar shows which issues GitHub closed.
   - Only the main session reports items. A subagent does not.
 - When you orchestrate an effort's tickets, report each ticket with action \`ticket\`. Give the ticket's issue \`number\` and its \`title\`. On your first ticket call, also give \`effort\`: the name in the effort's \`effort:<name>\` issue label.
   - Call it with state \`started\` when you delegate the ticket.

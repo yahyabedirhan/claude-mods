@@ -133,28 +133,30 @@ test('a subagent cannot report items', async ($, on) => {
   expect((w.saved[SESSION_ID] as { sessionItems?: unknown[] } | undefined)?.sessionItems ?? []).toEqual([])
 })
 
-test("during an effort the session total holds every build ticket, QA left out, and the session's items", async ($, on) => {
+test('during an effort the Session bar counts only the items, and the Effort section the closed tickets, QA counted', async ($, on) => {
   const w = world(on, { isNarrow: true, issues: effortIssues() })
   await start($)
   for (const title of ['Review the branch', 'Open the pull request', 'Get the approval', 'Merge', 'Follow up', 'Settle']) {
     await add($, title)
   }
+  await add($, 'Build ticket 2')
   await callStatusTool($, { action: 'ticket', state: 'started', number: 2, title: 'Ticket 2', effort: EFFORT })
+  await mark($, 'done', 'I7')
   const answer = await callStatusTool($, { action: 'ticket', state: 'landed', number: 2 })
   await w.clock.advance(0)
 
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { effort: EFFORT, done: 0, total: 14, builds: 13 } })
-  // The tracker's count arrives after the reply: until then the reported ticket stands for the tickets.
+  // The landed ticket moves no bar: its item, marked done, moved the Session bar.
   expect(answer.result).toBe('Ticket #2 Ticket 2 is landed. Session: 1/7 done.')
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 1/19')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 1/7')
     // The effort keeps counting its QA ticket: it is not finished until QA closes.
     expect(await sectionText($, surface, 'effort')).toContain('Closed 0/14')
-    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/19 · closed 0/14 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/7 · closed 0/14 · 0 surprise')
   }
 })
 
-test('a QA ticket the orchestrator reports does not count in the session', () => {
+test('a QA ticket the orchestrator starts is not building, and tickets alone give no Session progress', () => {
   const status = {
     ...emptyStatus(SESSION_ID),
     ticketReports: [
@@ -163,10 +165,15 @@ test('a QA ticket the orchestrator reports does not count in the session', () =>
     ],
   }
 
-  expect(sessionProgress(status)).toMatchObject({ done: 1, total: 1, building: [] })
+  expect(sessionProgress(status)).toBeNull()
+  const building = {
+    ...status,
+    ticketReports: [...status.ticketReports, { number: 4, title: 'Ticket 4', state: 'started' as const, at: 0 }],
+  }
+  expect(sessionProgress(building)).toMatchObject({ done: 0, total: 0, building: [{ number: 4 }] })
 })
 
-test('the tickets the tracker counted closed are done, QA ones left out', () => {
+test('the tickets landed or closed never count in the Session bar; only the items do', () => {
   const list = [
     { number: 2, title: 'Ticket 2', isClosed: true },
     { number: 3, title: 'Ticket 3', isClosed: true },
@@ -180,26 +187,12 @@ test('the tickets the tracker counted closed are done, QA ones left out', () => 
     ticketReports: [{ number: 2, title: 'Ticket 2', state: 'landed' as const, at: 0, effort: EFFORT }],
   }
 
-  expect(sessionProgress(status)).toMatchObject({ done: 2, total: 3 })
-  // A count for another effort closes nothing in this one.
-  expect(sessionProgress({ ...status, effort: { name: 'other' } })).toBeNull()
+  expect(sessionProgress(status)).toBeNull()
+  const item: SessionItem = { id: 'I1', title: 'Build ticket 3', state: 'added', addedAt: 0, at: 0 }
+  expect(sessionProgress({ ...status, sessionItems: [item] })).toMatchObject({ done: 0, total: 1 })
 })
 
-test('the tickets reported landed stay done while the tracker counts fewer closed', () => {
-  const status = {
-    ...emptyStatus(SESSION_ID),
-    effort: { name: EFFORT },
-    tickets: { effort: EFFORT, done: 0, total: 3, builds: 3, at: 0 },
-    ticketReports: [
-      { number: 2, title: 'Ticket 2', state: 'landed' as const, at: 0, effort: EFFORT },
-      { number: 3, title: 'Ticket 3', state: 'landed' as const, at: 0, effort: EFFORT },
-    ],
-  }
-
-  expect(sessionProgress(status)).toMatchObject({ done: 2, total: 3 })
-})
-
-test('the task list keeps a line of its own beside the items', async ($, on) => {
+test('the task list shows in the Task section, apart from the items', async ($, on) => {
   world(on, { isNarrow: true })
   await start($)
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
@@ -208,7 +201,8 @@ test('the task list keeps a line of its own beside the items', async ($, on) => 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
     expect(text).toContain('Progress 0/1')
-    expect(text).toContain('Tasks 0/1')
+    expect(text).not.toContain('Tasks')
+    expect(await sectionText($, surface, 'task')).toMatch(/^TaskDone 0\/1 /)
     expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 0/1 · tasks 0/1 · 0 surprise')
   }
 })

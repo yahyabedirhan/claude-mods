@@ -35,7 +35,7 @@ function setStatus($: Engine, taskId: string, status: 'in_progress' | 'completed
   return $.tool.call({ tool: 'TaskUpdate', taskId, status })
 }
 
-test('the Session section shows tasks done, the total and a bar', async ($, on) => {
+test('the Task section shows tasks done, the total and a bar, and the Session section no task line', async ($, on) => {
   const w = world(on)
   taskTools(w)
   await start($)
@@ -46,13 +46,13 @@ test('the Session section shows tasks done, the total and a bar', async ($, on) 
   await setStatus($, '3', 'in_progress')
 
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Tasks 1/3')
-    expect(text).toMatch(/█+░+/)
+    const text = (await sectionText($, surface, 'task')) ?? ''
+    expect(text).toMatch(/^TaskDone 1\/3 █+░+/)
+    expect(await sectionText($, surface, 'session')).toMatch(/^Session\s*ID\s+session-a$/)
   }
 })
 
-test('the bar fills as tasks finish', async ($, on) => {
+test('the Task bar fills as tasks finish', async ($, on) => {
   const w = world(on)
   taskTools(w)
   await start($)
@@ -62,8 +62,8 @@ test('the bar fills as tasks finish', async ($, on) => {
   await setStatus($, '2', 'completed')
 
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Tasks 2/2')
+    const text = (await sectionText($, surface, 'task')) ?? ''
+    expect(text).toContain('Done 2/2')
     expect(text).not.toContain('░')
   }
 })

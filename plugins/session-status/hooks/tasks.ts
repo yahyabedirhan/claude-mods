@@ -120,3 +120,14 @@ export function currentTask(tasks: readonly Task[]): Task | null {
 function withTasks(status: SessionStatus, tasks: Task[]): SessionStatus {
   return { ...status, tasks, progress: progressOf(tasks) }
 }
+
+/**
+ * The task list as the Task section lists it: the running tasks first, then
+ * the pending ones, then the completed ones, each in the order it was made.
+ */
+export function listedTasks(status: SessionStatus | null): Task[] {
+  const tasks = status?.tasks ?? []
+  const of = (state: Status) => tasks.filter(task => task.status === state)
+
+  return [...of('in_progress'), ...of('pending'), ...of('completed')]
+}

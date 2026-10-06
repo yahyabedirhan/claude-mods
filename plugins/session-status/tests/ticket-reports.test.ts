@@ -11,6 +11,7 @@ import {
   bandText,
   callStatusTool,
   ghIssue,
+  mountPane,
   sectionText,
   start,
   world,
@@ -63,7 +64,7 @@ test('the status tool describes the ticket action and its fields', async ($, on)
   expect(tool?.description).toMatch(/never for a delegate/i)
 })
 
-test('the Session section counts the tickets landed or closed, of all the tracker counted', async ($, on) => {
+test('tickets landed or closed never move the Session bar; the Effort section counts the closed ones', async ($, on) => {
   const w = world(on, { issues: runIssues() })
   await start($)
 
@@ -83,7 +84,7 @@ test('the Session section counts the tickets landed or closed, of all the tracke
   })
   for (const surface of SURFACES) {
     const session = (await sectionText($, surface, 'session')) ?? ''
-    expect(session).toContain('Progress 1/13')
+    expect(session).not.toContain('Progress')
     expect(session).toContain('Building: #3')
     expect(session).not.toContain('#4')
     // The tracker's count stays in the Effort section: one closed before the run.
@@ -91,29 +92,20 @@ test('the Session section counts the tickets landed or closed, of all the tracke
   }
 })
 
-test('a ticket both closed and landed counts once in each section', async ($, on) => {
+test('the ticket result tells the model the Session progress the pane shows, from the items only', async ($, on) => {
   const w = world(on, { issues: runIssues() })
   await start($)
-
-  await ticket($, 'landed', 2, 'Player: Open a video', EFFORT)
-  await settle(w.clock)
-
-  for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 1/13')
-    expect(await sectionText($, surface, 'effort')).toContain('Closed 1/13')
-  }
-})
-
-test('the ticket result tells the model the Session progress the pane shows', async ($, on) => {
-  const w = world(on, { issues: runIssues() })
-  await start($)
-  await ticket($, 'started', 4, 'Comment: Queue a comment', EFFORT)
+  expect((await ticket($, 'started', 4, 'Comment: Queue a comment', EFFORT)).result).toBe(
+    'Ticket #4 Comment: Queue a comment is started. Session: no items, building #4.',
+  )
   await ticket($, 'started', 5, 'Ticket 5')
+  await callStatusTool($, { action: 'item', state: 'added', title: 'Build #4' })
+  await callStatusTool($, { action: 'item', state: 'done', id: 'I1' })
   await settle(w.clock)
 
   const answer = await ticket($, 'landed', 4)
 
-  expect(answer.result).toBe('Ticket #4 Comment: Queue a comment is landed. Session: 1/13 done, building #5.')
+  expect(answer.result).toBe('Ticket #4 Comment: Queue a comment is landed. Session: 1/1 done, building #5.')
   expect((await ticket($, 'landed', 4)).result).toContain('is landed already.')
 })
 
@@ -127,7 +119,7 @@ test('the reply names at most four tickets in progress, then how many more', asy
   expect((await ticket($, 'started', 7, 'Ticket 7')).result).toContain('building #2, #3, #4, #5, +2 more.')
 })
 
-test('without gh the Session section still counts the reports, and no Effort section shows', async ($, on) => {
+test('without gh the Session section still names the tickets being built, and no Effort section shows', async ($, on) => {
   const w = world(on, { failRuns: true })
   await start($)
 
@@ -136,11 +128,11 @@ test('without gh the Session section still counts the reports, and no Effort sec
   const answer = await ticket($, 'started', 4, 'Comment: Queue a comment')
   await settle(w.clock)
 
-  expect(answer.result).toContain('Session: 1/3 done, building #3, #4.')
+  expect(answer.result).toContain('Session: no items, building #3, #4.')
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: null })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Progress 1/3')
+    expect(text).not.toContain('Progress')
     expect(text).toContain('Building: #3, #4')
     expect(await sectionText($, surface, 'effort')).toBeUndefined()
   }
@@ -168,7 +160,7 @@ test('a ticket report without an effort name takes the branch as the effort', as
   expect(w.saved[SESSION_ID]).toMatchObject({ effort: { name: 'proto-1', from: 'branch' } })
 })
 
-test('a report naming another effort switches the session to it, and Session counts only its tickets', async ($, on) => {
+test('a report naming another effort switches the session to it, and Session names only its tickets as building', async ($, on) => {
   const w = world(on)
   await start($)
   await ticket($, 'landed', 2, 'Player: Open a video', EFFORT)
@@ -178,7 +170,7 @@ test('a report naming another effort switches the session to it, and Session cou
 
   const answer = await ticket($, 'started', 3, 'Search: Find a video', 'search-v1')
 
-  expect(answer.result).toContain('Session: 0/1 done, building #3.')
+  expect(answer.result).toContain('Session: no items, building #3.')
   expect(w.saved[SESSION_ID]).toMatchObject({
     effort: { name: 'search-v1', from: 'report' },
     ticketReports: [
@@ -188,13 +180,13 @@ test('a report naming another effort switches the session to it, and Session cou
     ],
   })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Building: #3')
   }
 
-  // Back to the first effort: its reports count again.
+  // Back to the first effort: its tickets are all landed, so nothing is building.
   await ticket($, 'landed', 3, undefined, EFFORT)
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 2/2')
+    expect(await sectionText($, surface, 'session')).toMatch(/^Session\s*ID\s+session-a$/)
   }
 })
 
@@ -209,9 +201,7 @@ test('stopped takes a started ticket back and leaves a landed one landed', async
 
   expect(w.saved[SESSION_ID]).toMatchObject({ ticketReports: [{ number: 4, state: 'landed' }] })
   for (const surface of SURFACES) {
-    const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Progress 1/1')
-    expect(text).not.toContain('Building')
+    expect(await sectionText($, surface, 'session')).toMatch(/^Session\s*ID\s+session-a$/)
   }
 })
 
@@ -222,7 +212,7 @@ test('stopped after rework puts the ticket back to landed', async ($, on) => {
   await w.clock.advance(60_000)
   await ticket($, 'started', 4)
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Building: #4')
   }
 
   expect((await ticket($, 'stopped', 4)).result).toContain('Ticket #4 Comment: Queue a comment is landed again')
@@ -230,7 +220,7 @@ test('stopped after rework puts the ticket back to landed', async ($, on) => {
   expect(w.saved[SESSION_ID]).toMatchObject({ ticketReports: [{ number: 4, state: 'landed', at: START }] })
   expect((w.saved[SESSION_ID] as { ticketReports: object[] }).ticketReports[0]).not.toHaveProperty('landedAt')
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 1/1')
+    expect(await sectionText($, surface, 'session')).not.toContain('Building')
   }
 })
 
@@ -261,7 +251,7 @@ test('a ticket without an issue number is reported by its title', async ($, on) 
   })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toContain('Progress 1/2')
+    expect(text).not.toContain('Progress')
     expect(text).toContain('Building: Add the logout button')
   }
 })
@@ -282,7 +272,7 @@ test('the status tool refuses a ticket it cannot name or place', async ($, on) =
   expect(w.saved[SESSION_ID]).toMatchObject({ ticketReports: [{ number: 3 }] })
 })
 
-test('the section names at most four tickets in progress', async ($, on) => {
+test('the section names at most four tickets in progress, then a "+N more" button', async ($, on) => {
   world(on)
   await start($)
   for (const n of [2, 3, 4, 5, 6, 7]) {
@@ -290,11 +280,18 @@ test('the section names at most four tickets in progress', async ($, on) => {
   }
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Building: #2, #3, #4, #5, +2 more')
+    const ui = await mountPane($, surface)
+    const text = (await ui.find({ key: 'session' }))?.text ?? ''
+    // The line names four tickets; the button below it, not the line, says how many more.
+    expect(text).toContain('Building: #2, #3, #4, #5+2 more')
+    expect(text).not.toContain(', +2 more')
+    expect(text).not.toContain('#6')
+    expect((await ui.find({ key: 'building-more' }))?.text).toBe('+2 more')
+    await ui.unmount()
   }
 })
 
-test('the band shows the session and closed counts, never ticket names', async ($, on) => {
+test('the band shows the closed count and the items, never the tickets or their names', async ($, on) => {
   const w = world(on, { isNarrow: true, issues: runIssues() })
   await start($)
   await ticket($, 'landed', 4, 'Comment: Queue a comment', EFFORT)
@@ -302,7 +299,13 @@ test('the band shows the session and closed counts, never ticket names', async (
   await settle(w.clock)
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/13 · closed 1/13 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · 0/0 done · closed 1/13 · 0 surprise')
+  }
+
+  await callStatusTool($, { action: 'item', state: 'added', title: 'Build #4' })
+  await callStatusTool($, { action: 'item', state: 'done', id: 'I1' })
+  for (const surface of SURFACES) {
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · progress 1/1 · closed 1/13 · 0 surprise')
   }
 })
 
@@ -325,16 +328,20 @@ async function clear($: Engine, w: ReturnType<typeof world>) {
   await $.classic.SessionStart({ source: 'clear', session_id: NEW_SESSION } as never)
 }
 
-test('after /clear the Session progress starts from zero, even for the same effort', async ($, on) => {
+test('after /clear the Session section starts with no items, even for the same effort', async ($, on) => {
   const w = world(on)
   await start($)
   await ticket($, 'landed', 4, 'Comment: Queue a comment', EFFORT)
+  await callStatusTool($, { action: 'item', state: 'added', title: 'Build #4' })
+  await callStatusTool($, { action: 'item', state: 'done', id: 'I1' })
 
   await clear($, w)
   await ticket($, 'started', 3, 'Control: Play a video', EFFORT)
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
+    const text = (await sectionText($, surface, 'session')) ?? ''
+    expect(text).not.toContain('Progress')
+    expect(text).toContain('Building: #3')
   }
 })
 

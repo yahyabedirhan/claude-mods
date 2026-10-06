@@ -20,16 +20,19 @@ You should know  every open blocker: what failed and what unblocks it
 Session          ID        cb8cbec3-754b-4b30-80d5-014a9daf1042
                  Branch    pane-width           press the ID, branch or worktree to copy it
                  Worktree  claude-mods-8ec7ac/1
-                 Progress 7/19 ███████░░░░░       the session's items and effort tickets
+                 Progress 7/19 ███████░░░░░       the session's own items
                  ○ I8 Open the pull request       2 items, open ones first, then "+N more"
                  ✓ I7 Run the tests
                  Building: #3, #5
-                 Tasks 2/5 ████████░░░░░          while a task list exists
 Effort           video-review-v1                  during an effort
-                 Closed 1/13 █░░░░░░░░░░░         once the tracker counted it
+                 Closed 1/13 █░░░░░░░░░░░         the issues GitHub closed
                  ○ #4 Effort progress             2 tickets, open ones first, each a link
                  ○ #5 Observer agent
                  +11 more
+Task             Done 2/5 ████████░░░░░           while a task list exists
+                 ◐ Write the tests                2 tasks, running ones first
+                 ○ Update the README
+                 +3 more
 Links            󰓂 claude-mods#14 · 󰘭 skills#88 · ◎ claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
@@ -65,21 +68,24 @@ Answered (N) · Last update
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
      Press a value to copy it to the clipboard: the full session ID, the
      branch name, or the worktree's full path.
-   - **Progress**: how close the session is to settling, as done of all (see
+   - **Progress**: this session's own items, done of all (see
      [Session progress](#session-progress)). The total grows as the session
-     takes on more work.
+     takes on more work. Effort tickets and tasks never count here.
    - The items, each with its id: two of them, the open ones first (`○`,
      oldest first), then the done ones (`✓`, newest first), then a pressable
      "+N more" for every item behind Progress. Dropped items are left out.
-   - **Building**: the tickets the orchestrator builds now.
-   - **Tasks**: the task list's tasks done, on a line of its own. It never
-     mixes into Progress.
+   - **Building**: the tickets the orchestrator builds now, the first 4,
+     then a pressable "+N more".
 6. **Effort**, during an effort: its name, then the tracker's count once it
    has one: closed tickets of all the effort's issues, `QA:` tickets
    included. It never mixes in the orchestrator's reports. Below it, two
    tickets, the open ones first (`○`), then the closed ones (`✓`), each in
    issue-number order; each number links to its issue. A pressable
    "+N more" lists every ticket of the effort.
+   **Task**, while Claude Code's task list (`TaskCreate`, `TodoWrite`) has a
+   task: the tasks completed of all, then two tasks, the running ones first
+   (`◐`), then the pending (`○`), then the completed (`✓`), and a pressable
+   "+N more" that lists them all.
 7. **Links**: the pull requests and issues attached to the session, in
    every repository, newest 5 first, then "+N more". The session's
    `gh pr create` and `gh issue create` add theirs by themselves; the agent
@@ -127,8 +133,10 @@ Answered (N) · Last update
     dismissed.
 16. **Last update**: its time and age.
 
-**"+N more"** under the session items, the effort's tickets, Decide before settling, Follow-up
-after settling, Surprises and Observations is a button:
+**Every "+N more" is a button**: under the session items, the Building
+line, the effort's tickets, the tasks, the links, Decide before settling,
+Follow-up after settling, Surprises, Observations and the cron jobs. A new
+section that shows "+N more" follows the same rule. It is a button:
 pressing it turns the pane into that whole list, newest first (the items:
 and the tickets: open ones first), with a
 **← Back** button (or the `b` key) to return. Closing the pane returns it to
@@ -153,7 +161,7 @@ prompt shows the counts instead:
 observer's findings out.
 `follow-up` shows while there is one, `tasks` while a task list exists, and
 `closed` during an effort.
-Without items or effort tickets the session figure is the tasks'
+Without items the session figure is the tasks'
 `<done>/<total> done`.
 
 ## Opening it
@@ -192,61 +200,63 @@ decision until it is resolved. Follow-ups are never on the list.
 
 ## Session progress
 
-Every session shows how close it is to settling: `Progress 7/19`, done of all.
-The total is the session's items plus, during an effort, the effort's
-tickets.
+The pane shows three kinds of progress, and they never mix:
+
+| Section | Counts | Done when |
+| --- | --- | --- |
+| **Session** (`Progress 7/19`) | the items this session is responsible for | the session marks the item `done` |
+| **Effort** (`Closed 1/14`) | the effort's GitHub issues, without the `Spec:` issue | GitHub closes the issue |
+| **Task** (`Done 2/5`) | Claude Code's task list | the task is completed |
+
+A session without an effort shows only Session. A session that builds an
+effort adds an item for each ticket it takes on and marks it done when its
+work lands; the issue, and the Effort bar, move only when GitHub closes it,
+usually when you merge. So a settled session reads full while its issues
+are still open:
+
+```text
+1. the agent adds  I5 Build #4         Session 4/5   Effort 3/9
+2. its work lands in the pull request  Session 5/5   Effort 3/9   (#4 still open)
+3. you merge; GitHub closes #4         Session 5/5   Effort 4/9
+```
 
 **Items.** The main session reports each piece of work it must do before it
 settles with the `item` action. The total grows as the session goes on.
 
 | State | When the agent reports it | What Progress does |
 | --- | --- | --- |
-| `added` | You ask for something: one item for each request or sub-request. Also follow-up work the agent takes on, and each step left before the session settles (review, pull request, your approval, merge, settle). | Counts one more item and lists it as open. |
+| `added` | You ask for something: one item for each request or sub-request. Also each effort ticket it takes on, follow-up work, and each step left before the session settles (review, pull request, your approval, merge, settle). | Counts one more item and lists it as open. |
 | `done` | The item's work is finished and verified. | Counts it as done. |
 | `dropped` | The item is no longer needed, or a later item replaced it. | Takes it out of the total, even after it was done. |
 
 - An item is never reopened: rework is a new item. A dropped item stays
   dropped.
 - Only the main session reports items; a subagent's `item` call is refused.
-- The task list (`TaskCreate`, `TodoWrite`) keeps its own **Tasks** line and
-  never mixes into Progress.
-
-**Effort tickets.** During an effort, Progress also counts the effort's
-tickets: every ticket the tracker counted, or the tickets reported when they
-are more. A ticket counts as done once the orchestrator reports it landed.
-`Spec:` and `QA:` issues are left out: you close a QA ticket by hand, so the
-orchestrator never lands one. The agent adds no item for a ticket.
 
 ## Effort progress
 
-During an effort the pane shows two counts that never mix:
-
-- **Session** (`Progress 7/19`): the session's items and the tickets the
-  orchestrator reported landed, of every ticket of the effort.
-- **Effort** (`Closed 1/14`): what the tracker says. An issue often closes
-  long after its ticket is built: when the pull request merges, after QA,
-  or never in a run that shares its issues. It counts the `QA:` tickets: the
-  effort is not finished until they close.
+**Effort** (`Closed 1/14`) is what GitHub says: the closed issues with the
+label `effort:<name>`, of all of them, without the `Spec:` issue. An issue
+often closes long after its ticket is built: when the pull request merges,
+after QA, or never in a run that shares its issues. It counts the `QA:`
+tickets: the effort is not finished until they close.
 
 The orchestrator reports each ticket with the `ticket` action:
 
 | State | When the orchestrator reports it | What Session does |
 | --- | --- | --- |
 | `started` | It delegates the ticket. | Names the ticket: `Building: #3`. |
-| `landed` | The ticket's commit is on the effort branch. | Counts the ticket as landed. |
-| `stopped` | A started ticket is no longer being built. | Removes the ticket. A ticket started again after it landed (rework) goes back to landed. |
+| `landed` | The ticket's commit is on the effort branch. | Takes it off the Building line. |
+| `stopped` | A started ticket is no longer being built. | Takes it off the Building line. A ticket started again after it landed (rework) goes back to landed. |
 
-- **Session** counts the tickets reported landed, of all the effort's
-  tickets without `QA:` ones.
-- **Closed** is the closed issues with the label `effort:<name>`, of all of
-  them, without the `Spec:` issue.
+- Ticket reports feed only the Building line; they never change a bar.
 - **The effort's name** comes from the `effort` field of a `ticket` call,
   from an `effort:<name>` label in a command, or from the git branch. A
   report that names another effort switches the session to it; only that
   effort's reports count.
 - A `stopped` for a ticket never reported changes nothing.
 - A ticket without an issue number is reported by its title alone.
-- **Without `gh`** the Effort section is left out; Session still counts.
+- **Without `gh`** the Effort section is left out; Session still counts its items.
 
 ## Places
 

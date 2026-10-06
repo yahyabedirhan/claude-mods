@@ -40,6 +40,8 @@ test('blocked items take the warning colour, ids the accent, labels dim, and bar
   await callStatusTool($, decisionBeforeSettling())
   await callStatusTool($, { action: 'ticket', state: 'started', number: 3, title: 'Play', effort: 'e' })
   await callStatusTool($, { action: 'ticket', state: 'landed', number: 4, title: 'Queue' })
+  await callStatusTool($, { action: 'item', state: 'added', title: 'Queue' })
+  await callStatusTool($, { action: 'item', state: 'done', id: 'I1' })
   for (let turn = 0; turn < 5; turn++) {
     await $.turn.complete({ answer: 'Done.', durationMs: 1000, isAborted: false, turnId: 'turn', reason: 'answer' })
   }

@@ -2,14 +2,31 @@
 // "+N more" that opens that view. A list section shows its newest few; the
 // full-list view (see list-view.tsx) shows every entry.
 
-import type { RenderNode } from 'claude-code'
+import type { RenderNode, RenderSurface } from 'claude-code'
 
-import type { Decision, GitHubRepo, PaneView, SessionItem, SessionStatus, Surprise, TrackedTicket } from '../../types'
+import type {
+  CronJob,
+  Decision,
+  GitHubRepo,
+  PaneView,
+  SessionItem,
+  SessionLink,
+  SessionStatus,
+  Surprise,
+  Task,
+  TicketReport,
+  TrackedTicket,
+} from '../../types'
+import { expireCrons } from '../crons'
 import { effortTickets } from '../effort-progress'
+import { linkLabel } from '../links'
 import { COLOR } from '../palette'
 import { issueUrl } from '../place'
 import { listedItems } from '../session-items'
+import { sessionProgress } from '../session-progress'
 import { isOpen, onEndList, openFollowUps, openToDecide } from '../status'
+import { listedTasks } from '../tasks'
+import { ticketShortName } from '../ticket-reports'
 import type { Ui } from './section'
 
 /** The surprises the agent recorded, open, oldest first. */
@@ -90,6 +107,81 @@ export function ticketEntry(ui: Ui, ticket: TrackedTicket, repo: GitHubRepo | nu
   )
 }
 
+/** One task of the task list: `○ Write tests`, `◐` while it runs, `✓` once completed. */
+export function taskEntry(ui: Ui, task: Task, prefix: string): RenderNode {
+  const { Text } = ui
+  const mark = task.status === 'completed' ? '✓ ' : task.status === 'in_progress' ? '◐ ' : '○ '
+
+  return (
+    <Text key={`${prefix}-${task.id}`}>
+      <Text dimColor>{mark}</Text>
+      {task.subject}
+    </Text>
+  )
+}
+
+/** Material Design's pull request and merge glyphs, from a Nerd Font: the terminal draws them. */
+const PR_GLYPH = '\u{F04C2}'
+const MERGED_GLYPH = '\u{F062D}'
+
+/** A pull request's mark where no Nerd Font draws: the desktop and the others. */
+const PR_PLAIN = '⇄'
+
+/**
+ * Each page's mark and colour by its kind and state: an open page green, a
+ * merged pull request or a closed issue purple, a pull request closed
+ * without merging red.
+ */
+export function mark(link: SessionLink, surface: RenderSurface): { glyph: string; color: string } {
+  const state = link.state ?? 'open'
+  if (link.kind === 'issue') {
+    return state === 'open' ? { glyph: '◎', color: COLOR.open } : { glyph: '⊙', color: COLOR.merged }
+  }
+  const pr = surface === 'terminal' ? PR_GLYPH : PR_PLAIN
+  if (state === 'merged') {
+    return { glyph: surface === 'terminal' ? MERGED_GLYPH : PR_PLAIN, color: COLOR.merged }
+  }
+
+  return { glyph: pr, color: state === 'closed' ? COLOR.closedUnmerged : COLOR.open }
+}
+
+/** One page: its mark in its colour, then `<repo>#<n>`, a link to the page. */
+export function linkEntry(ui: Ui, link: SessionLink, surface: RenderSurface): RenderNode {
+  const { Link, Text } = ui
+  const { glyph, color } = mark(link, surface)
+
+  return (
+    <Text key={`link-${link.url}`}>
+      <Text color={color}>{`${glyph} `}</Text>
+      <Link href={link.url} label={linkLabel(link)} />
+    </Text>
+  )
+}
+
+/** One cron job: its fires, its schedule and its prompt, on one line. */
+export function cronEntry(ui: Ui, job: CronJob, prefix: string): RenderNode {
+  const { Text } = ui
+
+  return (
+    <Text key={`${prefix}-${job.id}`} wrap="truncate-end">
+      <Text dimColor>{`${job.fires > 0 ? `${job.fires}× ` : ''}${job.schedule} · `}</Text>
+      {job.prompt}
+    </Text>
+  )
+}
+
+/** One ticket being built: `#3 Play a video`, the number a link to its issue when it has a page. */
+export function buildingEntry(ui: Ui, ticket: TicketReport, repo: GitHubRepo | null): RenderNode {
+  const { Link, Text } = ui
+  const name = ticketShortName(ticket)
+
+  return (
+    <Text key={`building-all-${ticket.number ?? ticket.title}`} color={COLOR.accent}>
+      {ticket.number === undefined || repo === null ? name : <Link href={issueUrl(repo, ticket.number)} label={name} />}
+    </Text>
+  )
+}
+
 /** `+N more`, pressable: it opens the list in full. Keyed `<key>-more`. */
 export function moreButton(ui: Ui, key: string, more: number, open: () => void): RenderNode {
   const { Box, Button } = ui
@@ -102,7 +194,25 @@ export function moreButton(ui: Ui, key: string, more: number, open: () => void):
 }
 
 /** Each list the full-list view shows: its heading and its entries, newest first (items: open first). */
-export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: SessionStatus | null) => { title: string; entries: RenderNode[] }> = {
+export const FULL_LISTS: Record<
+  Exclude<PaneView, 'main'>,
+  (ui: Ui, status: SessionStatus | null, surface: RenderSurface, now: number) => { title: string; entries: RenderNode[] }
+> = {
+  links: (ui, status, surface) => {
+    const all = [...(status?.links ?? [])].reverse()
+
+    return { title: `Links (${all.length})`, entries: all.map(link => linkEntry(ui, link, surface)) }
+  },
+  crons: (ui, status, _surface, now) => {
+    const all = expireCrons(status?.crons ?? [], now).filter(job => job.state === 'active')
+
+    return { title: `Active cron jobs (${all.length})`, entries: all.map(job => cronEntry(ui, job, 'all')) }
+  },
+  building: (ui, status) => {
+    const all = sessionProgress(status)?.building ?? []
+
+    return { title: `Building (${all.length})`, entries: all.map(ticket => buildingEntry(ui, ticket, status?.place?.repo ?? null)) }
+  },
   surprises: (ui, status) => {
     const all = openSurprises(status)
 
@@ -139,6 +249,12 @@ export const FULL_LISTS: Record<Exclude<PaneView, 'main'>, (ui: Ui, status: Sess
       title: `${status?.effort?.name ?? 'Effort'} tickets (${closed}/${all.length} closed)`,
       entries: all.map(ticket => ticketEntry(ui, ticket, repo, 'all')),
     }
+  },
+  tasks: (ui, status) => {
+    const all = listedTasks(status)
+    const done = all.filter(task => task.status === 'completed').length
+
+    return { title: `Tasks (${done}/${all.length} done)`, entries: all.map(task => taskEntry(ui, task, 'all')) }
   },
   'follow-up': (ui, status) => {
     const all = status === null ? [] : openFollowUps(status)

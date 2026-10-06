@@ -5,7 +5,7 @@ import { first } from '../lists'
 import { COLOR } from '../palette'
 import { issueUrl, worktreeLabel } from '../place'
 import { listedItems } from '../session-items'
-import { sessionProgress, taskProgress } from '../session-progress'
+import { sessionProgress } from '../session-progress'
 import { ticketShortName } from '../ticket-reports'
 import { barCells, progressBar } from './bar'
 import { itemEntry, moreButton } from './entries'
@@ -23,11 +23,11 @@ const LABEL_CELLS = 9
 /**
  * This session's own work, in every session: the session id, the branch and
  * the worktree, each copied when pressed;
- * the items done of all, the effort's tickets among them, then the first
- * two items (open ones first) and the tickets the orchestrator builds now; and the task list's
- * tasks done, on a line of its own. The effort's name and the tracker's
- * closed count are the Effort section's, the pull requests and issues the
- * Links section's. Drawn once any of it is known.
+ * the session items done of all, then the first two items (open ones
+ * first); and the tickets the orchestrator builds now. Effort tickets never
+ * count in this bar: the Effort section shows which issues GitHub closed,
+ * the Task section the task list, the Links section the pull requests and
+ * issues. Drawn once any of it is known.
  */
 export const sessionSection: Section = ({ ui, status, columns, show, copy }) => {
   const { Box, Text } = ui
@@ -37,7 +37,6 @@ export const sessionSection: Section = ({ ui, status, columns, show, copy }) => 
   const { place } = status
   const repo = place?.repo ?? null
   const progress = sessionProgress(status)
-  const tasks = taskProgress(status)
   const lines: RenderNode[] = [copyable(ui, 'ID', status.sessionId, status.sessionId, copy)]
   if (place !== null && place.branch !== null) {
     lines.push(copyable(ui, 'Branch', place.branch, place.branch, copy))
@@ -45,19 +44,19 @@ export const sessionSection: Section = ({ ui, status, columns, show, copy }) => 
   if (place !== null && worktreeLabel(place.root) !== '') {
     lines.push(copyable(ui, 'Worktree', worktreeLabel(place.root), place.root, copy))
   }
-  if (progress !== null) {
+  if (progress !== null && progress.total > 0) {
     lines.push(bar(ui, 'Progress', progress.done, progress.total, columns))
     const { shown, more } = first(listedItems(status), ITEMS_SHOWN)
     lines.push(...shown.map(item => itemEntry(ui, item, 'item')))
     if (more > 0) {
       lines.push(moreButton(ui, 'items', more, () => show('items')))
     }
-    if (progress.building.length > 0) {
-      lines.push(building(ui, progress.building, repo === null ? null : number => issueUrl(repo, number)))
-    }
   }
-  if (tasks !== null) {
-    lines.push(bar(ui, 'Tasks', tasks.done, tasks.total, columns))
+  if (progress !== null && progress.building.length > 0) {
+    lines.push(building(ui, progress.building, repo === null ? null : number => issueUrl(repo, number)))
+    if (progress.building.length > BUILDING_SHOWN) {
+      lines.push(moreButton(ui, 'building', progress.building.length - BUILDING_SHOWN, () => show('building')))
+    }
   }
   if (lines.length === 0) {
     return null
@@ -105,10 +104,10 @@ function copyable(
   )
 }
 
-/** `Building: #3, #5, +2 more`, each numbered ticket a link to its issue when it has a page. */
+/** `Building: #3, #5`, each numbered ticket a link to its issue when it has a page; the rest open with "+N more" below. */
 function building(ui: Ui, tickets: readonly TicketReport[], pageOf: ((number: number) => string) | null): RenderNode {
   const { Link, Text } = ui
-  const { shown, more } = first(tickets, BUILDING_SHOWN)
+  const { shown } = first(tickets, BUILDING_SHOWN)
 
   return (
     <Text key="session-building">
@@ -123,7 +122,6 @@ function building(ui: Ui, tickets: readonly TicketReport[], pageOf: ((number: nu
           )}
         </Text>
       ))}
-      {more > 0 ? <Text dimColor>{`, +${more} more`}</Text> : null}
     </Text>
   )
 }

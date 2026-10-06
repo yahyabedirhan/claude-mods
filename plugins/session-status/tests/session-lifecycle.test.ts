@@ -195,6 +195,7 @@ test('/compact keeps all status', async ($, on) => {
   await callStatusTool($, blockedDecision())
   await callStatusTool($, surprise())
   await $.classic.TaskCreated({ task_id: '1', task_subject: 'Build the pane' })
+  await callStatusTool($, { action: 'item', state: 'added', title: 'Show the items' })
   const before = saved[SESSION_ID]
   await $.classic.PreCompact({ trigger: 'manual', custom_instructions: null })
   await sessionStart($, 'compact', SESSION_ID)
@@ -204,7 +205,8 @@ test('/compact keeps all status', async ($, on) => {
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'blocked')).toContain('Which database do we use?')
     expect(await sectionText($, surface, 'surprises')).toContain('The API has no batch endpoint')
-    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
+    expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
+    expect(await sectionText($, surface, 'task')).toContain('Done 0/1')
   }
 })
 

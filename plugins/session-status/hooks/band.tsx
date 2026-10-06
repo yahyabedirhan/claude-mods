@@ -28,8 +28,7 @@ function openCounts(status: SessionStatus | null): { blocked: number; decide: nu
 
 /**
  * `<n> blocked · <n> decide · <n> follow-up · <session> · <effort> · <n> surprise`,
- * the follow-up figure only when there is one. The session figure is `progress 7/10` once the session has items or effort
- * tickets, followed by `tasks 2/5` while a task list exists; without items
+ * the follow-up figure only when there is one. The session figure is `progress 7/10` once the session has items, followed by `tasks 2/5` while a task list exists; without items
  * it is the tasks' `<done>/<total> done`. The effort figure, `closed 1/13`,
  * shows only while the tracker counts the effort's tickets.
  */
@@ -42,7 +41,7 @@ export function bandText(status: SessionStatus | null): string {
     `${blocked} blocked`,
     `${decide} decide`,
     ...(followUp === 0 ? [] : [`${followUp} follow-up`]),
-    ...(session === null
+    ...(session === null || session.total === 0
       ? [`${tasks?.done ?? 0}/${tasks?.total ?? 0} done`]
       : [`progress ${session.done}/${session.total}`, ...(tasks === null ? [] : [`tasks ${tasks.done}/${tasks.total}`])]),
     ...(effort === null ? [] : [`closed ${effort.closed}/${effort.total}`]),

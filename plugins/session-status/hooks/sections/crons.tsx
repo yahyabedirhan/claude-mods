@@ -1,5 +1,6 @@
 import { cronCounts, expireCrons } from '../crons'
 import { first } from '../lists'
+import { cronEntry, moreButton } from './entries'
 import type { Section } from './section'
 
 /** How many active jobs the section names; the rest show as "+N more". */
@@ -12,7 +13,7 @@ const ACTIVE_SHOWN = 3
  * counts as expired from the drawing's clock reading, before any event
  * stores it so. Drawn once a job is scheduled.
  */
-export const cronsSection: Section = ({ ui, status, now }) => {
+export const cronsSection: Section = ({ ui, status, now, show }) => {
   const { Box, Text } = ui
   const crons = expireCrons(status?.crons ?? [], now)
   if (crons.length === 0) {
@@ -31,13 +32,8 @@ export const cronsSection: Section = ({ ui, status, now }) => {
     <Box key="crons" flexDirection="column">
       <Text bold>Cron jobs</Text>
       <Text>{parts.join(' · ')}</Text>
-      {shown.map(job => (
-        <Text key={`cron-${job.id}`} wrap="truncate-end">
-          <Text dimColor>{`${job.fires > 0 ? `${job.fires}× ` : ''}${job.schedule} · `}</Text>
-          {job.prompt}
-        </Text>
-      ))}
-      {more > 0 ? <Text dimColor>{`+${more} more`}</Text> : null}
+      {shown.map(job => cronEntry(ui, job, 'cron'))}
+      {more > 0 ? moreButton(ui, 'crons', more, () => show('crons')) : null}
     </Box>
   )
 }

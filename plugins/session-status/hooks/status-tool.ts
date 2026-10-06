@@ -72,7 +72,7 @@ export const STATUS_TOOL_SPEC = {
     'and for each step left before the session settles (for example the review, the PR, the user\'s approval, the merge, the settle).',
     'The result names the item\'s id (I1, I2, ...). State `done` with `id`: the work is finished and verified.',
     'State `dropped` with `id`: the item is no longer needed, or a later item replaced it.',
-    'Do not add an item for an effort ticket: the tickets count by themselves.',
+    'Add an item for each effort ticket you take on, and mark it done when its work lands: the Session bar counts only items.',
     '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
     'Use it to find an id you no longer have, for example after `/compact`. It changes nothing.',
     '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
@@ -401,7 +401,7 @@ export function itemText(item: SessionItem, change: ItemChange, progress: Sessio
 
 /** `Session: 7/10 done`: the progress the Session section shows. */
 function progressSaid(progress: SessionProgress): string {
-  return `Session: ${progress.done}/${progress.total} done`
+  return progress.total === 0 ? 'Session: no items' : `Session: ${progress.done}/${progress.total} done`
 }
 
 /** One sentence on what a `ticket` call did to its ticket. */
