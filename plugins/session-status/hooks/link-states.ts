@@ -4,6 +4,7 @@
 // here calls `$`.
 
 import type { LinkState, SessionLink, SessionStatus } from '../types'
+import { autoSet } from './set-by'
 
 /** How often the links' states are read again while the session works. */
 export const LINK_STATE_REFRESH_MS = 2 * 60_000
@@ -57,17 +58,25 @@ export function parseLinkStates(stdout: string, links: readonly SessionLink[]): 
   return states
 }
 
-/** The status with each link's state set to what GitHub said; the same status when nothing changed. */
+/**
+ * The status with each link's state set to what GitHub said; the same
+ * status when nothing changed. A state the agent set with `update` stays
+ * until GitHub reports another state than it did before.
+ */
 export function withLinkStates(status: SessionStatus, states: ReadonlyMap<string, LinkState>): SessionStatus {
   let isChanged = false
   const links = status.links.map(link => {
     const state = states.get(link.url)
-    if (state === undefined || state === (link.state ?? 'open')) {
+    if (state === undefined) {
+      return link
+    }
+    const read = autoSet({ ...link, state: link.state ?? 'open' }, 'state', state, 'read')
+    if (read.state === (link.state ?? 'open') && read.fieldsSetBy === link.fieldsSetBy) {
       return link
     }
     isChanged = true
 
-    return { ...link, state }
+    return read
   })
 
   return isChanged ? { ...status, links } : status

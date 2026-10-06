@@ -3,7 +3,8 @@
 // register.tsx, because the engine follows `$` and the state library's
 // sources only within the hooks module's own file.
 
-import type { Blocker, Decision, Effort, SessionItem, SessionStatus, StatusItem, TicketReport } from '../types'
+import type { Blocker, Decision, SessionItem, SessionStatus, StatusItem } from '../types'
+import { highestDeletedId } from './set-by'
 
 /** An item before it is recorded: `recordItem` adds its id and its time. */
 export type ItemDraft = StatusItem extends infer I
@@ -33,7 +34,7 @@ const CLOSING = {
 /**
  * The status with one more item, and that item: the draft given the next id
  * of its kind and the time it was recorded. Ids only grow within a session,
- * so pings and resolves can name an item by its id.
+ * a deleted id too, so pings and resolves can name an item by its id.
  */
 export function recordItem(
   status: SessionStatus,
@@ -44,7 +45,7 @@ export function recordItem(
   const highest = status.items
     .filter(item => item.kind === draft.kind)
     .map(item => Number(item.id.slice(prefix.length)))
-    .reduce((max, n) => (Number.isInteger(n) && n > max ? n : max), 0)
+    .reduce((max, n) => (Number.isInteger(n) && n > max ? n : max), highestDeletedId(status, draft.kind, prefix))
   const item = { ...draft, id: `${prefix}${highest + 1}`, recordedAt: now } as StatusItem
 
   return { status: { ...status, items: [...status.items, item] }, item }
@@ -140,6 +141,7 @@ export function emptyStatus(sessionId: string): SessionStatus {
     places: [],
     crons: [],
     activity: null,
+    deleted: [],
     updatedAt: null,
   }
 }
@@ -203,7 +205,7 @@ export function statusForSession(
 
 /**
  * How many of each list a status keeps within a session: finished subagent
- * ids, links, reported tickets, session items, the files of each place, and
+ * ids, links, reported tickets, session items, deleted entries, the files of each place, and
  * closed items of each kind. The oldest drop first (reported tickets and
  * files by their last change); an open item never drops.
  */
@@ -229,6 +231,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     status.ticketReports.length > CAP ||
     status.sessionItems.length > CAP ||
     status.crons.length > CAP ||
+    status.deleted.length > CAP ||
     status.places.length > PLACES_KEPT ||
     status.places.some(place => place.files.length > CAP) ||
     closedCount.decision > CAP ||
@@ -258,6 +261,7 @@ export function withinBounds(status: SessionStatus): SessionStatus {
     ticketReports: newestByChange(status.ticketReports, CAP),
     sessionItems: newestSessionItems(status.sessionItems),
     crons: newestByChange(status.crons, CAP),
+    deleted: status.deleted.slice(-CAP),
     places: newestByChange(status.places, PLACES_KEPT).map(place => ({ ...place, files: place.files.slice(-CAP) })),
     subagents: { ...status.subagents, finished: status.subagents.finished.slice(-CAP) },
   }

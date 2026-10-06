@@ -90,6 +90,27 @@ export type Blocker = {
   pingId?: string
 }
 
+/**
+ * Who set a value last: an automatic source (`auto`), such as a GitHub
+ * read or a task event, or the agent with the status tool's `create` or
+ * `update` (`manual`).
+ */
+export type SetBy = 'auto' | 'manual'
+
+/**
+ * A field the agent set with `update`, over the value its automatic source
+ * gave. An automatic read that reports `lastAuto` again changes nothing; a
+ * new change from that source overwrites the field and drops this mark.
+ */
+export type ManualField = {
+  setBy: 'manual'
+  /** What the automatic source last reported for the field; null when it reported nothing. */
+  lastAuto: string | null
+}
+
+/** The fields of an entry that the agent set by hand; a field left out was set by its automatic source. */
+export type FieldsSetBy<Field extends string> = Partial<Record<Field, ManualField>>
+
 /** One item the agent recorded: a decision, a surprise or a blocker. */
 export type StatusItem = Decision | Surprise | Blocker
 /** One task of the session's task list, from the task tools and Task events. */
@@ -106,6 +127,10 @@ export type Task = {
   status: 'pending' | 'in_progress' | 'completed'
   /** When the task last changed, in `$.clock.now()` milliseconds. */
   at: number
+  /** `manual` when the agent created it with `create`; absent when the task tools did. */
+  setBy?: SetBy
+  /** The fields the agent set with `update`. */
+  fieldsSetBy?: FieldsSetBy<'subject' | 'status'>
 }
 
 /**
@@ -141,6 +166,10 @@ export type SessionLink = {
   agentId?: string
   /** When it was found, in `$.clock.now()` milliseconds. */
   at: number
+  /** `manual` when the agent created it with `create` or `link`; absent when a `gh` command did. */
+  setBy?: SetBy
+  /** The fields the agent set with `update`. */
+  fieldsSetBy?: FieldsSetBy<'state'>
 }
 
 /** The session's subagents, by id: those that run now and those that finished. */
@@ -170,6 +199,10 @@ export type Effort = {
    * label showed. A report's name always wins; a label's wins over a branch's.
    */
   from?: 'report' | 'label' | 'branch'
+  /** `manual` when the agent created it with `create`; absent when it was found. */
+  setBy?: SetBy
+  /** The fields the agent set with `update`. */
+  fieldsSetBy?: FieldsSetBy<'name'>
 }
 
 /**
@@ -317,6 +350,26 @@ export type CronJob = {
   createdAt?: number
   /** When it last changed, in `$.clock.now()` milliseconds. */
   at: number
+  /** `manual` when the agent created it with `create`; absent when CronCreate did. */
+  setBy?: SetBy
+  /** The fields the agent set with `update`. */
+  fieldsSetBy?: FieldsSetBy<'state'>
+}
+
+/**
+ * An entry the agent removed with `delete`, by its kind and its key: an
+ * automatic source does not add it again, and an id is not given again.
+ */
+export type DeletedEntry = {
+  kind: 'item' | 'decision' | 'surprise' | 'blocker' | 'ticket' | 'link' | 'effort' | 'task' | 'cron' | 'place'
+  /**
+   * What the entry is known by: an item's, decision's, surprise's or
+   * blocker's id; a ticket's `#3` or title; a link's URL; the effort's name;
+   * a task's or cron job's id; a place's `owner/repo`, or its key without one.
+   */
+  key: string
+  /** When it was deleted, in `$.clock.now()` milliseconds. */
+  at: number
 }
 
 export type SessionStatus = {
@@ -364,6 +417,8 @@ export type SessionStatus = {
   crons: CronJob[]
   /** What the session does: null before its first turn. */
   activity: Activity | null
+  /** The entries the agent deleted, oldest first. */
+  deleted: DeletedEntry[]
   /** When the status last changed, in `$.clock.now()` milliseconds. */
   updatedAt: number | null
 }

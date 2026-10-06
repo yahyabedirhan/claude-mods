@@ -6,11 +6,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
-import type { Blocker, Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
+import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
 import { cronFired } from './crons'
 import { meetsAutoOpenTrigger } from './auto-open'
 import { drawBand } from './band'
+import { createEntry, deleteEntry, linkPage, pings, readEntries, recordDraft, updateEntry } from './crud'
+import type { CrudOutcome } from './crud'
 import { describeToolCall } from './describe-tool-call'
 import { branchEffortName, effortSighting, withEffort } from './effort'
 import { TICKET_TIMEOUT_MS, isTicketReadDue, parseTicketList, ticketListArgv, withTickets } from './effort-progress'
@@ -23,7 +25,7 @@ import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
 import { LINK_STATE_TIMEOUT_MS, isLinkStateReadDue, linkStatesArgv, parseLinkStates, withLinkStates } from './link-states'
-import { linkedText, linksFound } from './links'
+import { linkedText } from './links'
 import { listText, resetProgress, resetText } from './reset'
 import type { ResetRemoved } from './reset'
 import { reportItem } from './session-items'
@@ -45,8 +47,8 @@ import {
   emptyStatus,
   keysToPrune,
   onEndList,
+  isOpen,
   openToDecide,
-  recordItem,
   savedStatus,
   statusForSession,
   withDefaults,
@@ -441,16 +443,48 @@ export const register: Register = on => {
       return { result: await reset($) }
     }
 
+    if ('crud' in input) {
+      const request = input.crud
+      if (request.action === 'read') {
+        return { result: readEntries(await currentStatus($), request.filter) }
+      }
+      const context = { now, agentId: input.agentId }
+      // The reply comes from the change the status took, not from a check
+      // made before it: another change can land in between.
+      let outcome: CrudOutcome | { error: string } | undefined
+      const after = await changeStatus($, status => {
+        outcome =
+          request.action === 'create'
+            ? createEntry(status, request.kind, request.fields, context)
+            : request.action === 'update'
+              ? updateEntry(status, request.kind, request.id, request.fields, context)
+              : deleteEntry(status, request.kind, request.id, context)
+
+        return 'error' in outcome ? status : outcome.status
+      })
+      if (outcome === undefined || 'error' in outcome) {
+        return { deny: outcome?.error ?? 'Nothing changed.' }
+      }
+      if (outcome.pinged !== undefined) {
+        pingChange($, after.sessionId, outcome.pinged.before, outcome.pinged.after)
+      }
+      if (request.kind === 'link') {
+        await readLinkStatesIfDue($, e)
+      }
+
+      return { result: outcome.text }
+    }
+
     if ('link' in input) {
       const { link } = input
-      // The reply comes from the change the status took: linksFound returns
-      // the status unchanged when the page is listed already.
+      // The reply comes from the change the status took: linkPage says
+      // whether the page was listed already.
       let isAdded = false
       await changeStatus($, status => {
-        const linked = linksFound(status, [link], { agentId: input.agentId, at: now })
-        isAdded = linked !== status
+        const linked = linkPage(status, link, { agentId: input.agentId, at: now })
+        isAdded = linked.isAdded
 
-        return linked
+        return linked.status
       })
 
       await readLinkStatesIfDue($, e)
@@ -494,25 +528,16 @@ export const register: Register = on => {
       return { result: itemText(outcome.item, outcome.change, sessionProgress(reported)) }
     }
 
+    const { draft } = input
     let recorded: StatusItem | undefined
     const after = await changeStatus($, status => {
-      const { status: next, item } = recordItem(status, input.draft, now)
-      if (!pings(item)) {
-        recorded = item
+      const { status: next, item } = recordDraft(status, draft, now)
+      recorded = item
 
-        return next
-      }
-      // The ping id is kept, so a resolve after a /clear withdraws this ping.
-      const pinged = { ...item, pingId: pingId(status.sessionId, item.id) }
-      recorded = pinged
-
-      return { ...next, items: next.items.map(candidate => (candidate === item ? pinged : candidate)) }
+      return next
     })
-
-    if (recorded?.kind === 'decision' && recorded.urgency === 'blocked') {
-      sendPing($, blockedPing(after.sessionId, recorded))
-    } else if (recorded?.kind === 'blocker') {
-      sendPing($, blockerPing(after.sessionId, recorded))
+    if (recorded !== undefined) {
+      pingChange($, after.sessionId, null, recorded)
     }
 
     return { result: recorded === undefined ? 'Recorded.' : recordedText(recorded) }
@@ -660,9 +685,20 @@ export const register: Register = on => {
   })
 }
 
-/** Whether an item pings the person: a blocked decision or a blocker. */
-function pings(item: StatusItem): item is Decision | Blocker {
-  return item.kind === 'blocker' || (item.kind === 'decision' && item.urgency === 'blocked')
+/**
+ * Sends or withdraws the ping of a decision or blocker that a change made
+ * ping or stop pinging: recorded or opened again blocked, or closed,
+ * deleted or no longer blocked.
+ */
+function pingChange($: EngineInterface, sessionId: string, before: StatusItem | null, after: StatusItem | null): void {
+  const wasPinging = before !== null && isOpen(before) && pings(before)
+  const isPinging = after !== null && isOpen(after) && pings(after)
+  if (!wasPinging && isPinging) {
+    sendPing($, after.kind === 'blocker' ? blockerPing(sessionId, after) : blockedPing(sessionId, after))
+  } else if (wasPinging && !isPinging) {
+    // An item carried over a /clear keeps the ping id its own session sent.
+    sendPing($, withdrawPing(before.pingId ?? pingId(sessionId, before.id)))
+  }
 }
 
 /**

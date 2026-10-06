@@ -6,6 +6,7 @@
 
 import type { GitHubRepo, Place, SessionStatus } from '../types'
 import { isSameRepo } from './place'
+import { isDeleted } from './set-by'
 
 /**
  * The commands that change something, in one place: the git and gh
@@ -141,7 +142,8 @@ export type ChangedRepo = { root: string; repo: GitHubRepo | null } | { root: nu
 /**
  * The status with one change counted in its repository: a file edited or
  * written (each file once), or a command run. A repository known by its
- * GitHub name alone joins a place of the same repository found before.
+ * GitHub name alone joins a place of the same repository found before. A
+ * repository the agent deleted is not counted again.
  */
 export function withChange(
   status: SessionStatus,
@@ -149,6 +151,9 @@ export function withChange(
   change: { file: string } | { command: true },
   at: number,
 ): SessionStatus {
+  if (isDeleted(status, 'place', where.repo?.slug ?? where.root ?? '')) {
+    return status
+  }
   const index = status.places.findIndex(place =>
     where.root === null
       ? place.repo !== null && isSameRepo(place.repo.slug, where.repo.slug)
@@ -172,6 +177,11 @@ export function withChange(
     ...status,
     places: known === undefined ? [...status.places, place] : status.places.map((p, i) => (i === index ? place : p)),
   }
+}
+
+/** A place's id, as the status tool names it: its `owner/repo`, or its key when it has no GitHub repository. */
+export function placeId(place: Pick<Place, 'key' | 'repo'>): string {
+  return place.repo?.slug ?? place.key
 }
 
 /** One other repository as the Places section shows it. */

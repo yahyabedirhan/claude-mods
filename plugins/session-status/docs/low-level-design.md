@@ -57,12 +57,18 @@ the next change.
   with a state (open, merged, closed).
 - **Place / places**: where the session works, and the other repositories
   it changed.
+- **Deleted entries** (`DeletedEntry`): what the status tool's `delete`
+  removed, by kind and key, so an automatic source does not add it again and
+  an id is not given again.
+- **Manual fields** (`fieldsSetBy`): on a link, the effort, a task and a cron
+  job, the fields the agent set with `update`, each with the value its
+  automatic source last reported.
 
 ```text
 register.tsx ──events──▶ pure modules ──change──▶ Status ──draw──▶ sections
                                                     │
                                      $.state + $.store[sessionId]
-Status ─has─▶ items, sessionItems, effort+tickets, ticketReports, tasks, links, place, places, crons
+Status ─has─▶ items, sessionItems, effort+tickets, ticketReports, tasks, links, place, places, crons, deleted
 ```
 
 ## Class design
@@ -76,6 +82,8 @@ plugins/session-status/
 │   ├── register.tsx          # entry: engine events → pure modules; $.state/$.store; gh/git runs; pane and band render
 │   ├── status.ts             # the status rules: empty status, ids, bounds, which status a session id holds
 │   ├── status-tool.ts        # the status tool: schema, description, input → request
+│   ├── crud.ts               # create/read/update/delete: the kind table and four pure functions over SessionStatus
+│   ├── set-by.ts             # manual fields and deleted entries: what the automatic sources respect
 │   ├── instructions.ts       # the system prompt section that tells the model how to report
 │   ├── tool-results.ts       # a finished tool call → a status change (tasks, crons, links)
 │   ├── shell.ts              # a Bash command → the simple commands it runs (heredocs dropped)
@@ -164,8 +172,29 @@ ui.render Pane
 
 **Rejections:** an `item` call from a subagent, a `done` for an unknown
 id, a `link` with no pull request or issue URL, a `list` filter with an
-unknown kind or state: each returns an error text
+unknown kind or state, a generic call with an unknown kind, id or field, a
+subagent's change to an entry it did not create: each returns an error text
 for the model and changes nothing.
+
+**Generic actions and shortcuts.** `crud.ts` holds one table of kinds (`KINDS`:
+the id, the fields `create` takes and `update` can set, and the values of
+each fixed field). `status-tool.ts` checks a call against it;
+`createEntry`, `updateEntry`, `deleteEntry` and `readEntries` change or read
+the status. Each shortcut calls the same function as its generic action:
+`record_*` → `readDraft` and `recordDraft`, `resolve` and `dismiss` →
+`closeItem`, `item` → `reportItem` and `movedItem`, `ticket` →
+`reportTicket`, `link` → `linkPage`, `list` → `listText`.
+
+**Manual and automatic values.** `set-by.ts` decides when an automatic
+source may change a value. `autoSet` takes a reported value at all times
+for a field the agent did not set. For a field the agent set, it takes the
+value on an `event` (a `gh` merge, close or reopen; a task event; a
+CronDelete), and on a `read` (the GitHub read, a TodoWrite list, a label,
+the cron expiry and CronList) only when the read reports another value than
+`lastAuto`. `isDeleted` keeps a deleted link, effort, task, cron job or
+place out of `linksFound`, `withEffort`, `taskCreated`, `todosWritten`,
+`cronCreated` and `withChange`. A ticket report is the agent's own call, so
+it is not an automatic source that `isDeleted` stops.
 
 ## Extensibility
 
@@ -173,6 +202,7 @@ for the model and changes nothing.
 |---|---|
 | A new section | `sections/<name>.tsx`, one line in `SECTIONS`; a "+N more" adds a `PaneView` and a `FULL_LISTS` entry |
 | A new status tool action | `status-tool.ts` (schema, reading), one branch in `register.tsx`, `instructions.ts` |
+| A new kind for the generic actions | `crud.ts` (`KINDS`, `entriesOf`, a branch in each function), `reset.ts` (`LIST_KINDS`, a `listText` group), its automatic sources through `set-by.ts` |
 | A new `list` filter key | `reset.ts` (`ListFilter`, `matchesFilter`, a field on `ListEntry`), `status-tool.ts` (`filter` schema, `readListFilter`) |
 | Another tracker than GitHub | `effort-progress.ts` and `link-states.ts` (their argv and parsers) |
 | Another kind of progress | a pure module for its count, a section beside Effort and Task |

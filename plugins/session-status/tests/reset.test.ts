@@ -314,7 +314,7 @@ test('the list action reads the examples of the filter', async ($, on) => {
 
 test('the list action refuses an unknown kind or state and names the allowed values', () => {
   expect(readStatusToolInput({ action: 'list', filter: { kind: ['note'] } })).toEqual({
-    error: 'Unknown filter kind "note". Use some of: item, decision, blocker, surprise, observation, ticket, effort.',
+    error: 'Unknown filter kind "note". Use some of: item, decision, blocker, surprise, observation, ticket, effort, link, task, cron, place.',
   })
   expect(readStatusToolInput({ action: 'list', filter: { state: 'resolved' } })).toEqual({
     error: 'Unknown filter state "resolved". Use one of: open, closed, all.',
@@ -323,7 +323,7 @@ test('the list action refuses an unknown kind or state and names the allowed val
     error: 'A filter is an object with `kind`, `state` and `id`, each optional.',
   })
   expect(readStatusToolInput({ action: 'list', filter: { kind: [5] } })).toEqual({
-    error: "A filter's `kind` is an array of kinds: item, decision, blocker, surprise, observation, ticket, effort.",
+    error: "A filter's `kind` is an array of kinds: item, decision, blocker, surprise, observation, ticket, effort, link, task, cron, place.",
   })
   expect(readStatusToolInput({ action: 'list', filter: { id: [''] } })).toEqual({
     error: "A filter's `id` is an array of ids, such as D1, S2 or #3.",

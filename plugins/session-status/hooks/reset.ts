@@ -7,6 +7,8 @@
 // register.tsx runs both; nothing here calls `$`.
 
 import type { SessionItem, SessionStatus, StatusItem } from '../types'
+import { linkLabel } from './links'
+import { placeId } from './places'
 import { isOpen } from './status'
 import { ticketName, ticketShortName } from './ticket-reports'
 
@@ -27,9 +29,10 @@ export type ResetRemoved = {
 /**
  * The status without its record: the session items, the decisions,
  * surprises and blockers, the links, the reported tickets, the
- * effort and its ticket count; and what it took out. Ids start over at 1.
- * What the session runs now stays: its tasks, crons, subagents, place and
- * activity.
+ * effort and its ticket count, and the deleted entries of those kinds; and
+ * what it took out. Ids start over at 1. What the session runs now stays:
+ * its tasks, crons, subagents, place, places and activity, and the tasks,
+ * crons and places the agent deleted.
  */
 export function resetProgress(status: SessionStatus): { status: SessionStatus; removed: ResetRemoved } {
   return {
@@ -42,6 +45,7 @@ export function resetProgress(status: SessionStatus): { status: SessionStatus; r
       ticketReports: [],
       effort: null,
       tickets: null,
+      deleted: status.deleted.filter(entry => KEPT_DELETES.includes(entry.kind)),
     },
     removed: {
       items: status.sessionItems.length,
@@ -52,6 +56,9 @@ export function resetProgress(status: SessionStatus): { status: SessionStatus; r
     },
   }
 }
+
+/** The deleted entries a reset keeps: of the kinds it does not clear. */
+const KEPT_DELETES: readonly string[] = ['task', 'cron', 'place']
 
 /** What the person and the model read after a reset. */
 export function resetText(removed: ResetRemoved): string {
@@ -69,11 +76,15 @@ export function resetText(removed: ResetRemoved): string {
   return `Session status reset: removed ${joinAnd(parts)}. Everything starts over.`
 }
 
-/** The kinds of entry `list` names; an observation is a surprise the observer found. */
-export const LIST_KINDS = ['item', 'decision', 'blocker', 'surprise', 'observation', 'ticket', 'effort'] as const
+/**
+ * The kinds of entry `list` and `read` name; an observation is a surprise
+ * the observer found. `list` without a filter leaves out links, tasks, cron
+ * jobs and places, which the pane shows by themselves.
+ */
+export const LIST_KINDS = ['item', 'decision', 'blocker', 'surprise', 'observation', 'ticket', 'effort', 'link', 'task', 'cron', 'place'] as const
 export type ListKind = (typeof LIST_KINDS)[number]
 
-/** `open`, `closed` (resolved, dismissed, done, dropped, landed) or `all`. */
+/** `open`, `closed` (resolved, dismissed, done, dropped, landed, a merged or closed link, a completed task, a cron job no longer active) or `all`. */
 export const LIST_STATES = ['open', 'closed', 'all'] as const
 export type ListState = (typeof LIST_STATES)[number]
 
@@ -91,11 +102,14 @@ export type ListFilter = {
 /** What `matchesFilter` checks of one entry. */
 export type ListEntry = {
   kind: ListKind
-  /** `D1`, `I2`, a ticket's `#3` or title, the effort's name. */
+  /** `D1`, `I2`, a ticket's `#3` or title, the effort's name, a link's `repo#27`, a task's or cron job's id, a place's `owner/repo`. */
   id: string
-  /** Whether it is open; null for the effort, which has no state. */
+  /** Whether it is open; null for the effort and a place, which have no state. */
   open: boolean | null
 }
+
+/** What `read` keeps without a filter: everything. */
+export const EVERYTHING: ListFilter = { kinds: null, state: 'all', ids: null }
 
 /** Whether `filter` keeps `entry`. */
 export function matchesFilter(entry: ListEntry, filter: ListFilter): boolean {
@@ -180,6 +194,42 @@ export function listText(status: SessionStatus, filter: ListFilter | null): stri
       line: `${ticketName(ticket)} (${ticket.state})`,
     })),
   )
+  group(
+    'Links',
+    status.links.map(link => ({
+      kind: 'link',
+      id: linkLabel(link),
+      open: (link.state ?? 'open') === 'open',
+      line: `${linkLabel(link)} ${link.url} (${link.state ?? 'open'}${link.fieldsSetBy?.state === undefined ? '' : ', set by hand'})`,
+    })),
+  )
+  group(
+    'Tasks',
+    status.tasks.map(task => ({
+      kind: 'task',
+      id: task.id,
+      open: task.status !== 'completed',
+      line: `${task.id} ${task.subject} (${task.status})`,
+    })),
+  )
+  group(
+    'Cron jobs',
+    status.crons.map(job => ({
+      kind: 'cron',
+      id: job.id,
+      open: job.state === 'active',
+      line: `${job.id} ${job.schedule}: ${job.prompt} (${job.state})`,
+    })),
+  )
+  group(
+    'Places',
+    status.places.map(place => ({
+      kind: 'place',
+      id: placeId(place),
+      open: null,
+      line: `${placeId(place)} (${count(place.files.length, 'file')}, ${count(place.commands, 'command')})`,
+    })),
+  )
 
   if (lines.length > 0) {
     return lines.join('\n')
@@ -197,8 +247,15 @@ type ListRow = ListEntry & {
 
 /** What `list` names without a filter: open entries, done items, the effort and every reported ticket. */
 function keptWithoutFilter(row: ListRow): boolean {
+  if (PANE_KINDS.includes(row.kind)) {
+    return false
+  }
+
   return row.kind === 'ticket' || row.open !== false || (row.kind === 'item' && row.dropped !== true)
 }
+
+/** The kinds `list` without a filter leaves out. */
+const PANE_KINDS: readonly ListKind[] = ['link', 'task', 'cron', 'place']
 
 function count(n: number, noun: string, plural = `${noun}s`): string {
   return `${n} ${n === 1 ? noun : plural}`

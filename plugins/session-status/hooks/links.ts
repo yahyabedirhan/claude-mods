@@ -5,6 +5,7 @@
 // reopen a page change its state.
 
 import type { LinkState, SessionLink, SessionStatus } from '../types'
+import { autoSet, isDeleted } from './set-by'
 import { simpleCommands } from './shell'
 
 /** The `gh` commands that create a page, and the URL path each one prints. */
@@ -131,7 +132,8 @@ function printedPage(output: string): { repo: string; number: number } | null {
 /**
  * The status with each changed page's state set. A change matches a link of
  * its kind and number, in its repository, or, when it names none, in the
- * session's own repository. A page that is not linked stays out.
+ * session's own repository. A page that is not linked stays out. A command
+ * is a new change, so it overwrites a state the agent set with `update`.
  */
 export function linkStatesChanged(status: SessionStatus, changes: readonly StateChange[]): SessionStatus {
   let isChanged = false
@@ -140,12 +142,16 @@ export function linkStatesChanged(status: SessionStatus, changes: readonly State
     const repo = change.repo ?? status.place?.repo?.slug ?? null
     links = links.map(link => {
       const isPage = link.kind === change.kind && link.number === change.number && (repo === null || link.repo === repo)
-      if (!isPage || (link.state ?? 'open') === change.state) {
+      if (!isPage) {
+        return link
+      }
+      const changed = autoSet({ ...link, state: link.state ?? 'open' }, 'state', change.state, 'event')
+      if ((link.state ?? 'open') === changed.state && changed.fieldsSetBy === link.fieldsSetBy) {
         return link
       }
       isChanged = true
 
-      return { ...link, state: change.state }
+      return changed
     })
   }
 
@@ -159,7 +165,7 @@ export function linkedText(link: FoundLink, isAdded: boolean): string {
   return isAdded ? `${name} is now listed under Links.` : `${name} is listed under Links already. Nothing changed.`
 }
 
-/** The status with the found links added, each page once. */
+/** The status with the found links added, each page once; a page the agent deleted is not added again. */
 export function linksFound(
   status: SessionStatus,
   found: readonly FoundLink[],
@@ -167,7 +173,7 @@ export function linksFound(
 ): SessionStatus {
   const added: SessionLink[] = []
   for (const link of found) {
-    if ([...status.links, ...added].some(known => known.url === link.url)) {
+    if ([...status.links, ...added].some(known => known.url === link.url) || isDeleted(status, 'link', link.url)) {
       continue
     }
     const created: SessionLink = { ...link, at: stamp.at }

@@ -3,16 +3,18 @@
 // There is no task noun on `$`; register.tsx feeds these from the events.
 
 import type { Progress, SessionStatus, Task } from '../types'
+import { autoSet, isDeleted } from './set-by'
+import type { AutoSource } from './set-by'
 
 type Status = Task['status']
 
-/** A task the task tools or the TaskCreated event made: added once, by id. */
+/** A task the task tools or the TaskCreated event made: added once, by id; never again once the agent deleted it. */
 export function taskCreated(
   status: SessionStatus,
   task: { id: string; subject: string; activeForm?: string },
   at: number,
 ): SessionStatus {
-  if (status.tasks.some(known => known.id === task.id)) {
+  if (status.tasks.some(known => known.id === task.id) || isDeleted(status, 'task', task.id)) {
     return status
   }
   const created: Task = { id: task.id, subject: task.subject, status: 'pending', at }
@@ -26,7 +28,9 @@ export function taskCreated(
 /**
  * A change to one task: a new status (`deleted` removes the task), subject
  * or active form. A task not known yet is added when the change names its
- * subject, since its creation may have come before the mod loaded.
+ * subject, since its creation may have come before the mod loaded. A task
+ * event is a new change: it overwrites a subject or status the agent set
+ * with `update`; a `read` (a TodoWrite list stated again) does not.
  */
 export function taskUpdated(
   status: SessionStatus,
@@ -37,6 +41,7 @@ export function taskUpdated(
     activeForm?: string
   },
   at: number,
+  source: AutoSource = 'event',
 ): SessionStatus {
   if (change.status === 'deleted') {
     return withTasks(
@@ -46,19 +51,19 @@ export function taskUpdated(
   }
   const known = status.tasks.find(task => task.id === change.id)
   if (known === undefined) {
-    if (change.subject === undefined) {
+    if (change.subject === undefined || isDeleted(status, 'task', change.id)) {
       return status
     }
     const created = taskCreated(status, { id: change.id, subject: change.subject }, at)
 
-    return taskUpdated(created, change, at)
+    return taskUpdated(created, change, at, source)
   }
-  const updated: Task = { ...known, at }
+  let updated: Task = { ...known, at }
   if (change.status !== undefined) {
-    updated.status = change.status
+    updated = autoSet(updated, 'status', change.status, source)
   }
   if (change.subject !== undefined && change.subject !== '') {
-    updated.subject = change.subject
+    updated = autoSet(updated, 'subject', change.subject, source)
   }
   if (change.activeForm !== undefined && change.activeForm !== '') {
     updated.activeForm = change.activeForm
@@ -72,7 +77,9 @@ export function taskUpdated(
 
 /**
  * A TodoWrite list replaces the loop's earlier list whole. Each item is keyed
- * by its loop and place, since TodoWrite items carry no id.
+ * by its loop and place, since TodoWrite items carry no id. The list states
+ * every item again, so a field the agent set stays until the list changes
+ * it, and an item the agent deleted stays out.
  */
 export function todosWritten(
   status: SessionStatus,
@@ -82,13 +89,21 @@ export function todosWritten(
 ): SessionStatus {
   const prefix = `todo:${agentId ?? 'main'}:`
   const kept = status.tasks.filter(task => !task.id.startsWith(prefix))
-  const written = todos.map((todo, index): Task => {
-    const task: Task = { id: `${prefix}${index}`, subject: todo.content, status: todo.status, at }
+  const written = todos.flatMap((todo, index): Task[] => {
+    const id = `${prefix}${index}`
+    if (isDeleted(status, 'task', id)) {
+      return []
+    }
+    const known = status.tasks.find(task => task.id === id)
+    let task: Task = known === undefined ? { id, subject: todo.content, status: todo.status, at } : { ...known, at }
+    task = autoSet(autoSet(task, 'subject', todo.content, 'read'), 'status', todo.status, 'read')
     if (todo.activeForm !== undefined && todo.activeForm !== '') {
       task.activeForm = todo.activeForm
+    } else {
+      delete task.activeForm
     }
 
-    return task
+    return [task]
   })
 
   return withTasks(status, [...kept, ...written])
@@ -117,7 +132,8 @@ export function currentTask(tasks: readonly Task[]): Task | null {
     .reduce<Task | null>((last, task) => (last === null || task.at >= last.at ? task : last), null)
 }
 
-function withTasks(status: SessionStatus, tasks: Task[]): SessionStatus {
+/** The status with this task list, and the progress it gives. */
+export function withTasks(status: SessionStatus, tasks: Task[]): SessionStatus {
   return { ...status, tasks, progress: progressOf(tasks) }
 }
 
