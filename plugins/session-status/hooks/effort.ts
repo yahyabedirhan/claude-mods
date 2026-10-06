@@ -3,6 +3,7 @@
 // reads the branch name for it; nothing here calls `$`.
 
 import type { Effort, SessionStatus } from '../types'
+import { simpleCommands } from './shell'
 
 /** The skills that run an effort: a Skill call to one of them is an effort run. */
 export const EFFORT_SKILLS: readonly string[] = ['orchestrate-effort', 'orchestrate-with-handoff']
@@ -22,8 +23,9 @@ export type EffortSighting = { name: string | null }
 
 /**
  * The effort run a tool call shows: a Skill call to an effort skill (a
- * plugin's `<plugin>:<skill>` too), or a Bash command with an
- * `effort:<name>` label.
+ * plugin's `<plugin>:<skill>` too), or a Bash command that runs a `gh`
+ * command with an `effort:<name>` label. A label anywhere else, as in a
+ * heredoc's script or an `echo`, is no effort run.
  */
 export function effortSighting(call: { tool: string }): EffortSighting | null {
   const input = call as unknown as Record<string, unknown>
@@ -36,9 +38,14 @@ export function effortSighting(call: { tool: string }): EffortSighting | null {
     return { name: typeof input.args === 'string' ? effortLabel(input.args) : null }
   }
   if (call.tool === 'Bash' && typeof input.command === 'string') {
-    const name = effortLabel(input.command)
+    for (const part of simpleCommands(input.command)) {
+      const name = /^gh\s/.test(part) ? effortLabel(part) : null
+      if (name !== null) {
+        return { name }
+      }
+    }
 
-    return name === null ? null : { name }
+    return null
   }
 
   return null

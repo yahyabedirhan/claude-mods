@@ -4,6 +4,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
+import { linkStatesArgv, parseLinkStates } from '../hooks/link-states'
 import { findStateChanges } from '../hooks/links'
 import { SESSION_ID, SURFACES, callStatusTool, mountPane, start, world } from './world'
 import type { Surface, World } from './world'
@@ -98,4 +99,71 @@ test('findStateChanges reads the page by number, #number, URL, --repo or what gh
   ])
   expect(findStateChanges('gh pr view 27', '')).toEqual([])
   expect(findStateChanges('gh pr merge 27 --auto', '')).toEqual([])
+})
+
+test('the links take the states GitHub reports, whoever merged or closed them', async ($, on) => {
+  const w = world(on)
+  w.pageStates({ 'octo/widgets#27': 'MERGED', 'octo/widgets#28': 'CLOSED' })
+  await start($)
+  await callStatusTool($, { action: 'link', url: PR_URL })
+  await w.clock.advance(0)
+  await callStatusTool($, { action: 'link', url: ISSUE_URL })
+  await w.clock.advance(0)
+
+  expect(w.runs.filter(argv => argv.slice(0, 3).join(' ') === 'gh api graphql')).toHaveLength(2)
+  expect(w.saved[SESSION_ID]).toMatchObject({ links: [{ number: 27, state: 'merged' }, { number: 28, state: 'closed' }] })
+  expect(await marks($, 'terminal')).toEqual([
+    ['⊙', 'merged'],
+    [MERGED_GLYPH, 'merged'],
+  ])
+})
+
+test('the states are read again after a gh pr command, or two minutes on, and not between', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, { action: 'link', url: PR_URL })
+  await w.clock.advance(0)
+  const reads = () => w.runs.filter(argv => argv.slice(0, 3).join(' ') === 'gh api graphql').length
+
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await w.clock.advance(0)
+  expect(reads()).toBe(1)
+
+  w.pageStates({ 'octo/widgets#27': 'CLOSED' })
+  await $.tool.call({ tool: 'Bash', command: 'gh pr view 27' })
+  await w.clock.advance(0)
+  expect(reads()).toBe(2)
+  expect(await marks($, 'terminal')).toEqual([[PR_GLYPH, 'error']])
+
+  await w.clock.advance(2 * 60_000)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await w.clock.advance(0)
+  expect(reads()).toBe(3)
+})
+
+test('a page GitHub cannot find keeps the state it had', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, { action: 'link', url: PR_URL })
+  await w.clock.advance(0)
+
+  expect((w.saved[SESSION_ID] as { links: { state?: string }[] }).links[0]?.state).toBeUndefined()
+})
+
+test('one graphql query asks for every page, each repository once, and its answer maps back by URL', () => {
+  const links = [
+    { kind: 'pr', repo: 'octo/widgets', number: 27, url: PR_URL, at: 0 },
+    { kind: 'issue', repo: 'octo/widgets', number: 28, url: ISSUE_URL, at: 0 },
+    { kind: 'pr', repo: 'octo/skills', number: 88, url: 'https://github.com/octo/skills/pull/88', at: 0 },
+  ] as const
+  const argv = linkStatesArgv(links) ?? []
+
+  expect(argv.slice(0, 4)).toEqual(['gh', 'api', 'graphql', '-f'])
+  expect(argv[4]).toContain('r0: repository(owner: "octo", name: "widgets") { n27: issueOrPullRequest(number: 27)')
+  expect(argv[4]).toContain('r1: repository(owner: "octo", name: "skills") { n88:')
+  expect(linkStatesArgv([])).toBeNull()
+
+  const answer = JSON.stringify({ data: { r0: { n27: { state: 'MERGED' }, n28: { state: 'OPEN' } }, r1: null } })
+  expect(parseLinkStates(answer, links)).toEqual(new Map([[PR_URL, 'merged'], [ISSUE_URL, 'open']]))
+  expect(parseLinkStates('gh: not logged in', links)).toEqual(new Map())
 })

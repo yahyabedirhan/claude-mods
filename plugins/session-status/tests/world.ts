@@ -71,6 +71,11 @@ export type World = {
    */
   issues: (list: GhIssue[] | undefined) => void
   /**
+   * Sets the states `gh api graphql` answers for pages from now on, by
+   * `<owner>/<repo>#<number>`; a page left out is one GitHub cannot find.
+   */
+  pageStates: (states: Record<string, 'OPEN' | 'CLOSED' | 'MERGED'>) => void
+  /**
    * Holds every `gh issue list` answer from now on until the returned
    * function is called, as a slow network does.
    */
@@ -123,6 +128,24 @@ export const BASE_SECTIONS = [{ id: 'intro', text: 'You are Claude Code.', scope
  *
  * Call it before the test's first call on `$`.
  */
+/** What `gh api graphql` answers for a link state query: each repository's pages, null when unknown. */
+function graphqlStates(query: string, states: Record<string, string>) {
+  const data: Record<string, Record<string, { state: string } | null>> = {}
+  const headers = [...query.matchAll(/(r\d+): repository\(owner: "([^"]+)", name: "([^"]+)"\)/g)]
+  headers.forEach((header, index) => {
+    const [, alias = '', owner = '', name = ''] = header
+    const body = query.slice(header.index, headers[index + 1]?.index ?? query.length)
+    const pages: Record<string, { state: string } | null> = {}
+    for (const page of body.matchAll(/n(\d+): issueOrPullRequest/g)) {
+      const state = states[`${owner}/${name}#${page[1]}`]
+      pages[`n${page[1]}`] = state === undefined ? null : { state }
+    }
+    data[alias] = pages
+  })
+
+  return data
+}
+
 export function world(
   on: On,
   options: {
@@ -162,6 +185,7 @@ export function world(
   const modelCalls: ModelCompleteRequest[] = []
   let reply: ModelReply = () => '{"findings":[]}'
   let issues = options.issues
+  let pageStates: Record<string, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
   let branch = options.branch
   let issueGate: Promise<void> | null = null
   const storeWrites: { key: string; value: unknown }[] = []
@@ -232,6 +256,9 @@ export function world(
     const git = gitAnswer(options.repos ?? [], e.argv)
     if (git !== null) {
       return { value: { ...git, ...FULL } }
+    }
+    if (e.argv.slice(0, 3).join(' ') === 'gh api graphql') {
+      return { value: { exitCode: 0, stdout: JSON.stringify({ data: graphqlStates(e.argv.at(-1) ?? '', pageStates) }), stderr: '', ...FULL } }
     }
     if (e.argv.slice(0, 3).join(' ') === 'gh issue list') {
       await issueGate
@@ -309,6 +336,9 @@ export function world(
     modelCalls,
     model: next => {
       reply = next
+    },
+    pageStates: states => {
+      pageStates = states
     },
     issues: list => {
       issues = list

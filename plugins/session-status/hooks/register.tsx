@@ -22,6 +22,7 @@ import { blockedPing, blockerPing, endListPing, pingId, withdrawPing } from './p
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { LINK_STATE_TIMEOUT_MS, isLinkStateReadDue, linkStatesArgv, parseLinkStates, withLinkStates } from './link-states'
 import { linkedText, linksFound } from './links'
 import { listText, resetProgress, resetText } from './reset'
 import type { ResetRemoved } from './reset'
@@ -452,6 +453,8 @@ export const register: Register = on => {
         return linked
       })
 
+      await readLinkStatesIfDue($, e)
+
       return { result: linkedText(link, isAdded) }
     }
 
@@ -537,6 +540,7 @@ export const register: Register = on => {
     const change = toolResultChange(e, answer, await $.clock.now())
     await changeStatus($, change ?? (status => status))
     await countTicketsIfDue($, e)
+    await readLinkStatesIfDue($, e)
     if (answer.deny === undefined && answer.isError !== true) {
       countPlaces($, e)
     }
@@ -729,6 +733,42 @@ function startTicketRead($: EngineInterface, effort: string): void {
   } catch {
     isCountingTickets = false
   }
+}
+
+/** The last read of the links' states in this module load: how many links it read, and when. */
+let lastLinkStateRead: { links: number; at: number } | null = null
+
+/** Whether a read of the links' states runs now: one at a time. */
+let isReadingLinkStates = false
+
+/**
+ * Starts a read of the links' states when one is due after a tool call (see
+ * `isLinkStateReadDue`). The read runs on a timer, so it never holds the
+ * tool call; a read due while one runs is left to the next call, and a
+ * failed read keeps the states the links had.
+ */
+async function readLinkStatesIfDue($: EngineInterface, call: { tool: string }): Promise<void> {
+  const status = withDefaults(await read($, statusAtom))
+  const now = await $.clock.now()
+  if (isReadingLinkStates || status === null || !isLinkStateReadDue(status, lastLinkStateRead, call, now)) {
+    return
+  }
+  const argv = linkStatesArgv(status.links)
+  if (argv === null) {
+    return
+  }
+  lastLinkStateRead = { links: status.links.length, at: now }
+  isReadingLinkStates = true
+  inBackground($, 'link states', async () => {
+    try {
+      // A repository GitHub cannot find fails the call but still answers for the others.
+      const { stdout } = await $.process.run(argv, { timeoutMs: LINK_STATE_TIMEOUT_MS })
+      const states = parseLinkStates(stdout, status.links)
+      await changeStatus($, current => withLinkStates(current, states))
+    } finally {
+      isReadingLinkStates = false
+    }
+  })
 }
 
 /** Reads the effort's tickets with `gh` and keeps the count; swallows every failure. */
