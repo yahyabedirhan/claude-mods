@@ -22,7 +22,7 @@ test('the mod registers the status tool for the model when the session starts', 
   expect(tool?.inputSchema).toMatchObject({
     type: 'object',
     required: ['action'],
-    properties: { action: { enum: ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset', 'link'] } },
+    properties: { action: { enum: ['create', 'read', 'update', 'delete', 'record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset', 'link'] } },
   })
 })
 

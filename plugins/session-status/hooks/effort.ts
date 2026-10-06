@@ -3,6 +3,7 @@
 // reads the branch name for it; nothing here calls `$`.
 
 import type { Effort, SessionStatus } from '../types'
+import { isDeleted } from './set-by'
 import { simpleCommands } from './shell'
 
 /** The skills that run an effort: a Skill call to one of them is an effort run. */
@@ -70,9 +71,26 @@ export function branchEffortName(stdout: string): string | null {
  * The status with the effort it runs. A ticket report's name always wins: a
  * report for another effort switches the session to it. Otherwise the first
  * name found holds, except that a label's name replaces a branch's.
+ *
+ * No source brings back an effort the agent deleted; `create` does. A name
+ * the agent set with `update` stays until a label or a branch names another
+ * effort than the one found before (a branch never wins over a label's or a
+ * report's effort); a report is a new change and always wins.
  */
 export function withEffort(status: SessionStatus, found: Effort): SessionStatus {
   const known = status.effort
+  if (isDeleted(status, 'effort', found.name)) {
+    return status
+  }
+  const mark = known?.fieldsSetBy?.name
+  if (found.from !== 'report' && known !== null && mark !== undefined) {
+    const isWeaker = found.from === 'branch' && known.from !== undefined && known.from !== 'branch'
+    if (found.name === mark.lastAuto || found.name === known.name || isWeaker) {
+      return status
+    }
+
+    return { ...status, effort: found }
+  }
   if (found.from === 'report') {
     return known?.name === found.name ? status : { ...status, effort: found }
   }

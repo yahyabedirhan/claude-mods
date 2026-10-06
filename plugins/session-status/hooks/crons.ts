@@ -4,6 +4,7 @@
 // `$`.
 
 import type { CronJob, SessionStatus } from '../types'
+import { autoSet, isDeleted } from './set-by'
 
 /**
  * How long a recurring job lives: CronCreate's `recurring` input says a
@@ -11,35 +12,41 @@ import type { CronJob, SessionStatus } from '../types'
  */
 export const CRON_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000
 
-/** A new job from CronCreate's result: active, never fired. */
+/** A new job from CronCreate's result: active, never fired; never again once the agent deleted it. */
 export function cronCreated(
   status: SessionStatus,
   job: { id: string; schedule: string; prompt: string; recurring: boolean },
   at: number,
 ): SessionStatus {
-  if (status.crons.some(known => known.id === job.id)) {
+  if (status.crons.some(known => known.id === job.id) || isDeleted(status, 'cron', job.id)) {
     return status
   }
 
   return { ...status, crons: [...status.crons, { ...job, state: 'active', fires: 0, createdAt: at, at }] }
 }
 
-/** A job CronDelete removed: cancelled, unless it already ended. */
+/** A job CronDelete removed: cancelled, unless it already ended. A CronDelete is a new change, over a state the agent set too. */
 export function cronDeleted(status: SessionStatus, id: string, at: number): SessionStatus {
-  return withJob(cronsExpired(status, at), id, job => (job.state === 'active' ? { ...job, state: 'cancelled', at } : job))
+  return withJob(cronsExpired(status, at), id, job =>
+    job.state === 'active' || job.fieldsSetBy?.state !== undefined ? { ...autoSet(job, 'state', 'cancelled', 'event'), at } : job,
+  )
 }
 
 /**
  * The jobs CronList still lists stay active; an active one-shot job it no
- * longer lists has fired (it deletes itself once it has).
+ * longer lists has fired (it deletes itself once it has). A list is a read:
+ * a state the agent set stays.
  */
 export function cronListed(status: SessionStatus, listed: readonly string[], at: number): SessionStatus {
   const current = cronsExpired(status, at)
-  const crons = current.crons.map(job =>
-    job.state === 'active' && !job.recurring && !listed.includes(job.id)
-      ? { ...job, state: 'fired' as const, fires: Math.max(job.fires, 1), at }
-      : job,
-  )
+  const crons = current.crons.map(job => {
+    if (job.state !== 'active' || job.recurring || listed.includes(job.id)) {
+      return job
+    }
+    const fired = autoSet(job, 'state', 'fired', 'read')
+
+    return fired === job ? job : { ...fired, fires: Math.max(job.fires, 1), at }
+  })
 
   return crons.some((job, index) => job !== current.crons[index]) ? { ...current, crons } : current
 }
@@ -66,16 +73,20 @@ export function cronFired(status: SessionStatus, prompt: string, at: number): Se
 
 /**
  * The jobs as they stand at `now`: an active recurring job scheduled 7 days
- * or more before `now` is expired. The same array when none expired.
+ * or more before `now` is expired. The same array when none expired. An
+ * expiry is a read: a job the agent set active after it expired stays active.
  */
 export function expireCrons(crons: readonly CronJob[], now: number): readonly CronJob[] {
   const next = crons.map(job => {
     // A job held from before createdAt was kept counts from its last change.
     const expiresAt = (job.createdAt ?? job.at) + CRON_EXPIRY_MS
 
-    return job.state === 'active' && job.recurring && now >= expiresAt
-      ? { ...job, state: 'expired' as const, at: expiresAt }
-      : job
+    if (job.state !== 'active' || !job.recurring || now < expiresAt) {
+      return job
+    }
+    const expired = autoSet(job, 'state', 'expired', 'read')
+
+    return expired === job ? job : { ...expired, at: expiresAt }
   })
 
   return next.some((job, index) => job !== crons[index]) ? next : crons

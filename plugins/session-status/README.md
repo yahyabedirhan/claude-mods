@@ -187,6 +187,46 @@ prompt section that tells the agent how to use it. Actions:
 | `post_decide_list` | Marks the decide list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
 | `item` | Reports a session item: `state` `added` with a `title` (the reply names its id, `I1`, ...), or `done` or `dropped` with its `id`. |
+| `create` | Adds one entry of any kind: `kind` and `fields`. |
+| `read` | Returns the entries an optional `filter` keeps (see below); without one, everything. |
+| `update` | Changes the given `fields` of one entry: `kind`, `id` and `fields`. A closed entry can open again. |
+| `delete` | Removes one entry: `kind` and `id`. |
+
+The other actions are shortcuts for the generic four. Each shortcut and its
+generic action share the same pure function, such as `closeItem` for
+`resolve` and an `update` to `resolved`. The agent uses the generic
+actions when you ask, and when an automatic path recorded something wrong,
+such as a false link or a false effort.
+
+| Kind | Id | Fields `update` can set | Automatic source |
+| --- | --- | --- | --- |
+| `item` | `I5` | `title`, `state` | none |
+| `decision` | `D1` | `question`, `options`, `default`, `unblocks`, `urgency`, `state` | none |
+| `surprise` | `S2` | `occurred`, `changed`, `state` | the observer |
+| `blocker` | `B1` | `failed`, `needs`, `state` | none |
+| `ticket` | `#4` | `title`, `state` | `ticket` reports |
+| `link` | `claude-mods#27` | `state` (`open`, `merged`, `closed`) | `gh pr create`, `gh issue create`, `gh` merge and close commands, the GitHub read |
+| `effort` | its name | `name` | effort skills, `effort:` labels in `gh` commands |
+| `task` | the task id | `subject`, `status` | the task tools and Task events |
+| `cron` | the job id | `state` | the Cron tools |
+| `place` | `owner/repo` | none (`delete` only) | changing commands and file edits |
+
+`create` takes the fields the record actions take, such as `title`,
+`question` or `url`. A cron job and a place are created only by their
+automatic sources. A task the agent creates gets the id `manual-1`, ...
+
+**Manual and automatic values.** A value the agent sets with `update` stays
+until its automatic source reports a new change. A link you set to `closed`
+stays `closed` until GitHub reports another state than it reported before.
+A `gh pr reopen` or a task event is a new change each time, so it
+overwrites the value. An entry that `delete` removed does not come back from
+an automatic source, and its id is not given again. `create` or `link`
+brings a deleted entry back.
+
+Each generic call returns one line that says what changed, for example
+`Link skills#88 deleted.` An unknown kind, an unknown id or a field that the
+kind does not have returns an error that names the allowed values. A
+subagent can change only the entries that it created.
 
 **Short items.** The prompt section, the tool's description and the
 observer's instructions ask for the same style: each field one short, clear
@@ -292,8 +332,9 @@ out of the line.
 To start an unrelated task from nothing, type **`/session-status reset`**. It
 removes everything the status recorded: the session items, the decisions,
 surprises and blockers (open ones too), the links, the reported
-tickets, the effort and its ticket count. Ids start over at 1. What the session
-runs now stays: its tasks, crons, subagents and place. The model can do the
+tickets, the effort and its ticket count, and the record of what `delete`
+removed of those kinds. Ids start over at 1. What the session runs now
+stays: its tasks, crons, subagents, place and places. The model can do the
 same with the status tool's `reset` action, which it calls only when you
 explicitly ask for a reset, never on its own or because of `/clear`. Its
 `list` action names every open item, decision, blocker, surprise and
@@ -306,16 +347,18 @@ them matches.
 
 | Key | Values | Default |
 | --- | --- | --- |
-| `kind` | `item`, `decision`, `blocker`, `surprise`, `observation`, `ticket`, `effort` | all kinds |
-| `state` | `open`; `closed` (resolved, dismissed, done, dropped or landed); `all` | `open` |
-| `id` | ids such as `D1`, `S2`, `I16`, or a ticket as `#3` (any case) | all ids |
+| `kind` | `item`, `decision`, `blocker`, `surprise`, `observation`, `ticket`, `effort`, `link`, `task`, `cron`, `place` | all kinds |
+| `state` | `open`; `closed` (resolved, dismissed, done, dropped, landed, a merged or closed link, a completed task, a cron job no longer active); `all` | `open` |
+| `id` | ids such as `D1`, `S2`, `I16`, a ticket as `#3`, a link as `claude-mods#27` (any case) | all ids |
 
 An observation is a surprise the observer found; `surprise` leaves it out.
-The effort has no state, so it shows with any `state`. For example, "read
+The effort and a place have no state, so they show with any `state`. For example, "read
 the observations" is `{ "kind": ["observation"] }`, and "which decisions did
 I answer" is `{ "kind": ["decision"], "state": "closed" }`. Without a filter,
-`list` also names the done items and every reported ticket. An unknown kind
-or state returns an error that names the allowed values.
+`list` also names the done items and every reported ticket, and leaves out
+the links, tasks, cron jobs and places that the pane shows by themselves;
+`read` without a filter returns everything. An unknown kind or state returns
+an error that names the allowed values.
 
 ## Optional tools
 

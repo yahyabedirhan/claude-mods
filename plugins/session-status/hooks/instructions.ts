@@ -39,6 +39,10 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - When you work on a pull request or issue that this session did not create, such as one from an earlier session, call the tool with action \`link\` and its \`url\`. The pane then lists it under Links, with the pages this session created. Pages made with \`gh pr create\` or \`gh issue create\` are found by themselves.
 - When you need an id that is no longer in your context, for example after \`/compact\`, call the tool with action \`list\`. It names every open id.
 - When the user asks about only part of the status, such as the observations or the answered decisions, call \`list\` with a \`filter\` that reads only that: \`kind\`, \`state\` (\`open\`, \`closed\` or \`all\`) and \`id\`.
+- To change any entry, use the generic actions \`create\`, \`read\`, \`update\` and \`delete\`. Give \`kind\` (item, decision, surprise, blocker, ticket, link, effort, task, cron or place), \`id\` for an update or a delete, and \`fields\` for a create or an update.
+  - Use them when the user asks, and when an automatic path recorded something wrong. For example, delete a false link or a false effort, set a link's state, open a closed item again or fix a title.
+  - A value that you set stays until its automatic source reports a new change. A deleted entry does not come back from an automatic source.
+  - The other actions stay as shortcuts. Use them for the usual reports.
 - Only when the user explicitly asks you to reset, clear or start the session status over, call the tool with action \`reset\`. It removes everything the status recorded, open decisions and blockers too. Never reset on your own or because of \`/clear\`.
 - If you are a subagent and cannot call the status tool, put your decisions and surprises in your final report, with the same fields. The orchestrator records them with the status tool.`
 

@@ -4,9 +4,12 @@
 //
 // One tool with an `action` field: it records decisions and surprises,
 // closes them, marks the decide list as posted, and reports a ticket's
-// or a session item's state.
+// or a session item's state. Its generic actions (`create`, `read`,
+// `update`, `delete`) change every kind of entry the same way (crud.ts).
 
-import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
+import type { Decision, SessionItem, StatusItem } from '../types'
+import { CRUD_KINDS, KINDS, MAX_OPTIONS, MIN_OPTIONS, URGENCIES, checkFields, readDraft, text, ticketNumber } from './crud'
+import type { CrudKind, CrudRequest } from './crud'
 import { effortLabel } from './effort'
 import { readPageUrl } from './links'
 import type { FoundLink } from './links'
@@ -26,12 +29,14 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset', 'link'] as const
+const ACTIONS = ['create', 'read', 'update', 'delete', 'record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset', 'link'] as const
+/** The kind each `record_*` shortcut creates. */
+const RECORDS = { record_decision: 'decision', record_surprise: 'surprise', record_blocker: 'blocker' } as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
-const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
-const MIN_OPTIONS = 2
-const MAX_OPTIONS = 4
+
+/** Each kind's id and the fields `update` can set, as the tool's description lists them. */
+const KIND_TABLE = CRUD_KINDS.map(kind => `${kind} (${KINDS[kind].id}: ${KINDS[kind].update.length === 0 ? 'delete only' : KINDS[kind].update.join(', ')})`).join('; ')
 
 /**
  * How every item reads, told to the agent, to a subagent through the tool's
@@ -83,6 +88,14 @@ export const STATUS_TOOL_SPEC = {
     'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the links, the reported tickets and the effort.',
     '`link` with `url`: a GitHub pull request or issue this session works on but did not create, for example one from an earlier session.',
     'The Links section lists it as it lists a page made with `gh pr create` or `gh issue create`; those are found by themselves.',
+    '`create`, `read`, `update` and `delete` work the same way on every kind of entry. Use them when the user asks,',
+    'and when an automatic path recorded something wrong, such as a false link or effort.',
+    '`create` with `kind` and `fields` adds one entry. `read` with an optional `filter` returns the entries that match; without one, everything.',
+    '`update` with `kind`, `id` and `fields` changes those fields; a closed entry can open again.',
+    'A value you set stays until its automatic source reports a new change.',
+    '`delete` with `kind` and `id` removes one entry; an automatic source does not add it again.',
+    `Kinds, each with its id and the fields \`update\` can set: ${KIND_TABLE}.`,
+    'A subagent can change only the entries that it created.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -91,12 +104,22 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids or the entries a filter keeps (`list`), reset the session progress when the user asks (`reset`), or add a pull request or issue the session did not create (`link`).',
+          'What to do: create, read, update or delete any kind of entry; record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids or the entries a filter keeps (`list`), reset the session progress when the user asks (`reset`), or add a pull request or issue the session did not create (`link`).',
+      },
+      kind: {
+        type: 'string',
+        enum: [...CRUD_KINDS],
+        description: 'create, update, delete: the kind of entry. An observation is a `surprise`.',
+      },
+      fields: {
+        type: 'object',
+        description:
+          'create: the new entry\'s fields, named as the record actions name them (`title`, `question`, `url`, `name`, `subject`, ...). update: only the fields to change, such as `{ "state": "closed" }`.',
       },
       id: {
         type: 'string',
         description:
-          'resolve: the decision id (D1, ...) or the blocker id (B1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
+          'update, delete: the entry\'s id (I5, D1, S2, B1, #4, claude-mods#27, the effort\'s name, a task\'s or cron job\'s id, owner/repo). resolve: the decision id (D1, ...) or the blocker id (B1, ...). dismiss: the surprise id (S1, ...). item: the item id (I1, ...) for `done` and `dropped`.',
       },
       urgency: {
         type: 'string',
@@ -153,12 +176,12 @@ export const STATUS_TOOL_SPEC = {
       filter: {
         type: 'object',
         description:
-          'list: keep only the entries that match every key given. Without `filter`, `list` names the open entries, the done items, the effort and every reported ticket.',
+          'list, read: keep only the entries that match every key given. Without `filter`, `list` names the open entries, the done items, the effort and every reported ticket, and `read` returns everything.',
         properties: {
           kind: {
             type: 'array',
             items: { type: 'string', enum: [...LIST_KINDS] },
-            description: 'The kinds to keep; an observation is a surprise the observer found. All kinds when left out.',
+            description: 'The kinds to keep; an observation is a surprise the observer found. All kinds when left out (`list` then leaves out links, tasks, cron jobs and places).',
           },
           state: {
             type: 'string',
@@ -199,6 +222,8 @@ export type StatusToolRequest =
   | { reset: true }
   /** Add a page the session did not create to its links. */
   | { link: FoundLink; agentId?: string }
+  /** Create, read, update or delete one entry of any kind. */
+  | { crud: CrudRequest; agentId?: string }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -211,65 +236,12 @@ export function readStatusToolInput(
     typeof input.agentId === 'string' ? { draft: { ...draft, agentId: input.agentId } } : { draft }
 
   switch (input.action) {
-    case 'record_decision': {
-      // `review_later` is the name before 0.4.0 of `before_settling`.
-      const urgency = input.urgency === 'review_later' ? 'before_settling' : input.urgency
-      if (!URGENCIES.includes(urgency as DecisionUrgency)) {
-        return { error: 'A decision needs an urgency: `blocked`, `before_settling` or `after_settling`.' }
-      }
-      const question = text(input.question)
-      if (question === null) {
-        return { error: 'A decision needs a question.' }
-      }
-      const options = Array.isArray(input.options) ? input.options.map(text) : []
-      if (
-        options.length < MIN_OPTIONS ||
-        options.length > MAX_OPTIONS ||
-        options.some(option => option === null)
-      ) {
-        return { error: 'A decision needs two to four options, each a non-empty string.' }
-      }
-      const fallback = text(input.default)
-      if (fallback === null) {
-        return { error: 'A decision needs a default: the answer you recommend.' }
-      }
-      const unblocks = text(input.unblocks)
-      if (unblocks === null) {
-        return { error: 'A decision needs `unblocks`: what the user must say or do to settle it.' }
-      }
-
-      return withAgent({
-        kind: 'decision',
-        urgency: urgency as DecisionUrgency,
-        question,
-        options: options as string[],
-        default: fallback,
-        unblocks,
-      })
-    }
-    case 'record_surprise': {
-      const occurred = text(input.occurred)
-      if (occurred === null) {
-        return { error: 'A surprise needs `occurred`: what occurred.' }
-      }
-      const changed = text(input.changed)
-      if (changed === null) {
-        return { error: 'A surprise needs `changed`: what it changed in the work or the plan.' }
-      }
-
-      return withAgent({ kind: 'surprise', occurred, changed })
-    }
+    case 'record_decision':
+    case 'record_surprise':
     case 'record_blocker': {
-      const failed = text(input.failed)
-      if (failed === null) {
-        return { error: 'A blocker needs `failed`: what you tried that failed.' }
-      }
-      const needs = text(input.needs)
-      if (needs === null) {
-        return { error: 'A blocker needs `needs`: what the user can do to unblock you.' }
-      }
+      const draft = readDraft(RECORDS[input.action], input)
 
-      return withAgent({ kind: 'blocker', failed, needs })
+      return 'error' in draft ? draft : withAgent(draft)
     }
     case 'resolve':
     case 'dismiss': {
@@ -338,6 +310,17 @@ export function readStatusToolInput(
     }
     case 'list':
       return readListFilter(input.filter)
+    case 'create':
+    case 'read':
+    case 'update':
+    case 'delete': {
+      const request = readCrud(input.action, input)
+      if ('error' in request) {
+        return request
+      }
+
+      return typeof input.agentId === 'string' ? { crud: request, agentId: input.agentId } : { crud: request }
+    }
     case 'reset':
       return typeof input.agentId === 'string'
         ? { error: 'Only the main session resets the progress, and only when the user asks.' }
@@ -450,6 +433,38 @@ function ticketSaid(request: TicketRequest, { ticket, change }: TicketOutcome): 
   }
 }
 
+/** A generic call's kind, id and fields, checked against the kind table (see crud.ts). */
+function readCrud(action: CrudRequest['action'], input: Record<string, unknown>): CrudRequest | { error: string } {
+  if (action === 'read') {
+    const read = readListFilter(input.filter)
+
+    return 'error' in read ? read : { action, filter: read.list }
+  }
+  const kind = input.kind
+  if (!CRUD_KINDS.includes(kind as CrudKind)) {
+    return { error: `\`${action}\` needs \`kind\`: one of ${CRUD_KINDS.join(', ')}.` }
+  }
+  const fields = input.fields ?? {}
+  if (action !== 'delete' && (typeof fields !== 'object' || fields === null || Array.isArray(fields))) {
+    return { error: '`fields` is an object of field names and values.' }
+  }
+  if (action === 'create') {
+    const wrong = checkFields('create', kind as CrudKind, fields as Record<string, unknown>)
+
+    return wrong === null ? { action, kind: kind as CrudKind, fields: fields as Record<string, unknown> } : { error: wrong }
+  }
+  const id = text(input.id)
+  if (id === null) {
+    return { error: `\`${action}\` needs \`id\`: the entry's id, such as ${KINDS[kind as CrudKind].id}.` }
+  }
+  if (action === 'delete') {
+    return { action, kind: kind as CrudKind, id }
+  }
+  const wrong = checkFields('update', kind as CrudKind, fields as Record<string, unknown>)
+
+  return wrong === null ? { action, kind: kind as CrudKind, id, fields: fields as Record<string, unknown> } : { error: wrong }
+}
+
 /**
  * A `list` call's filter: absent or null for no filter; `kind` and `id` as
  * an array or one string, `state` open by default.
@@ -498,27 +513,4 @@ function filterValues(value: unknown): string[] | null | undefined {
   const list = (Array.isArray(value) ? value : [value]).map(text)
 
   return list.some(v => v === null) ? undefined : list.length === 0 ? null : (list as string[])
-}
-
-/**
- * A ticket's issue number from the input: `3`, `"3"` and `"#3"` all read as
- * 3; undefined when the input has none; null when it is no issue number.
- */
-function ticketNumber(value: unknown): number | undefined | null {
-  if (value === undefined || value === null || value === '') {
-    return undefined
-  }
-  const number = typeof value === 'string' ? Number(value.trim().replace(/^#/, '')) : value
-
-  return typeof number === 'number' && Number.isInteger(number) && number > 0 ? number : null
-}
-
-/** A trimmed, non-empty string, or null. */
-function text(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-  const trimmed = value.trim()
-
-  return trimmed === '' ? null : trimmed
 }
