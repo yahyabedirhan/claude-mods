@@ -430,11 +430,11 @@ export function subagentToolCall($: Engine, agentId: string, input: ToolCallArgs
   return $.tool.call({ ...input, agentId } as never)
 }
 
-/** Runs `/session-status` as the person typing it does. */
-export function runCommand($: Engine) {
+/** Runs `/session-status`, with `args` after it, as the person typing it does. */
+export function runCommand($: Engine, args = '') {
   return $.command.run({
     command: PLUGIN,
-    args: '',
+    args,
     origin: { kind: 'composer' },
     presentation: { isFullscreen: true, columns: 160 },
   })

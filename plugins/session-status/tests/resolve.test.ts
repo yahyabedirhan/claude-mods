@@ -27,7 +27,7 @@ test('the status tool offers resolve, dismiss and post_decide_list, and tells th
   const tool = tools.get(STATUS_TOOL)
   expect(tool?.inputSchema).toMatchObject({
     properties: {
-      action: { enum: ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item'] },
+      action: { enum: ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset'] },
       id: { type: 'string' },
     },
   })

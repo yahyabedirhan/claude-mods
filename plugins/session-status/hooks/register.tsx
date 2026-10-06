@@ -22,6 +22,8 @@ import { blockedPing, blockerPing, endListPing, pingId, withdrawPing } from './p
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { listText, resetProgress, resetText } from './reset'
+import type { ResetRemoved } from './reset'
 import { reportItem } from './session-items'
 import { sessionProgress } from './session-progress'
 import {
@@ -326,6 +328,19 @@ function startObserver($: EngineInterface, trigger: Trigger): void {
 /** This module load's age timer; a reload starts the module, and this, over. */
 let ageTicker: Timer | undefined
 
+/** Resets the session progress (see `resetProgress`), saved at once; resolves to the reply. */
+async function reset($: EngineInterface): Promise<string> {
+  let removed: ResetRemoved | undefined
+  await changeStatus($, status => {
+    const outcome = resetProgress(status)
+    removed = outcome.removed
+
+    return outcome.status
+  })
+
+  return resetText(removed ?? { items: 0, tickets: 0, effort: null })
+}
+
 /**
  * Draws the pane again every AGE_TICK_MS while it is open, so "last update"
  * ages without a status change. A reload drops the timer, and the
@@ -351,7 +366,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: COMMAND,
-      description: 'Open or close the session status pane',
+      description: 'Open or close the session status pane; `reset` clears the session progress',
     })
     await $.tool.register(STATUS_TOOL_SPEC)
     clearedFrom = null
@@ -411,7 +426,16 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
+  // `/session-status` opens or closes the pane; `/session-status reset`
+  // clears the session progress a `/clear` carried over.
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'reset') {
+      return { text: await reset($) }
+    }
+    if (arg !== '') {
+      return { text: `Unknown argument "${e.args.trim()}". Use /${COMMAND} to open or close the pane, or /${COMMAND} reset to clear the session progress.` }
+    }
     const done = await togglePane($)
 
     return { text: `Session status pane ${done}.` }
@@ -462,6 +486,14 @@ export const register: Register = on => {
       sendPing($, endListPing(posted.sessionId, listed.map(item => item.id)))
 
       return { result: endListText(listed) }
+    }
+
+    if ('list' in input) {
+      return { result: listText(await currentStatus($)) }
+    }
+
+    if ('reset' in input) {
+      return { result: await reset($) }
     }
 
     if ('ticket' in input) {

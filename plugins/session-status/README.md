@@ -249,6 +249,13 @@ out of the line.
   a report for a different effort starts the tickets from zero.
 - **`/compact`** keeps the status as it is.
 
+To start clean after `/clear`, type **`/session-status reset`**. It removes
+the session items, the reported tickets, the effort and its ticket count; the
+open decisions and blockers stay, with the same ids. The model can do the same
+with the status tool's `reset` action, which it calls only when you ask. Its
+`list` action names every open item, decision, blocker and surprise with its
+id, so the model can close them after `/clear` took the ids out of its context.
+
 ## Optional tools
 
 All are skipped silently when they are missing.
