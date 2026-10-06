@@ -4,7 +4,6 @@ import { blockedPing, endListPing, pingId, withdrawPing } from '../hooks/pings'
 import {
   blockedDecision,
   callStatusTool,
-  endSession,
   decisionBeforeSettling,
   start,
   surprise,
@@ -107,22 +106,6 @@ test('resolving a blocking decision withdraws its ping', async ($, on) => {
   const { runs, clock } = world(on, { sessionId: SESSION })
   await start($)
   await callStatusTool($, blockedDecision())
-  await settle(clock)
-  runs.length = 0
-
-  await callStatusTool($, { action: 'resolve', id: 'D1' })
-  await settle(clock)
-
-  expect(pingRuns(runs)).toEqual([['shipyard', 'ping', 'withdraw', PING]])
-})
-
-test('resolving a blocked decision carried over /clear withdraws the ping the first session sent', async ($, on) => {
-  const { runs, clock, switchSession } = world(on, { sessionId: SESSION })
-  await start($)
-  await callStatusTool($, blockedDecision())
-  await endSession($, SESSION)
-  switchSession('9b7d5e3a-0000-4000-8000-000000000000')
-  await $.classic.SessionStart({ source: 'clear', session_id: '9b7d5e3a-0000-4000-8000-000000000000' })
   await settle(clock)
   runs.length = 0
 

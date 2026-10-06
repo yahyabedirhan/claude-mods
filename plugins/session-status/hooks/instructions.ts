@@ -36,7 +36,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
   - Call it with state \`landed\` when the ticket's commit is on the effort branch. Do not wait for the issue to close: a ticket that waits for QA or for the merge has landed.
   - Call it with state \`stopped\` when a started ticket is no longer being built.
   - Only the orchestrator reports tickets. A delegate that builds one ticket does not.
-- When you need an id that is no longer in your context, for example after \`/clear\`, call the tool with action \`list\`. It names every open id.
+- When you need an id that is no longer in your context, for example after \`/compact\`, call the tool with action \`list\`. It names every open id.
 - Only when the user explicitly asks you to reset, clear or start the session status over, call the tool with action \`reset\`. It removes everything the status recorded, open decisions and blockers too. Never reset on your own or because of \`/clear\`.
 - If you are a subagent and cannot call the status tool, put your decisions and surprises in your final report, with the same fields. The orchestrator records them with the status tool.`
 

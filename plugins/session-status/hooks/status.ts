@@ -167,113 +167,6 @@ function withNewUrgency<T extends StatusItem>(item: T): T {
 }
 
 /**
- * The status a session starts with after `/clear`: empty for the new
- * session, but with the previous session's open decisions, ids unchanged, so
- * the person can still answer them by the same id, its open blockers, its effort and reported
- * tickets, and its session items: the new session goes on with the same
- * work. The Session section counts the carried tickets while the effort
- * stays; a report for another effort starts them from zero (see
- * `effortReports`). The items carry whole, so their count goes on.
- */
-export function carryOver(previous: SessionStatus, sessionId: string): SessionStatus {
-  const open = previous.items.filter(item => item.kind !== 'surprise' && isOpen(item))
-
-  return {
-    ...emptyStatus(sessionId),
-    items: open,
-    effort: previous.effort,
-    ticketReports: previous.ticketReports,
-    sessionItems: previous.sessionItems,
-  }
-}
-
-/**
- * The `$.store` key that holds what a `/clear` carries over, written when the
- * old session ends. It does not rely on `$.state`, which a `/clear` can empty.
- */
-export const CARRY_KEY = 'clear-carry'
-
-/**
- * How long a carry stays fresh. The new session's SessionStart follows the
- * old one's end at once; an older carry is one whose `/clear` never got that
- * far (the process stopped), and no later session takes it.
- */
-export const CARRY_WINDOW_MS = 60_000
-
-/** What a `/clear` carries over: the ended session's open decisions, effort, reported tickets and items. */
-export type ClearCarry = {
-  kind: 'clear-carry'
-  /** The session that ended. */
-  from: string
-  /** When it ended, in `$.clock.now()` milliseconds. */
-  at: number
-  /** The open decisions and blockers. */
-  items: (Decision | Blocker)[]
-  effort: Effort | null
-  ticketReports: TicketReport[]
-  sessionItems: SessionItem[]
-}
-
-/** What a session that ends by `/clear` carries over; null when it has nothing to carry. */
-export function clearCarry(status: SessionStatus, now: number): ClearCarry | null {
-  const { items, effort, ticketReports, sessionItems } = carryOver(status, status.sessionId)
-  const decisions = items.filter((item): item is Decision | Blocker => item.kind !== 'surprise')
-  if (decisions.length === 0 && effort === null && ticketReports.length === 0 && sessionItems.length === 0) {
-    return null
-  }
-
-  return { kind: 'clear-carry', from: status.sessionId, at: now, items: decisions, effort, ticketReports, sessionItems }
-}
-
-/**
- * A value read from `$.store` as a carry `sessionId` may take at `now`, or
- * null: not a carry, written by `sessionId` itself, or no longer fresh.
- */
-export function readCarry(value: unknown, sessionId: string, now: number): ClearCarry | null {
-  if (typeof value !== 'object' || value === null) {
-    return null
-  }
-  const carry = value as Partial<ClearCarry>
-  const isCarry =
-    carry.kind === 'clear-carry' &&
-    typeof carry.from === 'string' &&
-    typeof carry.at === 'number' &&
-    Array.isArray(carry.items)
-  if (!isCarry || carry.from === sessionId || Math.abs(now - (carry.at ?? 0)) > CARRY_WINDOW_MS) {
-    return null
-  }
-
-  return {
-    ...(carry as ClearCarry),
-    items: (carry.items ?? []).map(withNewUrgency),
-    effort: carry.effort ?? null,
-    ticketReports: Array.isArray(carry.ticketReports) ? carry.ticketReports : [],
-    sessionItems: Array.isArray(carry.sessionItems) ? carry.sessionItems : [],
-  }
-}
-
-/**
- * The status with a carry's decisions added before its own items, each id
- * once, and the carry's effort, reported tickets and session items while the
- * status has none. A status that the carried state already reached (`$.state` kept
- * across the `/clear`) stays as it is.
- */
-export function withCarry(status: SessionStatus, carry: ClearCarry): SessionStatus {
-  const ids = new Set(status.items.map(item => item.id))
-  const carried = carry.items.filter(item => !ids.has(item.id))
-  const effort = status.effort ?? carry.effort
-  const own = status.ticketReports
-  const ticketReports = own.length > 0 ? own : carry.ticketReports
-  const ownItems = status.sessionItems
-  const sessionItems = ownItems.length > 0 ? ownItems : carry.sessionItems
-  if (carried.length === 0 && effort === status.effort && ticketReports === own && sessionItems === ownItems) {
-    return status
-  }
-
-  return { ...status, items: [...carried, ...status.items], effort, ticketReports, sessionItems }
-}
-
-/**
  * A value read from `$.store` as the saved status of `sessionId`, or null
  * when it is not one: missing, another session's, or not a status at all.
  */
@@ -292,25 +185,20 @@ export function savedStatus(value: unknown, sessionId: string): SessionStatus | 
 /**
  * The status `sessionId` holds, given the one held now and the one saved for
  * it: the held one when it is this session's; else the saved one (a resume);
- * else, on a known `/clear` alone, the held one's open decisions carried over
- * at `now`; else none. A resume or fork with nothing saved starts empty: it
- * never takes the decisions of the session the process held before.
+ * else none. A status belongs to one session id: a `/clear`, a fork or a
+ * resume with nothing saved starts empty, never with the status the process
+ * held before.
  */
 export function statusForSession(
   held: SessionStatus | null,
   sessionId: string,
   saved: SessionStatus | null,
-  now: number,
-  isClear = false,
 ): SessionStatus | null {
   if (held?.sessionId === sessionId) {
     return held
   }
-  if (saved !== null) {
-    return saved
-  }
 
-  return held === null || !isClear ? null : { ...carryOver(held, sessionId), updatedAt: now }
+  return saved
 }
 
 /**
@@ -440,9 +328,7 @@ export function keysToPrune(saved: { key: string; value: unknown }[], current: s
  * The status after one change: `change` applied to the current status (an
  * empty one before the first change), kept within its bounds and stamped
  * with the session and the time. A current status of another session is
- * never stamped with this one: the change applies to an empty status. (A
- * `/clear`'s carry reaches the new session before any change; see
- * register.tsx's holdSession.)
+ * never stamped with this one: the change applies to an empty status.
  */
 export function applyChange(
   current: SessionStatus | null,

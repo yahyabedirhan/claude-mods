@@ -1,9 +1,9 @@
-// Resetting the session's progress, and listing what is open, as data. A
-// `/clear` carries the session items, the reported tickets and the effort
-// over (see `carryOver`); `/session-status reset` and the status tool's
-// `reset` action clear the whole record in one step, so an unrelated task
-// starts from nothing. The `list` action names every
-// open id, which a `/clear` leaves out of the model's context.
+// Resetting the session's progress, and listing what is open, as data.
+// `/session-status reset` and the status tool's `reset` action clear the
+// whole record in one step, so an unrelated task starts from nothing within
+// the same session (a `/clear` starts a new session, and so an empty status).
+// The `list` action names every open id, which a `/compact` can leave out of
+// the model's context.
 // register.tsx runs both; nothing here calls `$`.
 
 import type { SessionStatus } from '../types'
@@ -109,5 +109,5 @@ function count(n: number, noun: string, plural = `${noun}s`): string {
 }
 
 function joinAnd(parts: readonly string[]): string {
-  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
+  return parts.length === 1 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`
 }

@@ -253,10 +253,9 @@ out of the line.
 
 - **Resume** restores the session's saved status. A session with no saved
   status starts empty.
-- **`/clear`** starts a new status and carries the open decisions (same ids),
-  the effort, the reported tickets and the session items over to it. The
-  item count goes on, and so do the tickets while the effort stays the same;
-  a report for a different effort starts the tickets from zero.
+- **`/clear`** starts a new, empty status, because it starts a new session
+  id: nothing carries over, and ids start over at 1. The old session keeps
+  its saved status, which `/resume` of that session restores.
 - **`/compact`** keeps the status as it is.
 
 To start an unrelated task from nothing, type **`/session-status reset`**. It
@@ -267,7 +266,7 @@ runs now stays: its tasks, crons, subagents and place. The model can do the
 same with the status tool's `reset` action, which it calls only when you
 explicitly ask for a reset, never on its own or because of `/clear`. Its
 `list` action names every open item, decision, blocker and surprise with its
-id, so the model can close them after `/clear` took the ids out of its context.
+id, so the model can close them after `/compact` took the ids out of its context.
 
 ## Optional tools
 

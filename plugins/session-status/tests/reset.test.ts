@@ -5,7 +5,6 @@ import {
   STATUS_TOOL,
   callStatusTool,
   decisionBeforeSettling,
-  endSession,
   ghIssue,
   runCommand,
   sectionText,
@@ -14,36 +13,33 @@ import {
   world,
 } from './world'
 
-const NEW_SESSION = 'session-b'
 const EFFORT = 'launch'
 
-/** A session with two items, an effort with a reported ticket and an open decision, then a `/clear`. */
-async function clearedSession($: Parameters<typeof start>[0], w: ReturnType<typeof world>) {
+/** A session with two items, an effort with a reported ticket and an open decision. */
+async function sessionWithProgress($: Parameters<typeof start>[0]) {
   await start($)
   await callStatusTool($, { action: 'item', state: 'added', title: 'Write the parser' })
   await callStatusTool($, { action: 'item', state: 'added', title: 'Ship it' })
   await callStatusTool($, { action: 'item', state: 'done', id: 'I1' })
   await callStatusTool($, { action: 'ticket', state: 'landed', number: 3, title: 'Play a video', effort: EFFORT })
   await callStatusTool($, decisionBeforeSettling())
-  await endSession($, SESSION_ID)
-  w.forgetState()
-  w.switchSession(NEW_SESSION)
-  await $.classic.SessionStart({ source: 'clear', session_id: NEW_SESSION } as never)
 }
 
 test('/session-status reset clears everything, open decisions too, and ids start over', async ($, on) => {
   const w = world(on, { issues: [ghIssue(3, 'Play a video', 'OPEN', EFFORT), ghIssue(4, 'Pause', 'OPEN', EFFORT)] })
-  await clearedSession($, w)
-  expect(await sectionText($, 'terminal', 'session')).toBeDefined()
+  await sessionWithProgress($)
+  expect(await sectionText($, 'terminal', 'session')).toContain('Ship it')
 
   const reply = await runCommand($, 'reset')
 
   expect(reply.text).toBe(
     'Session status reset: removed 2 session items, 1 decision, surprise or blocker, 1 ticket report and the effort launch. Everything starts over.',
   )
-  expect(w.saved[NEW_SESSION]).toMatchObject({ sessionItems: [], ticketReports: [], effort: null, tickets: null })
-  expect(w.saved[NEW_SESSION]).toMatchObject({ items: [], links: [], endListPostedAt: null })
-  expect(await sectionText($, 'terminal', 'session')).toBeUndefined()
+  expect(w.saved[SESSION_ID]).toMatchObject({ sessionItems: [], ticketReports: [], effort: null, tickets: null })
+  expect(w.saved[SESSION_ID]).toMatchObject({ items: [], links: [], endListPostedAt: null })
+  const session = (await sectionText($, 'terminal', 'session')) ?? ''
+  expect(session).not.toContain('Progress')
+  expect(session).not.toContain('Ship it')
   expect(await sectionText($, 'terminal', 'effort')).toBeUndefined()
   expect((await callStatusTool($, { action: 'item', state: 'added', title: 'Fresh' })).result).toBe(
     'Added item I1 Fresh. Session: 0/1 done.',
@@ -71,18 +67,18 @@ test('/session-status with an unknown argument names the two forms and leaves th
 
 test('the reset action does what the command does, and a subagent cannot call it', async ($, on) => {
   const w = world(on)
-  await clearedSession($, w)
+  await sessionWithProgress($)
 
   expect((await subagentToolCall($, 'agent-1', { tool: STATUS_TOOL, action: 'reset' } as never)).deny).toMatch(
     /Only the main session/,
   )
   expect((await callStatusTool($, { action: 'reset' })).result).toMatch(/^Session status reset: removed 2 session items/)
-  expect(w.saved[NEW_SESSION]).toMatchObject({ sessionItems: [], effort: null })
+  expect(w.saved[SESSION_ID]).toMatchObject({ sessionItems: [], effort: null })
 })
 
-test('list names the ids the earlier session gave, after /clear', async ($, on) => {
-  const w = world(on)
-  await clearedSession($, w)
+test('list names the open and closed ids of the session', async ($, on) => {
+  world(on)
+  await sessionWithProgress($)
 
   const reply = (await callStatusTool($, { action: 'list' })).result
 

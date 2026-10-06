@@ -402,11 +402,6 @@ export async function internalAgent($: Engine, agentId: string) {
   await subagentStop($, agentId)
 }
 
-/** Ends the session `sessionId` as a `/clear` or an exit does. */
-export function endSession($: Engine, sessionId: string, reason: 'clear' | 'prompt_input_exit' = 'clear') {
-  return $.session.end({ reason, sessionId, resume: { id: sessionId } })
-}
-
 /** A subagent finishing, as the classic SubagentStop event says it. */
 export function subagentStop($: Engine, agentId: string) {
   return $.classic.SubagentStop({

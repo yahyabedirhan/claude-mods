@@ -13,7 +13,6 @@ import {
   SURFACES,
   bandText,
   callStatusTool,
-  endSession,
   ghIssue,
   mountPane,
   sectionText,
@@ -22,7 +21,6 @@ import {
   world,
 } from './world'
 
-const NEW_SESSION = 'session-b'
 const EFFORT = 'video-review-v1'
 
 /** Adds an item as the main session does. */
@@ -226,27 +224,6 @@ test('with two items or fewer the section shows no "+N more"', async ($, on) => 
     expect(text).toContain('✓ I1 One')
     expect(text).not.toContain('more')
   }
-})
-
-test('/clear carries the items over, so the count goes on', async ($, on) => {
-  const w = world(on)
-  await start($)
-  await add($, 'One')
-  await mark($, 'done', 'I1')
-  await add($, 'Two')
-
-  await endSession($, SESSION_ID)
-  w.forgetState()
-  w.switchSession(NEW_SESSION)
-  await $.classic.SessionStart({ source: 'clear', session_id: NEW_SESSION } as never)
-
-  expect(w.saved[NEW_SESSION]).toMatchObject({
-    sessionItems: [
-      { id: 'I1', state: 'done' },
-      { id: 'I2', state: 'added' },
-    ],
-  })
-  expect((await add($, 'Three')).result).toBe('Added item I3 Three. Session: 1/3 done.')
 })
 
 test('past the cap the open items and the newest item stay', () => {

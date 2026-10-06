@@ -10,7 +10,6 @@ import {
   SURFACES,
   bandText,
   callStatusTool,
-  endSession,
   ghIssue,
   sectionText,
   start,
@@ -319,42 +318,20 @@ test('a ticket report opens the pane and leaves doing now on the work', async ($
   expect(w.saved[SESSION_ID]).toMatchObject({ doingNow: { tool: 'Bash', text: 'Integrate the ticket' } })
 })
 
-/** Ends the session by /clear and starts the new one, `$.state` emptied as a /clear leaves it. */
+/** Starts a new session by /clear, `$.state` emptied as a /clear leaves it. */
 async function clear($: Engine, w: ReturnType<typeof world>) {
-  await endSession($, SESSION_ID)
   w.forgetState()
   w.switchSession(NEW_SESSION)
   await $.classic.SessionStart({ source: 'clear', session_id: NEW_SESSION } as never)
 }
 
-test('/clear carries the Session progress over while the effort stays the same', async ($, on) => {
-  const w = world(on)
-  await start($)
-  await ticket($, 'landed', 4, 'Comment: Queue a comment', EFFORT)
-  await ticket($, 'started', 3, 'Control: Play a video')
-
-  await clear($, w)
-
-  expect(w.saved[NEW_SESSION]).toMatchObject({
-    effort: { name: EFFORT },
-    ticketReports: [
-      { number: 4, state: 'landed' },
-      { number: 3, state: 'started' },
-    ],
-  })
-  await ticket($, 'landed', 3, undefined, EFFORT)
-  for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Progress 2/2')
-  }
-})
-
-test('after /clear a report for a different effort starts the Session progress from zero', async ($, on) => {
+test('after /clear the Session progress starts from zero, even for the same effort', async ($, on) => {
   const w = world(on)
   await start($)
   await ticket($, 'landed', 4, 'Comment: Queue a comment', EFFORT)
 
   await clear($, w)
-  await ticket($, 'started', 1, 'Search: Find a video', 'search-v1')
+  await ticket($, 'started', 3, 'Control: Play a video', EFFORT)
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'session')).toContain('Progress 0/1')
