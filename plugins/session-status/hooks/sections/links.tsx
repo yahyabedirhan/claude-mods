@@ -22,14 +22,17 @@ export const linksSection: Section = ({ ui, status, surface, show }) => {
   return (
     <Box key="links" flexDirection="column">
       <Text bold>Links</Text>
-      <Text>
+      {/* One box per link, so a narrow pane wraps between links, never between a mark and its label. */}
+      <Box key="links-row" flexDirection="row" flexWrap="wrap">
         {shown.map((link, index) => (
-          <Text key={link.url}>
-            {index === 0 ? '' : ' · '}
-            {linkEntry(ui, link, surface)}
-          </Text>
+          <Box key={link.url}>
+            <Text>
+              {linkEntry(ui, link, surface)}
+              {index === shown.length - 1 ? '' : ' · '}
+            </Text>
+          </Box>
         ))}
-      </Text>
+      </Box>
       {more > 0 ? moreButton(ui, 'links', more, () => show('links')) : null}
     </Box>
   )

@@ -67,3 +67,20 @@ test('the Building "+N more" opens every ticket being built', async ($, on) => {
     expect(isBack).toBe(true)
   }
 })
+
+test('in a narrow pane each link keeps its mark and label together', async ($, on) => {
+  world(on)
+  await start($)
+  for (let number = 31; number <= 35; number += 1) {
+    await callStatusTool($, { action: 'link', url: `https://github.com/yahyabedirhan/claude-mods/pull/${number}` })
+  }
+
+  const ui = await mountPane($, 'terminal')
+  const row = await ui.find({ key: 'links-row' })
+  const boxes = (await ui.findAll({ type: 'Box' })).filter(box => box.key?.startsWith('https://github.com/') === true)
+  await ui.unmount()
+  expect(row?.props).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
+  expect(boxes.map(box => box.text.trim())).toEqual(
+    [35, 34, 33, 32, 31].map((n, i) => `\u{F04C2} claude-mods#${n}${i === 4 ? '' : ' ·'}`),
+  )
+})
