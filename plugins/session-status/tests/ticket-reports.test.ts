@@ -299,7 +299,7 @@ test('the band shows the closed count and the items, never the tickets or their 
   await settle(w.clock)
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · 0/0 done · closed 1/13 · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · closed 1/13 · 0 surprise')
   }
 
   await callStatusTool($, { action: 'item', state: 'added', title: 'Build #4' })

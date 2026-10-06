@@ -162,7 +162,7 @@ observer's findings out.
 `follow-up` shows while there is one, `tasks` while a task list exists, and
 `closed` during an effort.
 Without items the session figure is the tasks'
-`<done>/<total> done`.
+`<done>/<total> done`; with no items and no tasks the band leaves it out.
 
 ## Opening it
 

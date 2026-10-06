@@ -32,13 +32,13 @@ test('below the width limit the band shows the counts in the agreed form', async
   }
 })
 
-test('the band counts zeros before any task', async ($, on) => {
+test('the band leaves the progress figure out before any item or task', async ($, on) => {
   world(on, { isNarrow: true })
   await start($)
   await callStatusTool($, surprise())
 
   for (const surface of SURFACES) {
-    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · 0/0 done · 1 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 0 decide · 1 surprise')
   }
 })
 
@@ -55,7 +55,7 @@ test('the band leaves resolved items out', () => {
     ] as StatusItem[],
   }
 
-  expect(bandLine(status)).toBe('1 blocked · 0 decide · 0/0 done · 0 surprise')
+  expect(bandLine(status)).toBe('1 blocked · 0 decide · 0 surprise')
 })
 
 function decision(id: string, urgency: 'blocked' | 'before_settling'): StatusItem {
