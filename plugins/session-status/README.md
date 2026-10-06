@@ -94,9 +94,13 @@ Answered (N) · Last update
 
    The pull request marks are Nerd Font glyphs (Material Design's
    `source_pull` and `source_merge`), drawn in the terminal; the desktop shows
-   `⇄` in the same colours. The state follows this session's own `gh pr
-   merge`, `gh pr close`, `gh pr reopen`, `gh issue close` and `gh issue
-   reopen`; a page merged or closed elsewhere keeps the state it had.
+   `⇄` in the same colours. The pane reads each page's state from GitHub
+   with one `gh api graphql` call: when a link joins, right after a `gh pr`
+   or `gh issue` command, and at most every two minutes while the session
+   works. A page merged or closed anywhere, by anyone, shows so; without
+   `gh` or a network, the marks keep their last state. Each label is a link
+   to its page: Cmd+click opens it in Ghostty, and Cmd+Shift+click when the
+   pane runs inside Herdr.
 8. **Places**: the other repositories the session changed (see
    [Places](#places)).
 9. **Decide before settling**: decisions the agent went on with a default
