@@ -70,6 +70,56 @@ export function resetText(removed: ResetRemoved): string {
   return `Session status reset: removed ${joinAnd(parts)}. Everything starts over.`
 }
 
+/** The kinds of entry `list` names; an observation is a surprise the observer found. */
+export const LIST_KINDS = ['item', 'decision', 'blocker', 'surprise', 'observation', 'ticket', 'effort'] as const
+export type ListKind = (typeof LIST_KINDS)[number]
+
+/** `open`, `closed` (resolved, dismissed, done, dropped, landed) or `all`. */
+export const LIST_STATES = ['open', 'closed', 'all'] as const
+export type ListState = (typeof LIST_STATES)[number]
+
+/**
+ * What a `list` call keeps: entries of one of `kinds`, in `state`, with one
+ * of `ids`. Different keys must all match; null keeps every kind or id.
+ */
+export type ListFilter = {
+  kinds: ReadonlySet<ListKind> | null
+  state: ListState
+  /** As the model gave them; `matchesFilter` ignores case and a ticket's `#`. */
+  ids: ReadonlySet<string> | null
+}
+
+/** What `matchesFilter` checks of one entry. */
+export type ListEntry = {
+  kind: ListKind
+  /** `D1`, `I2`, a ticket's `#3` or title, the effort's name. */
+  id: string
+  /** Whether it is open; null for the effort, which has no state. */
+  open: boolean | null
+}
+
+/** Whether `filter` keeps `entry`. */
+export function matchesFilter(entry: ListEntry, filter: ListFilter): boolean {
+  if (filter.kinds !== null && !filter.kinds.has(entry.kind)) {
+    return false
+  }
+  if (entry.open !== null && filter.state !== 'all' && entry.open !== (filter.state === 'open')) {
+    return false
+  }
+  if (filter.ids !== null) {
+    const id = sameId(entry.id)
+
+    return [...filter.ids].some(wanted => sameId(wanted) === id)
+  }
+
+  return true
+}
+
+/** An id as `matchesFilter` compares it: `#3`, `3` and ` #3 ` are the same, and so are `d1` and `D1`. */
+function sameId(id: string): string {
+  return id.trim().replace(/^#/, '').toUpperCase()
+}
+
 /**
  * What the model reads after `list`: one line for each open entry, grouped
  * by kind, each with its id; a kind with no entry is left out.
