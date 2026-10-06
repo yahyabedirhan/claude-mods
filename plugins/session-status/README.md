@@ -162,7 +162,7 @@ observer's findings out.
 `follow-up` shows while there is one, `tasks` while a task list exists, and
 `closed` during an effort.
 Without items the session figure is the tasks'
-`<done>/<total> done`.
+`<done>/<total> done`; with no items and no tasks the band leaves it out.
 
 ## Opening it
 
@@ -384,6 +384,9 @@ one finding. Findings show under **Observations**; they never reach the
 main agent. What the agent knows it is stuck on is a blocker, under **You
 should know**.
 
+- It reads each step as the user's, the agent's or a subagent's. A command
+  you run yourself, such as `/reload-plugins` or `!git status`, is marked as
+  yours, and the observer is told not to count it against the agent.
 - It checks every 5 main-loop turns and when a subagent finishes.
 - Each finding you dismiss doubles the turn interval, up to 40 turns. After
   a dismissal, a finished subagent also waits for that interval.

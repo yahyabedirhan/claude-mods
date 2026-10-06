@@ -20,6 +20,7 @@ import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
 import { kindOfId } from './status'
 import type { ItemDraft } from './status'
+import { asSentence } from './text'
 import { ticketName, ticketShortName } from './ticket-reports'
 import type { TicketOutcome, TicketRequest, TicketState } from './ticket-reports'
 
@@ -352,11 +353,12 @@ export function recordedText(item: StatusItem): string {
     return `Recorded blocker ${item.id}. The user was pinged.`
   }
 
+  const defaultText = asSentence(item.default)
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id} (blocked on the user).`
     : item.urgency === 'after_settling'
-      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${item.default}.`
-      : `Recorded decision ${item.id} (decide before settling). Default: ${item.default}.`
+      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${defaultText}`
+      : `Recorded decision ${item.id} (decide before settling). Default: ${defaultText}`
 }
 
 /** What the model reads after it closed an item. */

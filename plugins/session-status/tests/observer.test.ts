@@ -156,6 +156,126 @@ test('a check asks a small model with the recent steps, the task list and the ef
   expect(request?.system).toMatch(/one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is)
 })
 
+/** A user's `/reload-plugins` as Claude Code records it: the caveat, the command, and its output. */
+const RELOAD_PLUGINS = [
+  {
+    role: 'user',
+    text: "<local-command-caveat>The command below was run directly in Claude Code, not sent to you as a request, and its output goes straight to the user. It's recorded here as context for later messages.</local-command-caveat>",
+    toolUses: [],
+  },
+  {
+    role: 'user',
+    text: '<command-name>/reload-plugins</command-name>\n            <command-message>reload-plugins</command-message>\n            <command-args></command-args>',
+    toolUses: [],
+  },
+  { role: 'user', text: '<local-command-stdout>Reloaded: 4 plugins · 3 skills · 6 agents · 0 hooks</local-command-stdout>', toolUses: [] },
+] as const
+
+test("a check marks a user's slash command and its output as the user's", async ($, on) => {
+  const w = world(on)
+  w.messages.push({ role: 'assistant', text: 'The fix is ready.', toolUses: [] }, ...RELOAD_PLUGINS)
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const request = w.modelCalls[0]
+  const prompt = request?.prompt ?? ''
+  expect(prompt).toContain('agent: The fix is ready.')
+  expect(prompt).toContain('user ran /reload-plugins')
+  expect(prompt).toContain("user's command output: Reloaded: 4 plugins · 3 skills · 6 agents · 0 hooks")
+  expect(prompt).not.toContain('<command-name>')
+  expect(prompt).not.toContain('<local-command-stdout>')
+  expect(prompt).not.toContain('local-command-caveat')
+  expect(request?.system).toContain("Never report the user's own actions as the agent's")
+})
+
+test("a check marks a user's shell command and a subagent's work apart from the agent's", async ($, on) => {
+  const w = world(on)
+  w.messages.push(
+    { role: 'user', text: '<bash-input>git status</bash-input>', toolUses: [] },
+    { role: 'user', text: '<bash-stdout>nothing to commit</bash-stdout><bash-stderr></bash-stderr>', toolUses: [] },
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: [
+        { tool_use_id: 'u1', tool: 'Agent', input: { description: 'Find the bug' }, text: 'Found it in parse.ts', agentId: 'agent-9' },
+        { tool_use_id: 'u2', tool: 'Read', input: { file_path: '/parse.ts' }, text: 'code' },
+      ],
+    },
+  )
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const prompt = w.modelCalls[0]?.prompt ?? ''
+  expect(prompt).toContain('user ran !git status')
+  expect(prompt).toContain("user's command output: nothing to commit")
+  expect(prompt).toContain('subagent {"description":"Find the bug"} -> Found it in parse.ts')
+  expect(prompt).toContain('agent tool Read {"file_path":"/parse.ts"} -> code')
+})
+
+test("a check marks a finished background task as the agent's work, not the user's", async ($, on) => {
+  const w = world(on)
+  w.messages.push(
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: [{ tool_use_id: 'u1', tool: 'Bash', input: { command: 'npm test', run_in_background: true }, text: 'started' }],
+    },
+    {
+      role: 'user',
+      text: '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command "npm test" completed (exit code 0)</summary>\n<result>12 passed</result>\n</task-notification>',
+      toolUses: [],
+    },
+    { role: 'user', text: '<system-reminder>The task list is empty.</system-reminder>', toolUses: [] },
+  )
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const request = w.modelCalls[0]
+  const prompt = request?.prompt ?? ''
+  expect(prompt).toContain('background task finished: Background command "npm test" completed (exit code 0) -> 12 passed')
+  expect(prompt).not.toContain('task-notification')
+  expect(prompt).not.toContain('The task list is empty')
+  expect(request?.system).toContain('"background task finished" marks a background task the agent started; it is the agent\'s work')
+})
+
+test("a user prompt that quotes a command tag mid-text stays the user's prompt", async ($, on) => {
+  const w = world(on)
+  w.messages.push(
+    { role: 'user', text: 'Why does the parser drop <bash-stdout> lines?', toolUses: [] },
+    { role: 'user', text: 'Explain what <command-name>/review</command-name> records.', toolUses: [] },
+  )
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const prompt = w.modelCalls[0]?.prompt ?? ''
+  expect(prompt).toContain('user: Why does the parser drop <bash-stdout> lines?')
+  expect(prompt).toContain('user: Explain what <command-name>/review</command-name> records.')
+  expect(prompt).not.toContain('user ran')
+})
+
+test("the observer records no observation about the agent for a user's /reload-plugins", async ($, on) => {
+  const w = world(on)
+  // A model that reads only the plain transcript credits the reload to the agent;
+  // told the step is the user's own, it finds nothing.
+  w.model(request =>
+    request.prompt.includes('user ran /reload-plugins') && request.system?.includes("Never report the user's own actions as the agent's")
+      ? findings()
+      : findings({ occurred: 'The agent reloaded plugins without committing the work', changed: 'Commit before a reload' }),
+  )
+  w.messages.push({ role: 'assistant', text: 'The fix is ready.', toolUses: [] }, ...RELOAD_PLUGINS)
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  expect(w.modelCalls).toHaveLength(1)
+  expect(await surpriseCount($)).toEqual([undefined, undefined])
+  expect((w.saved['session-a'] as SessionStatus).items).toEqual([])
+})
+
 test('a check reads at most the newest 30 messages, each cut short', async ($, on) => {
   const w = world(on)
   for (let n = 1; n <= 40; n++) {

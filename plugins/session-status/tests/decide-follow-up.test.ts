@@ -37,7 +37,7 @@ test('a decision that can wait shows under Follow-up after settling, not under D
     const decide = (await sectionText($, surface, 'decide')) ?? ''
     expect(decide).toContain('Decide before settling (1)')
     expect(decide).not.toContain('D1')
-    expect(await bandText($, surface)).toBe('0 blocked · 1 decide · 1 follow-up · 0/0 done · 0 surprise')
+    expect(await bandText($, surface)).toBe('0 blocked · 1 decide · 1 follow-up · 0 surprise')
   }
 })
 

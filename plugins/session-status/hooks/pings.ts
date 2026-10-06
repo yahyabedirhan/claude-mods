@@ -4,6 +4,7 @@
 // register.tsx runs them; this module only builds them.
 
 import type { Blocker, Decision } from '../types'
+import { asSentence } from './text'
 
 const FROM = 'session-status'
 /** The longest title a ping gets; a longer question is cut and ends in "…". */
@@ -40,7 +41,7 @@ export function blockedPing(
 ): string[] {
   return ping(
     decision.question,
-    `Recommended: ${decision.default}. To unblock: ${decision.unblocks}`,
+    `Recommended: ${asSentence(decision.default)} To unblock: ${decision.unblocks}`,
     pingId(sessionId, decision.id),
   )
 }
