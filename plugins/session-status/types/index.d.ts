@@ -120,9 +120,18 @@ export type Progress = {
   current: string | null
 }
 
+/** Where a linked page stands: a pull request merges, either kind closes. */
+export type LinkState = 'open' | 'merged' | 'closed'
+
 /** A pull request or an issue attached to the session: created by it or one of its subagents, or linked with `link`. */
 export type SessionLink = {
   kind: 'pr' | 'issue'
+  /**
+   * Where the page stands, as this session last changed it with `gh pr
+   * merge`, `close` or `reopen` or `gh issue close` or `reopen`; absent: open.
+   * A change made elsewhere is not seen.
+   */
+  state?: LinkState
   /** The repository as `<owner>/<repo>`. */
   repo: string
   number: number

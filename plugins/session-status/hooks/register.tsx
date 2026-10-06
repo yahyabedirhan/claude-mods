@@ -645,6 +645,7 @@ export const register: Register = on => {
 
     return drawPane({
       ui: $.ui.resolve(e),
+      surface: e.surface,
       status: withDefaults(await read($, statusAtom)),
       now: await $.clock.now(),
       columns: e.props.bodyColumns,

@@ -4,7 +4,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { readPageUrl } from '../hooks/links'
-import { SESSION_ID, STATUS_TOOL, SURFACES, callStatusTool, sectionText, start, subagentToolCall, world } from './world'
+import { SESSION_ID, STATUS_TOOL, SURFACES, callStatusTool, prMark, sectionText, start, subagentToolCall, world } from './world'
 
 const PR_URL = 'https://github.com/octo/widgets/pull/27'
 const ISSUE_URL = 'https://github.com/octo/widgets/issues/28'
@@ -27,7 +27,7 @@ test('link adds a pull request and an issue to the Links section, as created pag
     ],
   })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'links')).toBe('Linksissue widgets#28 · PR widgets#27')
+    expect(await sectionText($, surface, 'links')).toBe(`Links◎ widgets#28 · ${prMark(surface)} widgets#27`)
   }
 })
 

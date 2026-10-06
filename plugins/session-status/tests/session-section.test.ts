@@ -5,7 +5,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { githubRepo, worktreeLabel } from '../hooks/place'
-import { SESSION_ID, SURFACES, callStatusTool, ghIssue, mountPane, sectionText, start, world } from './world'
+import { SESSION_ID, SURFACES, callStatusTool, ghIssue, mountPane, prMark, sectionText, start, world } from './world'
 import type { Surface, World } from './world'
 
 const ROOT = '/home/dev/.treehouse/claude-mods-8ec7ac/1/claude-mods'
@@ -150,7 +150,7 @@ test('the Links section lists the pages made in every repository, newest first',
   }
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'links')).toBe('LinksPR skills#88 · issue claude-mods#15 · PR claude-mods#14')
+    expect(await sectionText($, surface, 'links')).toBe(`Links${prMark(surface)} skills#88 · ◎ claude-mods#15 · ${prMark(surface)} claude-mods#14`)
     expect(await sectionText($, surface, 'session')).not.toContain('#14')
     expect(await paneLinks($, surface)).toContainEqual(['claude-mods#14', `${REPO_URL}/pull/14`])
   }

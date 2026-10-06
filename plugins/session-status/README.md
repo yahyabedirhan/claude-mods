@@ -30,7 +30,7 @@ Effort           video-review-v1                  during an effort
                  ○ #4 Effort progress             2 tickets, open ones first, each a link
                  ○ #5 Observer agent
                  +11 more
-Links            PR claude-mods#14 · PR skills#88 · issue claude-mods#15
+Links            󰓂 claude-mods#14 · 󰘭 skills#88 · ◎ claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
 Decide before settling     the newest 5, asked ones first, then a pressable "+N more"
@@ -85,7 +85,18 @@ Answered (N) · Last update
    `gh pr create` and `gh issue create` add theirs by themselves; the agent
    adds one it works on but did not make, such as a pull request from an
    earlier session, with the status tool's `link` action and the page's URL.
-   Both look the same.
+   Both look the same. A mark before each gives its kind and state:
+
+   | Page | Open | Done |
+   |---|---|---|
+   | Pull request | `󰓂` green | merged: `󰘭` purple; closed without merging: `󰓂` red |
+   | Issue | `◎` green | closed: `⊙` purple |
+
+   The pull request marks are Nerd Font glyphs (Material Design's
+   `source_pull` and `source_merge`), drawn in the terminal; the desktop shows
+   `⇄` in the same colours. The state follows this session's own `gh pr
+   merge`, `gh pr close`, `gh pr reopen`, `gh issue close` and `gh issue
+   reopen`; a page merged or closed elsewhere keeps the state it had.
 8. **Places**: the other repositories the session changed (see
    [Places](#places)).
 9. **Decide before settling**: decisions the agent went on with a default

@@ -20,6 +20,11 @@ export const STATUS_TOOL = 'mcp__session-status__status'
 export const SURFACES = ['terminal', 'desktop'] as const
 export type Surface = (typeof SURFACES)[number]
 
+/** An open pull request's mark in the Links section: a Nerd Font glyph in the terminal, plain text elsewhere. */
+export function prMark(surface: Surface): string {
+  return surface === 'terminal' ? '\u{F04C2}' : '⇄'
+}
+
 /** 2026-10-04 12:00:00 UTC: where the mocked clock starts. */
 export const START = Date.UTC(2026, 9, 4, 12, 0, 0)
 

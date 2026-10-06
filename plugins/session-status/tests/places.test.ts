@@ -5,7 +5,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { commandTargets } from '../hooks/places'
 import { CAP, PLACES_KEPT, emptyStatus, withinBounds } from '../hooks/status'
-import { SESSION_ID, SURFACES, mountPane, sectionText, start, subagentToolCall, world } from './world'
+import { SESSION_ID, SURFACES, mountPane, prMark, sectionText, start, subagentToolCall, world } from './world'
 import type { World } from './world'
 
 const OWN = '/home/dev/claude-mods'
@@ -76,7 +76,7 @@ test('commands that change something count where they ran; the pages made there 
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'places')).toBe('skills  4 commands')
-    expect(await sectionText($, surface, 'links')).toBe('LinksPR skills#88')
+    expect(await sectionText($, surface, 'links')).toBe(`Links${prMark(surface)} skills#88`)
     const ui = await mountPane($, surface)
     const links = (await ui.findAll({ type: 'Link' })).map(link => [link.text, link.props.href])
     await ui.unmount()
@@ -157,6 +157,6 @@ test('a repository where the session only made a pull request is in Links, not i
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'places')).toBeUndefined()
-    expect(await sectionText($, surface, 'links')).toBe('LinksPR skills#88')
+    expect(await sectionText($, surface, 'links')).toBe(`Links${prMark(surface)} skills#88`)
   }
 })

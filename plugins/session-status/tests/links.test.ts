@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { SESSION_ID, SURFACES, mountPane, sectionText, start, subagentToolCall, world } from './world'
+import { SESSION_ID, SURFACES, mountPane, prMark, sectionText, start, subagentToolCall, world } from './world'
 import type { World } from './world'
 
 const PR_URL = 'https://github.com/octo/widgets/pull/12'
@@ -41,8 +41,8 @@ test('a created pull request and issue show as clickable <repo>#<number> links',
       ['widgets#34', ISSUE_URL],
       ['widgets#12', PR_URL],
     ])
-    expect(section?.text).toContain('PR widgets#12')
-    expect(section?.text).toContain('issue widgets#34')
+    expect(section?.text).toContain(`${prMark(surface)} widgets#12`)
+    expect(section?.text).toContain('◎ widgets#34')
   }
 })
 
@@ -110,7 +110,7 @@ test('the Links section names the newest five pages, then how many more', async 
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'links')).toBe(
-      'Linksissue widgets#7 · issue widgets#6 · issue widgets#5 · issue widgets#4 · issue widgets#3 · +2 more',
+      'Links◎ widgets#7 · ◎ widgets#6 · ◎ widgets#5 · ◎ widgets#4 · ◎ widgets#3 · +2 more',
     )
   }
 })

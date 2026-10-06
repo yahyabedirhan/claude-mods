@@ -21,6 +21,8 @@ export type SectionContext = {
   view: PaneView
   /** Switches the pane to another view: a "+N more" opens its list, Back returns to `main`. */
   show: (view: PaneView) => void
+  /** Where the pane is drawn: the terminal draws Nerd Font glyphs, the others plain text. */
+  surface: RenderSurface
   /** Puts `text` on the clipboard of the surface a press came from. */
   copy: (text: string, surface: RenderSurface) => void
 }

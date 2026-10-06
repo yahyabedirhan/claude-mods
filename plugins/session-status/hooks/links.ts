@@ -1,9 +1,10 @@
 // The pull requests and issues a session creates, found in what `gh pr
 // create` and `gh issue create` print: the new page's URL. The status tool's
 // `link` action adds a page the session did not create, by its URL. The
-// Links section shows them all alike.
+// Links section shows them all alike. The `gh` commands that merge, close or
+// reopen a page change its state.
 
-import type { SessionLink, SessionStatus } from '../types'
+import type { LinkState, SessionLink, SessionStatus } from '../types'
 
 /** The `gh` commands that create a page, and the URL path each one prints. */
 const CREATES = [
@@ -12,6 +13,18 @@ const CREATES = [
 ] as const
 
 const PAGE_URL = /https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)(?![\w/])/g
+
+/** The `gh` commands that change a page's state, and the state each one leaves. */
+const STATE_COMMANDS = [
+  { kind: 'pr', command: /^gh\s+pr\s+merge\b/, state: 'merged' },
+  { kind: 'pr', command: /^gh\s+pr\s+close\b/, state: 'closed' },
+  { kind: 'pr', command: /^gh\s+pr\s+reopen\b/, state: 'open' },
+  { kind: 'issue', command: /^gh\s+issue\s+close\b/, state: 'closed' },
+  { kind: 'issue', command: /^gh\s+issue\s+reopen\b/, state: 'open' },
+] as const
+
+/** What `gh` prints after a merge, close or reopen: `<owner>/<repo>#<n>`. */
+const PRINTED_PAGE = /\b([\w.-]+\/[\w.-]+)#(\d+)\b/
 
 /** One page's URL and nothing else, for the `link` action. */
 const ONE_PAGE_URL = /^https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)\/?$/
@@ -24,7 +37,7 @@ export type FoundLink = Pick<SessionLink, 'kind' | 'repo' | 'number' | 'url'>
  * command that runs `gh pr create` or `gh issue create`. Nothing for any
  * other command, so a URL a command only printed is never taken.
  */
-export function findSessionLinks(command: string, output: string): FoundLink[] {
+export function findCreatedLinks(command: string, output: string): FoundLink[] {
   const found: FoundLink[] = []
   for (const create of CREATES) {
     if (!create.command.test(command)) {
@@ -56,6 +69,87 @@ export function readPageUrl(url: string): FoundLink | null {
 /** The `<repo>#<number>` a link shows: the repository's name without its owner. */
 export function linkLabel(link: Pick<SessionLink, 'repo' | 'number'>): string {
   return `${link.repo.split('/').pop() ?? link.repo}#${link.number}`
+}
+
+/** A page a command merged, closed or reopened; `repo` null when the command named only its number. */
+export type StateChange = { kind: SessionLink['kind']; repo: string | null; number: number; state: LinkState }
+
+/**
+ * The state changes in a shell command: each `gh pr merge`, `close` or
+ * `reopen` and `gh issue close` or `reopen` in it, with the page it names by
+ * number, `#<n>` or URL (and `--repo`). A command that names no page acts on
+ * the current branch's pull request: its page is read from what `gh` printed,
+ * when the command holds one change alone. `gh pr merge --auto` merges later
+ * and changes nothing now.
+ */
+export function findStateChanges(command: string, output: string): StateChange[] {
+  const parts = command
+    .split(/&&|\|\||;|\||\n/)
+    .map(part => part.trim())
+    .flatMap(part => {
+      const known = STATE_COMMANDS.find(entry => entry.command.test(part))
+      return known === undefined || (known.state === 'merged' && /\s--auto\b/.test(part)) ? [] : [{ part, known }]
+    })
+  const changes: StateChange[] = []
+  for (const { part, known } of parts) {
+    const page = namedPage(part) ?? (parts.length === 1 ? printedPage(output) : null)
+    if (page !== null) {
+      changes.push({ kind: known.kind, state: known.state, ...page })
+    }
+  }
+
+  return changes
+}
+
+/** The page a `gh` command's arguments name, or null when they name none. */
+function namedPage(part: string): { repo: string | null; number: number } | null {
+  const words = part.split(/\s+/).slice(3)
+  const repoAt = words.findIndex(word => word === '--repo' || word === '-R')
+  const repoFlag = words.find(word => word.startsWith('--repo='))?.slice('--repo='.length)
+  const repo = repoAt >= 0 ? (words[repoAt + 1] ?? null) : (repoFlag ?? null)
+  for (const word of words) {
+    const url = readPageUrl(word)
+    if (url !== null) {
+      return { repo: url.repo, number: url.number }
+    }
+    const number = /^#?(\d+)$/.exec(word)?.[1]
+    if (number !== undefined) {
+      return { repo, number: Number(number) }
+    }
+  }
+
+  return null
+}
+
+/** The page `gh` printed after a merge, close or reopen, or null. */
+function printedPage(output: string): { repo: string; number: number } | null {
+  const match = PRINTED_PAGE.exec(output)
+
+  return match === null ? null : { repo: match[1] ?? '', number: Number(match[2]) }
+}
+
+/**
+ * The status with each changed page's state set. A change matches a link of
+ * its kind and number, in its repository, or, when it names none, in the
+ * session's own repository. A page that is not linked stays out.
+ */
+export function linkStatesChanged(status: SessionStatus, changes: readonly StateChange[]): SessionStatus {
+  let isChanged = false
+  let links = status.links
+  for (const change of changes) {
+    const repo = change.repo ?? status.place?.repo?.slug ?? null
+    links = links.map(link => {
+      const isPage = link.kind === change.kind && link.number === change.number && (repo === null || link.repo === repo)
+      if (!isPage || (link.state ?? 'open') === change.state) {
+        return link
+      }
+      isChanged = true
+
+      return { ...link, state: change.state }
+    })
+  }
+
+  return isChanged ? { ...status, links } : status
 }
 
 /** What the model reads after `link`: whether the page joined the links. */
