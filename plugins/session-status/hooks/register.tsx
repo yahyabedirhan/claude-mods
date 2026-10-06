@@ -434,7 +434,7 @@ export const register: Register = on => {
     }
 
     if ('list' in input) {
-      return { result: listText(await currentStatus($), null) }
+      return { result: listText(await currentStatus($), input.list) }
     }
 
     if ('reset' in input) {
