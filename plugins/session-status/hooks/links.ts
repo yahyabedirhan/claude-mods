@@ -1,5 +1,6 @@
 // The pull requests and issues a session creates, found in what `gh pr
-// create` and `gh issue create` print: the new page's URL.
+// create` and `gh issue create` print: the new page's URL. The status tool's
+// `link` action adds a page the session did not create, by its URL.
 
 import type { CreatedLink, SessionStatus } from '../types'
 
@@ -10,6 +11,9 @@ const CREATES = [
 ] as const
 
 const PAGE_URL = /https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)(?![\w/])/g
+
+/** One page's URL and nothing else, for the `link` action. */
+const ONE_PAGE_URL = /^https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)\/?$/
 
 /** A created page as the pane names it: `<repo>#<number>`. */
 export type FoundLink = Pick<CreatedLink, 'kind' | 'repo' | 'number' | 'url'>
@@ -36,9 +40,28 @@ export function findCreatedLinks(command: string, output: string): FoundLink[] {
   return found
 }
 
+/** The page a `link` call names: a pull request's or issue's URL; null for any other text. */
+export function readPageUrl(url: string): FoundLink | null {
+  const page = url.trim().replace(/\/$/, '')
+  const match = ONE_PAGE_URL.exec(page)
+  if (match === null) {
+    return null
+  }
+  const [, owner, repo, path, number] = match as unknown as [string, string, string, string, string]
+
+  return { kind: path === 'pull' ? 'pr' : 'issue', repo: `${owner}/${repo}`, number: Number(number), url: page }
+}
+
 /** The `<repo>#<number>` a link shows: the repository's name without its owner. */
 export function linkLabel(link: Pick<CreatedLink, 'repo' | 'number'>): string {
   return `${link.repo.split('/').pop() ?? link.repo}#${link.number}`
+}
+
+/** What the model reads after `link`: whether the page joined the links. */
+export function linkedText(link: FoundLink, isAdded: boolean): string {
+  const name = `${link.kind === 'pr' ? 'Pull request' : 'Issue'} ${linkLabel(link)}`
+
+  return isAdded ? `${name} is now listed under Created.` : `${name} is listed under Created already. Nothing changed.`
 }
 
 /** The status with the found links added, each page once. */

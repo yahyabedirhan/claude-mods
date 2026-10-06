@@ -81,7 +81,9 @@ Answered (N) · Last update
    issue-number order; each number links to its issue. A pressable
    "+N more" lists every ticket of the effort.
 7. **Created**: the pull requests and issues the session made, in every
-   repository, newest 5 first, then "+N more".
+   repository, newest 5 first, then "+N more". The agent adds one it works
+   on but did not make, such as a pull request from an earlier session, with
+   the status tool's `link` action and the page's URL.
 8. **Places**: the other repositories the session changed (see
    [Places](#places)).
 9. **Decide before settling**: decisions the agent went on with a default

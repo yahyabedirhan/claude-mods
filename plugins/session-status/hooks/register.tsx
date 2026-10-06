@@ -22,6 +22,7 @@ import { blockedPing, blockerPing, endListPing, pingId, withdrawPing } from './p
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { linkedText, linksFound } from './links'
 import { listText, resetProgress, resetText } from './reset'
 import type { ResetRemoved } from './reset'
 import { reportItem } from './session-items'
@@ -437,6 +438,21 @@ export const register: Register = on => {
 
     if ('reset' in input) {
       return { result: await reset($) }
+    }
+
+    if ('link' in input) {
+      const { link } = input
+      // The reply comes from the change the status took: linksFound returns
+      // the status unchanged when the page is listed already.
+      let isAdded = false
+      await changeStatus($, status => {
+        const linked = linksFound(status, [link], { agentId: input.agentId, at: now })
+        isAdded = linked !== status
+
+        return linked
+      })
+
+      return { result: linkedText(link, isAdded) }
     }
 
     if ('ticket' in input) {
