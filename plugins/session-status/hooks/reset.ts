@@ -6,10 +6,9 @@
 // the model's context.
 // register.tsx runs both; nothing here calls `$`.
 
-import type { SessionStatus } from '../types'
-import { openItems } from './session-items'
+import type { SessionItem, SessionStatus, StatusItem } from '../types'
 import { isOpen } from './status'
-import { ticketName } from './ticket-reports'
+import { ticketName, ticketShortName } from './ticket-reports'
 
 /** What a reset took out of the status. */
 export type ResetRemoved = {
@@ -121,37 +120,84 @@ function sameId(id: string): string {
 }
 
 /**
- * What the model reads after `list`: one line for each open entry, grouped
- * by kind, each with its id; a kind with no entry is left out.
+ * What the model reads after `list`: one line for each entry `filter`
+ * keeps, grouped by kind, each with its id; a kind with no entry is left
+ * out. Without a filter it names the open entries, the done items, the
+ * effort and every reported ticket.
  */
-export function listText(status: SessionStatus): string {
-  const open = status.items.filter(isOpen)
+export function listText(status: SessionStatus, filter: ListFilter | null): string {
+  const keep = filter === null ? keptWithoutFilter : (row: ListRow) => matchesFilter(row, filter)
   const lines: string[] = []
-  const group = (heading: string, entries: string[]) => {
-    if (entries.length > 0) {
-      lines.push(`${heading}:`, ...entries.map(entry => `- ${entry}`))
+  const group = (heading: string, rows: ListRow[]) => {
+    const kept = rows.filter(keep)
+    if (kept.length > 0) {
+      lines.push(`${heading}:`, ...kept.map(row => `- ${row.line}`))
     }
   }
-  const sessionItems = status.sessionItems.filter(item => item.state !== 'dropped')
+  const closed = (item: StatusItem, word: string) => (isOpen(item) ? '' : ` (${word})`)
+  const ITEM_ORDER: readonly SessionItem['state'][] = ['added', 'done', 'dropped']
   group(
     'Session items',
-    [...openItems(status), ...sessionItems.filter(item => item.state === 'done')].map(
-      item => `${item.id} ${item.title} (${item.state === 'added' ? 'open' : 'done'})`,
-    ),
+    ITEM_ORDER.flatMap(state => status.sessionItems.filter(item => item.state === state)).map(item => ({
+      kind: 'item',
+      id: item.id,
+      open: item.state === 'added',
+      ...(item.state === 'dropped' ? { dropped: true } : {}),
+      line: `${item.id} ${item.title} (${item.state === 'added' ? 'open' : item.state})`,
+    })),
   )
   group(
     'Decisions',
-    open.flatMap(item => (item.kind === 'decision' ? [`${item.id} ${item.question} (${item.urgency})`] : [])),
+    status.items.flatMap(item =>
+      item.kind === 'decision'
+        ? [{ kind: 'decision' as const, id: item.id, open: isOpen(item), line: `${item.id} ${item.question} (${item.urgency}${isOpen(item) ? '' : ', resolved'})` }]
+        : [],
+    ),
   )
-  group('Blockers', open.flatMap(item => (item.kind === 'blocker' ? [`${item.id} ${item.failed}`] : [])))
-  group('Surprises', open.flatMap(item => (item.kind === 'surprise' ? [`${item.id} ${item.occurred}`] : [])))
-  group('Effort', status.effort === null ? [] : [status.effort.name])
+  group(
+    'Blockers',
+    status.items.flatMap(item =>
+      item.kind === 'blocker'
+        ? [{ kind: 'blocker' as const, id: item.id, open: isOpen(item), line: `${item.id} ${item.failed}${closed(item, 'resolved')}` }]
+        : [],
+    ),
+  )
+  const surprises = (kind: 'surprise' | 'observation') =>
+    status.items.flatMap(item =>
+      item.kind === 'surprise' && (item.source === 'observer') === (kind === 'observation')
+        ? [{ kind, id: item.id, open: isOpen(item), line: `${item.id} ${item.occurred}${closed(item, 'dismissed')}` }]
+        : [],
+    )
+  group('Surprises', surprises('surprise'))
+  group('Observations', surprises('observation'))
+  group('Effort', status.effort === null ? [] : [{ kind: 'effort', id: status.effort.name, open: null, line: status.effort.name }])
   group(
     'Reported tickets',
-    status.ticketReports.map(ticket => `${ticketName(ticket)} (${ticket.state})`),
+    status.ticketReports.map(ticket => ({
+      kind: 'ticket',
+      id: ticketShortName(ticket),
+      open: ticket.state === 'started',
+      line: `${ticketName(ticket)} (${ticket.state})`,
+    })),
   )
 
-  return lines.length === 0 ? 'Nothing is open, and the session has no progress.' : lines.join('\n')
+  if (lines.length > 0) {
+    return lines.join('\n')
+  }
+
+  return filter === null ? 'Nothing is open, and the session has no progress.' : 'Nothing matches the filter.'
+}
+
+/** One line of `list`, and what the filter checks of it. */
+type ListRow = ListEntry & {
+  line: string
+  /** A dropped session item, which `list` without a filter leaves out. */
+  dropped?: true
+}
+
+/** What `list` names without a filter: open entries, done items, the effort and every reported ticket. */
+function keptWithoutFilter(row: ListRow): boolean {
+  return row.kind === 'ticket' || row.open !== false || (row.kind === 'item' && row.dropped !== true)
 }
 
 function count(n: number, noun: string, plural = `${noun}s`): string {
