@@ -129,6 +129,8 @@ export type Task = {
   at: number
   /** `manual` when the agent created it with `create`; absent when the task tools did. */
   setBy?: SetBy
+  /** The subagent's id when a subagent created it with `create`. */
+  agentId?: string
   /** The fields the agent set with `update`. */
   fieldsSetBy?: FieldsSetBy<'subject' | 'status'>
 }
@@ -254,6 +256,8 @@ export type TicketReport = {
   /** The ticket's title. */
   title: string
   state: 'started' | 'landed'
+  /** The fields the agent set with `update`; the next report overwrites them. */
+  fieldsSetBy?: FieldsSetBy<'title' | 'state'>
   /** When it reached this state, in `$.clock.now()` milliseconds. */
   at: number
   /**
@@ -350,8 +354,6 @@ export type CronJob = {
   createdAt?: number
   /** When it last changed, in `$.clock.now()` milliseconds. */
   at: number
-  /** `manual` when the agent created it with `create`; absent when CronCreate did. */
-  setBy?: SetBy
   /** The fields the agent set with `update`. */
   fieldsSetBy?: FieldsSetBy<'state'>
 }

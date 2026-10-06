@@ -192,8 +192,9 @@ prompt section that tells the agent how to use it. Actions:
 | `update` | Changes the given `fields` of one entry: `kind`, `id` and `fields`. A closed entry can open again. |
 | `delete` | Removes one entry: `kind` and `id`. |
 
-The other actions are shortcuts for the generic four, and each one calls
-the same function as its generic action. The agent uses the generic
+The other actions are shortcuts for the generic four. Each shortcut and its
+generic action share the same pure function, such as `closeItem` for
+`resolve` and an `update` to `resolved`. The agent uses the generic
 actions when you ask, and when an automatic path recorded something wrong,
 such as a false link or a false effort.
 

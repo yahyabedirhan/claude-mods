@@ -60,8 +60,8 @@ the next change.
 - **Deleted entries** (`DeletedEntry`): what the status tool's `delete`
   removed, by kind and key, so an automatic source does not add it again and
   an id is not given again.
-- **Manual fields** (`fieldsSetBy`): on a link, the effort, a task and a cron
-  job, the fields the agent set with `update`, each with the value its
+- **Manual fields** (`fieldsSetBy`): on a link, the effort, a ticket report,
+  a task and a cron job, the fields the agent set with `update`, each with the value its
   automatic source last reported.
 
 ```text
@@ -189,12 +189,14 @@ the status. Each shortcut calls the same function as its generic action:
 source may change a value. `autoSet` takes a reported value at all times
 for a field the agent did not set. For a field the agent set, it takes the
 value on an `event` (a `gh` merge, close or reopen; a task event; a
-CronDelete), and on a `read` (the GitHub read, a TodoWrite list, a label,
+CronDelete; a ticket report), and on a `read` (the GitHub read, a TodoWrite list, a label,
 the cron expiry and CronList) only when the read reports another value than
-`lastAuto`. `isDeleted` keeps a deleted link, effort, task, cron job or
-place out of `linksFound`, `withEffort`, `taskCreated`, `todosWritten`,
-`cronCreated` and `withChange`. A ticket report is the agent's own call, so
-it is not an automatic source that `isDeleted` stops.
+`lastAuto`. `isDeleted` keeps a deleted link, effort, ticket, task, cron job
+or place out of `linksFound`, `withEffort`, `reportTicket`, `taskCreated`,
+`todosWritten`, `cronCreated` and `withChange`. A deleted TodoWrite item is
+known by its loop and its content, not its place in the list, and a deleted
+place by its GitHub name and its folder. `create` and `link` bring a deleted
+entry back.
 
 ## Extensibility
 

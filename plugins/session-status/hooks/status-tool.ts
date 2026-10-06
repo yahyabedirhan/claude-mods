@@ -7,8 +7,8 @@
 // or a session item's state. Its generic actions (`create`, `read`,
 // `update`, `delete`) change every kind of entry the same way (crud.ts).
 
-import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
-import { CRUD_KINDS, KINDS, checkFields, readDraft, ticketNumber } from './crud'
+import type { Decision, SessionItem, StatusItem } from '../types'
+import { CRUD_KINDS, KINDS, MAX_OPTIONS, MIN_OPTIONS, URGENCIES, checkFields, readDraft, text, ticketNumber } from './crud'
 import type { CrudKind, CrudRequest } from './crud'
 import { effortLabel } from './effort'
 import { readPageUrl } from './links'
@@ -34,9 +34,6 @@ const ACTIONS = ['create', 'read', 'update', 'delete', 'record_decision', 'recor
 const RECORDS = { record_decision: 'decision', record_surprise: 'surprise', record_blocker: 'blocker' } as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
-const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
-const MIN_OPTIONS = 2
-const MAX_OPTIONS = 4
 
 /** Each kind's id and the fields `update` can set, as the tool's description lists them. */
 const KIND_TABLE = CRUD_KINDS.map(kind => `${kind} (${KINDS[kind].id}: ${KINDS[kind].update.length === 0 ? 'delete only' : KINDS[kind].update.join(', ')})`).join('; ')
@@ -516,14 +513,4 @@ function filterValues(value: unknown): string[] | null | undefined {
   const list = (Array.isArray(value) ? value : [value]).map(text)
 
   return list.some(v => v === null) ? undefined : list.length === 0 ? null : (list as string[])
-}
-
-/** A trimmed, non-empty string, or null. */
-function text(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null
-  }
-  const trimmed = value.trim()
-
-  return trimmed === '' ? null : trimmed
 }

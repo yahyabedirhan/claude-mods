@@ -91,7 +91,7 @@ export function todosWritten(
   const kept = status.tasks.filter(task => !task.id.startsWith(prefix))
   const written = todos.flatMap((todo, index): Task[] => {
     const id = `${prefix}${index}`
-    if (isDeleted(status, 'task', id)) {
+    if (isDeleted(status, 'task', todoKey(prefix, todo.content))) {
       return []
     }
     const known = status.tasks.find(task => task.id === id)
@@ -130,6 +130,21 @@ export function currentTask(tasks: readonly Task[]): Task | null {
   return tasks
     .filter(task => task.status === 'in_progress')
     .reduce<Task | null>((last, task) => (last === null || task.at >= last.at ? task : last), null)
+}
+
+/**
+ * What a deleted TodoWrite item is known by: its loop and its content, so a
+ * later item at the same place in the list is not hidden.
+ */
+export function todoKey(prefix: string, content: string): string {
+  return `${prefix}${content}`
+}
+
+/** The task a `delete` remembers: a TodoWrite item by `todoKey`, any other task by its id. */
+export function deletedTaskKey(task: Pick<Task, 'id' | 'subject'>): string {
+  const prefix = /^todo:[^:]+:/.exec(task.id)?.[0]
+
+  return prefix === undefined ? task.id : todoKey(prefix, task.subject)
 }
 
 /** The status with this task list, and the progress it gives. */

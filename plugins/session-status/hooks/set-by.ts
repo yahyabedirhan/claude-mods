@@ -101,7 +101,7 @@ function stored(value: unknown): string | null {
   return value === undefined || value === null ? null : String(value)
 }
 
-/** A key as `isDeleted` compares it: ticket `#3` is `3`, and `d1` is `D1`. */
-function sameKey(key: string): string {
+/** A key or an id as the status tool compares it: ticket `#3` is `3`, and `d1` is `D1`. */
+export function sameKey(key: string): string {
   return key.trim().replace(/^#(?=\d+$)/, '').toLowerCase()
 }

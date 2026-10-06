@@ -7,7 +7,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import type { SessionStatus } from '../types'
-import { createEntry, updateEntry } from '../hooks/crud'
+import { createEntry, deleteEntry, updateEntry } from '../hooks/crud'
 import { withEffort } from '../hooks/effort'
 import { withLinkStates } from '../hooks/link-states'
 import { emptyStatus } from '../hooks/status'
@@ -335,7 +335,7 @@ test('a task the agent set stays over a TodoWrite list that states it again, not
 
 test('a deleted task does not come back from the next TodoWrite list', () => {
   const listed = todosWritten(emptyStatus(SESSION_ID), [{ content: 'Lint', status: 'pending' }], undefined, START)
-  const status = { ...listed, deleted: [{ kind: 'task' as const, key: 'todo:main:0', at: START }], tasks: [] }
+  const status = { ...listed, deleted: [{ kind: 'task' as const, key: 'todo:main:Lint', at: START }], tasks: [] }
 
   expect(todosWritten(status, [{ content: 'Lint', status: 'pending' }], undefined, START + 1).tasks).toEqual([])
 })
@@ -419,3 +419,104 @@ test('reset still deletes all entries at one time', async ($, on) => {
 
   expect(saved(w)).toMatchObject({ sessionItems: [], links: [], deleted: [] })
 })
+
+// review fixes
+
+test('a deleted ticket does not come back from the next report; create adds it again', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, { action: 'ticket', state: 'started', number: 4, title: 'Add CRUD', effort: 'crud' })
+  await callStatusTool($, { action: 'delete', kind: 'ticket', id: '#4' })
+
+  await callStatusTool($, { action: 'ticket', state: 'landed', number: 4, title: 'Add CRUD' })
+  expect(saved(w).ticketReports).toEqual([])
+
+  await callStatusTool($, { action: 'create', kind: 'ticket', fields: { number: 4, title: 'Add CRUD', state: 'landed' } })
+  expect(saved(w).ticketReports).toMatchObject([{ number: 4, state: 'landed' }])
+})
+
+test('a ticket title the agent set is overwritten by the next report', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, { action: 'ticket', state: 'started', number: 4, title: 'Add CRUD', effort: 'crud' })
+  await callStatusTool($, { action: 'update', kind: 'ticket', id: '#4', fields: { title: 'Add the CRUD actions' } })
+  expect(saved(w).ticketReports[0]).toMatchObject({ title: 'Add the CRUD actions', fieldsSetBy: { title: { setBy: 'manual', lastAuto: 'Add CRUD' } } })
+
+  await callStatusTool($, { action: 'ticket', state: 'landed', number: 4, title: 'Add CRUD' })
+  expect(saved(w).ticketReports[0]).toMatchObject({ title: 'Add CRUD', state: 'landed' })
+  expect(saved(w).ticketReports[0]).not.toHaveProperty('fieldsSetBy')
+})
+
+test('a deleted cron job does not come back from CronCreate', async ($, on) => {
+  const w = world(on)
+  w.answer('CronCreate', () => ({ id: 'job1', humanSchedule: '0 * * * *', recurring: true }))
+  await start($)
+  await $.tool.call({ tool: 'CronCreate', cron: '0 * * * *', prompt: 'Check CI', recurring: true } as never)
+  await callStatusTool($, { action: 'delete', kind: 'cron', id: 'job1' })
+
+  await $.tool.call({ tool: 'CronCreate', cron: '0 * * * *', prompt: 'Check CI', recurring: true } as never)
+
+  expect(saved(w).crons).toEqual([])
+})
+
+test('a deleted effort does not come back from a ticket report', () => {
+  const status = { ...emptyStatus(SESSION_ID), deleted: [{ kind: 'effort' as const, key: 'false-one', at: START }] }
+
+  expect(withEffort(status, { name: 'false-one', from: 'report' }).effort).toBeNull()
+})
+
+test('a branch never replaces an effort name the agent set over a label', () => {
+  const found = withEffort(emptyStatus(SESSION_ID), { name: 'crud', from: 'label' })
+  const renamed = updateEntry(found, 'effort', 'crud', { name: 'session-status-crud' }, { now: START })
+  if ('error' in renamed) {
+    throw new Error(renamed.error)
+  }
+
+  expect(withEffort(renamed.status, { name: 'main', from: 'branch' }).effort?.name).toBe('session-status-crud')
+})
+
+test('a deleted TodoWrite item hides only that item, not its place in the list', () => {
+  const listed = todosWritten(emptyStatus(SESSION_ID), [{ content: 'Lint', status: 'pending' }, { content: 'Test', status: 'pending' }], undefined, START)
+  const removed = deleteFirst(listed, 'todo:main:0')
+
+  const next = todosWritten(removed, [{ content: 'Build', status: 'pending' }, { content: 'Lint', status: 'pending' }], undefined, START + 1)
+
+  expect(next.tasks.map(task => task.subject)).toEqual(['Build'])
+})
+
+test('a place deleted by its GitHub name stays deleted when a change names only its folder', async ($, on) => {
+  const w = world(on, { repos: [{ root: '/other', remote: 'git@github.com:octo/other.git' }] })
+  await start($)
+  await $.tool.call({ tool: 'Edit', file_path: '/other/a.md', old_string: 'a', new_string: 'b' } as never)
+  await settle($, w)
+  await callStatusTool($, { action: 'delete', kind: 'place', id: 'OCTO/other' })
+
+  expect(saved(w).deleted.map(entry => entry.key)).toEqual(['octo/other', '/other'])
+})
+
+test('a subagent can change a task that it created', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await subagentToolCall($, 'agent-1', { tool: 'mcp__session-status__status', action: 'create', kind: 'task', fields: { subject: 'Lint' } } as never)
+
+  const own = await subagentToolCall($, 'agent-1', {
+    tool: 'mcp__session-status__status',
+    action: 'update',
+    kind: 'task',
+    id: 'manual-1',
+    fields: { status: 'completed' },
+  } as never)
+
+  expect(own.result).toBe('Task manual-1 updated: status completed.')
+  expect(saved(w).tasks).toMatchObject([{ id: 'manual-1', status: 'completed', agentId: 'agent-1' }])
+})
+
+/** The status with one task deleted through `delete`. */
+function deleteFirst(status: SessionStatus, id: string): SessionStatus {
+  const outcome = deleteEntry(status, 'task', id, { now: START })
+  if ('error' in outcome) {
+    throw new Error(outcome.error)
+  }
+
+  return outcome.status
+}

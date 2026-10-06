@@ -39,11 +39,14 @@ export function cronDeleted(status: SessionStatus, id: string, at: number): Sess
  */
 export function cronListed(status: SessionStatus, listed: readonly string[], at: number): SessionStatus {
   const current = cronsExpired(status, at)
-  const crons = current.crons.map(job =>
-    job.state === 'active' && !job.recurring && !listed.includes(job.id) && job.fieldsSetBy?.state === undefined
-      ? { ...job, state: 'fired' as const, fires: Math.max(job.fires, 1), at }
-      : job,
-  )
+  const crons = current.crons.map(job => {
+    if (job.state !== 'active' || job.recurring || listed.includes(job.id)) {
+      return job
+    }
+    const fired = autoSet(job, 'state', 'fired', 'read')
+
+    return fired === job ? job : { ...fired, fires: Math.max(job.fires, 1), at }
+  })
 
   return crons.some((job, index) => job !== current.crons[index]) ? { ...current, crons } : current
 }

@@ -151,7 +151,7 @@ export function withChange(
   change: { file: string } | { command: true },
   at: number,
 ): SessionStatus {
-  if (isDeleted(status, 'place', where.repo?.slug ?? where.root ?? '')) {
+  if ([where.repo?.slug, where.root].some(key => key != null && isDeleted(status, 'place', key))) {
     return status
   }
   const index = status.places.findIndex(place =>

@@ -14,10 +14,10 @@ import { pingId } from './pings'
 import { placeId } from './places'
 import { movedItem, reportItem } from './session-items'
 import type { ItemState } from './session-items'
-import { manualSet, withDeleted, withoutDeleted } from './set-by'
+import { manualSet, sameKey, withDeleted, withoutDeleted } from './set-by'
 import { closeItem, isOpen, recordItem } from './status'
 import type { ItemDraft } from './status'
-import { taskCreated, taskUpdated, withTasks } from './tasks'
+import { deletedTaskKey, taskCreated, taskUpdated, withTasks } from './tasks'
 import { effortReports, reportTicket, ticketShortName } from './ticket-reports'
 
 /** The kinds of entry the generic actions change. An observation is a `surprise`. */
@@ -38,7 +38,9 @@ type KindSpec = {
   values?: Readonly<Record<string, readonly string[]>>
 }
 
-const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
+export const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
+export const MIN_OPTIONS = 2
+export const MAX_OPTIONS = 4
 const DECISION_FIELDS = ['urgency', 'question', 'options', 'default', 'unblocks'] as const
 
 /** Each kind's id, fields and values: what the status tool checks a call against. */
@@ -269,8 +271,9 @@ export function createEntry(
       }
       const state = fields.state === undefined ? 'started' : (fields.state as 'started' | 'landed')
       const effort = text(fields.effort)
+      const restored = withoutDeleted(status, 'ticket', ticketShortName({ number, title: title ?? '' }))
       const outcome = reportTicket(
-        status,
+        restored,
         { state, ...(number === undefined ? {} : { number }), ...(title === null ? {} : { title }), ...(effort === null ? {} : { effort }) },
         now,
       )
@@ -313,12 +316,18 @@ export function createEntry(
       const moved = fields.status === undefined ? created : taskUpdated(created, { id, status: fields.status as Task['status'] }, now)
 
       return {
-        status: withTasks(moved, moved.tasks.map(task => (task.id === id ? { ...task, setBy: 'manual' as const } : task))),
+        status: withTasks(
+          moved,
+          moved.tasks.map(task =>
+            task.id === id ? { ...task, setBy: 'manual' as const, ...(context.agentId === undefined ? {} : { agentId: context.agentId }) } : task,
+          ),
+        ),
         text: `Task ${id} created.`,
       }
     }
     case 'cron':
     case 'place':
+      // checkFields refused these above: only their automatic sources create them.
       return { error: checkFields('create', kind, {}) ?? 'Not created.' }
   }
 }
@@ -386,10 +395,9 @@ export function updateEntry(
       }
       const known = found.entry
       const state = fields.state as 'started' | 'landed' | undefined
-      const ticket = {
-        ...known,
-        ...(title === undefined ? {} : { title }),
-        ...(state === undefined || state === known.state ? {} : { state, at: now }),
+      let ticket = title === undefined ? known : manualSet(known, 'title', title)
+      if (state !== undefined && state !== known.state) {
+        ticket = { ...manualSet(ticket, 'state', state), at: now }
       }
 
       return { status: { ...status, ticketReports: status.ticketReports.map(report => (report === known ? ticket : report)) }, text: said }
@@ -429,6 +437,7 @@ export function updateEntry(
       return { status: { ...status, crons: status.crons.map(candidate => (candidate === found.entry ? job : candidate)) }, text: said }
     }
     case 'place':
+      // checkFields refused this above: a place has no field to set.
       return { error: checkFields('update', 'place', { any: true }) ?? 'Not updated.' }
   }
 }
@@ -451,11 +460,11 @@ function changedItem(item: StatusItem, fields: Fields): { item: StatusItem } | C
       next.options = options
       continue
     }
-    const value_ = field === 'urgency' ? value : text(value)
-    if (value_ === null) {
+    const set = field === 'urgency' ? value : text(value)
+    if (set === null) {
       return { error: `A ${item.kind}'s \`${field}\` is a non-empty string.` }
     }
-    next[field] = value_
+    next[field] = set
   }
 
   return { item: next as StatusItem }
@@ -496,17 +505,23 @@ export function deleteEntry(status: SessionStatus, kind: CrudKind, id: string, c
     case 'effort':
       return { status: withDeleted({ ...status, effort: null, tickets: null }, 'effort', found.entry.name, now), text: said }
     case 'task':
-      return { status: withDeleted(taskUpdated(status, { id: found.entry.id, status: 'deleted' }, now), 'task', found.entry.id, now), text: said }
+      return {
+        status: withDeleted(taskUpdated(status, { id: found.entry.id, status: 'deleted' }, now), 'task', deletedTaskKey(found.entry), now),
+        text: said,
+      }
     case 'cron':
       return {
         status: withDeleted({ ...status, crons: status.crons.filter(job => job !== found.entry) }, 'cron', found.entry.id, now),
         text: said,
       }
-    case 'place':
-      return {
-        status: withDeleted({ ...status, places: status.places.filter(place => placeId(place) !== found.name) }, 'place', found.name, now),
-        text: said,
-      }
+    case 'place': {
+      // A place is known by its GitHub name and by its folder: both are remembered.
+      const removed = status.places.filter(place => sameKey(placeId(place)) === sameKey(found.name))
+      const kept = { ...status, places: status.places.filter(place => !removed.includes(place)) }
+      const next = [found.name, ...removed.map(place => place.key)].reduce((current, key) => withDeleted(current, 'place', key, now), kept)
+
+      return { status: next, text: said }
+    }
   }
 }
 
@@ -528,8 +543,8 @@ type Found =
  * ids there are, and a subagent finds only the entries it created.
  */
 function findEntry(status: SessionStatus, kind: CrudKind, id: string, context: CrudContext): Found | CrudError {
-  const wanted = id.trim().replace(/^#(?=\d+$)/, '').toLowerCase()
-  const same = (candidate: string) => candidate.trim().replace(/^#(?=\d+$)/, '').toLowerCase() === wanted
+  const wanted = sameKey(id)
+  const same = (candidate: string) => sameKey(candidate) === wanted
   const candidates = entriesOf(status, kind)
   const found = candidates.find(candidate => candidate.keys.some(same))
   if (found === undefined) {
@@ -610,9 +625,6 @@ export function pings(item: StatusItem): item is Decision | Blocker {
   return item.kind === 'blocker' || (item.kind === 'decision' && item.urgency === 'blocked')
 }
 
-const MIN_OPTIONS = 2
-const MAX_OPTIONS = 4
-
 /** A decision's options: two to four non-empty strings, or null. */
 function readOptions(value: unknown): string[] | null {
   const options = Array.isArray(value) ? value.map(text) : []
@@ -636,7 +648,7 @@ export function ticketNumber(value: unknown): number | undefined | null {
 }
 
 /** A trimmed, non-empty string, or null. */
-function text(value: unknown): string | null {
+export function text(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null
   }

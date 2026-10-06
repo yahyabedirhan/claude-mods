@@ -6,6 +6,7 @@
 
 import type { SessionStatus, TicketReport } from '../types'
 import { withEffort } from './effort'
+import { isDeleted } from './set-by'
 
 /** What a `ticket` call says about one ticket. `stopped` takes a started ticket back. */
 export type TicketState = TicketReport['state'] | 'stopped'
@@ -68,6 +69,10 @@ export function reportsIn(status: SessionStatus, state: TicketReport['state']): 
  * started ticket back: to landed after rework, else out of the reports. A
  * `stopped` for a ticket not started changes nothing.
  *
+ * A report is a new change: it overwrites a title or state the agent set
+ * with `update`. A ticket the agent deleted is not added again; `create`
+ * adds it again.
+ *
  * Says what is wrong when a new ticket has no title, for the model to fix
  * and call again.
  */
@@ -97,6 +102,9 @@ export function reportTicket(
       : { status: { ...switched, ticketReports }, ticket: back, change: 'relanded' }
   }
 
+  if (known === undefined && isDeleted(switched, 'ticket', ticketShortName({ number: request.number, title: request.title ?? '' }))) {
+    return { ...unchanged, ticket: null }
+  }
   const title = request.title ?? known?.title
   if (title === undefined) {
     return { error: "A ticket not reported before needs `title`: the ticket's title." }
