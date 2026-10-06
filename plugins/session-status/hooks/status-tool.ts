@@ -9,6 +9,8 @@
 import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
 import { effortLabel } from './effort'
 import { readPageUrl } from './links'
+import { LIST_KINDS, LIST_STATES } from './reset'
+import type { ListFilter, ListKind, ListState } from './reset'
 import type { FoundLink } from './links'
 import { joinFirst } from './lists'
 import type { ItemChange, ItemRequest, ItemState } from './session-items'
@@ -73,8 +75,10 @@ export const STATUS_TOOL_SPEC = {
     'The result names the item\'s id (I1, I2, ...). State `done` with `id`: the work is finished and verified.',
     'State `dropped` with `id`: the item is no longer needed, or a later item replaced it.',
     'Add an item for each effort ticket you take on, and mark it done when its work lands: the Session bar counts only items.',
-    '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
+    '`list`: names every open session item, decision, blocker, surprise and observation with its id, the effort and the reported tickets.',
     'Use it to find an id you no longer have, for example after `/compact`. It changes nothing.',
+    'Give `filter` to read only what the user asks for: `kind` (item, decision, blocker, surprise, observation, ticket, effort),',
+    '`state` (`open` by default, `closed` or `all`) and `id` (such as D1, S2). Different keys must all match.',
     '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
     'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the links, the reported tickets and the effort.',
     '`link` with `url`: a GitHub pull request or issue this session works on but did not create, for example one from an earlier session.',
@@ -87,7 +91,7 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids (`list`), reset the session progress when the user asks (`reset`), or add a pull request or issue the session did not create (`link`).',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids or the entries a filter keeps (`list`), reset the session progress when the user asks (`reset`), or add a pull request or issue the session did not create (`link`).',
       },
       id: {
         type: 'string',
@@ -146,6 +150,28 @@ export const STATUS_TOOL_SPEC = {
         description:
           "ticket: the effort's name, as its `effort:<name>` issue label writes it. Give it on your first ticket call.",
       },
+      filter: {
+        type: 'object',
+        description:
+          'list: keep only the entries that match every key given. Without `filter`, `list` names the open entries, the done items, the effort and every reported ticket.',
+        properties: {
+          kind: {
+            type: 'array',
+            items: { type: 'string', enum: [...LIST_KINDS] },
+            description: 'The kinds to keep; an observation is a surprise the observer found. All kinds when left out.',
+          },
+          state: {
+            type: 'string',
+            enum: [...LIST_STATES],
+            description: '`open` (the default), `closed` (resolved, dismissed, done, dropped or landed) or `all`. The effort has no state.',
+          },
+          id: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'The ids to keep, such as D1, S2, I16, or a ticket as #3. All ids when left out.',
+          },
+        },
+      },
       url: {
         type: 'string',
         description: 'link: the page of a GitHub pull request or issue, as `https://github.com/<owner>/<repo>/pull/<number>` or `.../issues/<number>`.',
@@ -167,8 +193,8 @@ export type StatusToolRequest =
   | { ticket: TicketRequest }
   /** Report a session item's state. */
   | { item: ItemRequest }
-  /** Name every open id. */
-  | { list: true }
+  /** Name the entries the filter keeps; null names what `list` names without one. */
+  | { list: ListFilter | null }
   /** Reset the session progress. */
   | { reset: true }
   /** Add a page the session did not create to its links. */
@@ -311,7 +337,7 @@ export function readStatusToolInput(
       return { item: { state: state as 'done' | 'dropped', id } }
     }
     case 'list':
-      return { list: true }
+      return readListFilter(input.filter)
     case 'reset':
       return typeof input.agentId === 'string'
         ? { error: 'Only the main session resets the progress, and only when the user asks.' }
@@ -422,6 +448,44 @@ function ticketSaid(request: TicketRequest, { ticket, change }: TicketOutcome): 
         ? `Ticket ${name} already landed; it stays landed.`
         : `Ticket ${name} is ${ticket.state} already.`
   }
+}
+
+/**
+ * A `list` call's filter: absent or null for no filter; `kind` and `id` as
+ * an array or one string, `state` open by default.
+ */
+function readListFilter(filter: unknown): { list: ListFilter | null } | { error: string } {
+  if (filter === undefined || filter === null) {
+    return { list: null }
+  }
+  if (typeof filter !== 'object' || Array.isArray(filter)) {
+    return { error: 'A filter is an object with `kind`, `state` and `id`, each optional.' }
+  }
+  const { kind, state = 'open', id } = filter as Record<string, unknown>
+  const kinds = strings(kind)
+  const unknownKind = kinds?.find(k => !LIST_KINDS.includes(k as ListKind))
+  if (unknownKind !== undefined) {
+    return { error: `Unknown filter kind "${unknownKind}". Use some of: ${LIST_KINDS.join(', ')}.` }
+  }
+  if (!LIST_STATES.includes(state as ListState)) {
+    return { error: `Unknown filter state "${String(state)}". Use one of: ${LIST_STATES.join(', ')}.` }
+  }
+  const ids = strings(id)
+
+  return {
+    list: {
+      kinds: kinds === null ? null : new Set(kinds as ListKind[]),
+      state: state as ListState,
+      ids: ids === null ? null : new Set(ids),
+    },
+  }
+}
+
+/** The non-empty strings of an array or of one string; null when there is none, which keeps all. */
+function strings(value: unknown): string[] | null {
+  const list = (Array.isArray(value) ? value : [value]).map(text).filter((v): v is string => v !== null)
+
+  return list.length === 0 ? null : list
 }
 
 /**
