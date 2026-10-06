@@ -17,7 +17,7 @@ export type ResetRemoved = {
   items: number
   /** Decisions, surprises and blockers, open and closed. */
   entries: number
-  /** Pull requests and issues the Created section listed. */
+  /** Pull requests and issues the Links section listed. */
   links: number
   /** Reported tickets, of every effort. */
   tickets: number
@@ -27,7 +27,7 @@ export type ResetRemoved = {
 
 /**
  * The status without its record: the session items, the decisions,
- * surprises and blockers, the created links, the reported tickets, the
+ * surprises and blockers, the links, the reported tickets, the
  * effort and its ticket count; and what it took out. Ids start over at 1.
  * What the session runs now stays: its tasks, crons, subagents, place and
  * activity.
@@ -59,7 +59,7 @@ export function resetText(removed: ResetRemoved): string {
   const parts = [
     ...(removed.items > 0 ? [count(removed.items, 'session item')] : []),
     ...(removed.entries > 0 ? [count(removed.entries, 'decision, surprise or blocker', 'decisions, surprises and blockers')] : []),
-    ...(removed.links > 0 ? [count(removed.links, 'created link')] : []),
+    ...(removed.links > 0 ? [count(removed.links, 'link')] : []),
     ...(removed.tickets > 0 ? [count(removed.tickets, 'ticket report')] : []),
     ...(removed.effort === null ? [] : [`the effort ${removed.effort}`]),
   ]

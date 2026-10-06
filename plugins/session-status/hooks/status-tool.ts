@@ -8,6 +8,8 @@
 
 import type { Decision, DecisionUrgency, SessionItem, StatusItem } from '../types'
 import { effortLabel } from './effort'
+import { readPageUrl } from './links'
+import type { FoundLink } from './links'
 import { joinFirst } from './lists'
 import type { ItemChange, ItemRequest, ItemState } from './session-items'
 import type { SessionProgress } from './session-progress'
@@ -22,7 +24,7 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset', 'link'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
@@ -74,7 +76,9 @@ export const STATUS_TOOL_SPEC = {
     '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
     'Use it to find an id you no longer have, for example after `/compact`. It changes nothing.',
     '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
-    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the created links, the reported tickets and the effort.',
+    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the links, the reported tickets and the effort.',
+    '`link` with `url`: a GitHub pull request or issue this session works on but did not create, for example one from an earlier session.',
+    'The Links section lists it as it lists a page made with `gh pr create` or `gh issue create`; those are found by themselves.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -83,7 +87,7 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids (`list`), or reset the session progress when the user asks (`reset`).',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids (`list`), reset the session progress when the user asks (`reset`), or add a pull request or issue the session did not create (`link`).',
       },
       id: {
         type: 'string',
@@ -142,6 +146,10 @@ export const STATUS_TOOL_SPEC = {
         description:
           "ticket: the effort's name, as its `effort:<name>` issue label writes it. Give it on your first ticket call.",
       },
+      url: {
+        type: 'string',
+        description: 'link: the page of a GitHub pull request or issue, as `https://github.com/<owner>/<repo>/pull/<number>` or `.../issues/<number>`.',
+      },
     },
     required: ['action'],
   },
@@ -163,6 +171,8 @@ export type StatusToolRequest =
   | { list: true }
   /** Reset the session progress. */
   | { reset: true }
+  /** Add a page the session did not create to its links. */
+  | { link: FoundLink; agentId?: string }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -306,6 +316,14 @@ export function readStatusToolInput(
       return typeof input.agentId === 'string'
         ? { error: 'Only the main session resets the progress, and only when the user asks.' }
         : { reset: true }
+    case 'link': {
+      const link = readPageUrl(text(input.url) ?? '')
+      if (link === null) {
+        return { error: 'A link needs `url`: the page of a GitHub pull request or issue, as https://github.com/<owner>/<repo>/pull/<number> or .../issues/<number>.' }
+      }
+
+      return typeof input.agentId === 'string' ? { link, agentId: input.agentId } : { link }
+    }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }

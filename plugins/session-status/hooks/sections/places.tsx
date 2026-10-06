@@ -6,7 +6,7 @@ import type { Section, Ui } from './section'
  * The blast radius: the other repositories the session changed files in or
  * ran changing commands in, one line each, `skills  3 files · 2 commands`, a
  * part left out when it is zero. The repository's name links to its page;
- * the pull requests and issues made there are the Created section's. With
+ * the pull requests and issues made there are the Links section's. With
  * two or more the heading `Places (N)` leads them; one place is its line
  * alone. Drawn only when there is one.
  */

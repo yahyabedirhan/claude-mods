@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { SESSION_ID, SURFACES, mountPane, sectionText, start, subagentToolCall, world } from './world'
+import { SESSION_ID, SURFACES, mountPane, prMark, sectionText, start, subagentToolCall, world } from './world'
 import type { World } from './world'
 
 const PR_URL = 'https://github.com/octo/widgets/pull/12'
@@ -19,7 +19,7 @@ function shell(w: World, printed: Record<string, string>) {
 async function linksIn($: Engine, surface: (typeof SURFACES)[number]) {
   const ui = await mountPane($, surface)
   const links = await ui.findAll({ type: 'Link' })
-  const section = await ui.find({ key: 'created' })
+  const section = await ui.find({ key: 'links' })
   await ui.unmount()
 
   return { links, section }
@@ -41,8 +41,8 @@ test('a created pull request and issue show as clickable <repo>#<number> links',
       ['widgets#34', ISSUE_URL],
       ['widgets#12', PR_URL],
     ])
-    expect(section?.text).toContain('PR widgets#12')
-    expect(section?.text).toContain('issue widgets#34')
+    expect(section?.text).toContain(`${prMark(surface)} widgets#12`)
+    expect(section?.text).toContain('◎ widgets#34')
   }
 })
 
@@ -96,7 +96,7 @@ test('no link shows before the first created page', async ($, on) => {
   }
 })
 
-test('the Created section names the newest five pages, then how many more', async ($, on) => {
+test('the Links section names the newest five pages, then how many more', async ($, on) => {
   const w = world(on)
   const printed: Record<string, string> = {}
   for (let n = 1; n <= 7; n++) {
@@ -109,8 +109,8 @@ test('the Created section names the newest five pages, then how many more', asyn
   }
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'created')).toBe(
-      'Createdissue widgets#7 · issue widgets#6 · issue widgets#5 · issue widgets#4 · issue widgets#3 · +2 more',
+    expect(await sectionText($, surface, 'links')).toBe(
+      'Links◎ widgets#7 · ◎ widgets#6 · ◎ widgets#5 · ◎ widgets#4 · ◎ widgets#3 · +2 more',
     )
   }
 })

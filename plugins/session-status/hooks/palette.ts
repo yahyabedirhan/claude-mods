@@ -12,4 +12,10 @@ export const COLOR = {
   accent: 'suggestion',
   /** A session wrapping up: the Settling state. */
   closing: 'planMode',
+  /** An open pull request or issue in the Links section. */
+  open: 'success',
+  /** A merged pull request or a closed issue: the theme's purple for a merge. */
+  merged: 'merged',
+  /** A pull request closed without merging. */
+  closedUnmerged: 'error',
 } as const

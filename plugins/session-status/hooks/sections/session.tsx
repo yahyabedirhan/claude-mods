@@ -26,8 +26,8 @@ const LABEL_CELLS = 9
  * the items done of all, the effort's tickets among them, then the first
  * two items (open ones first) and the tickets the orchestrator builds now; and the task list's
  * tasks done, on a line of its own. The effort's name and the tracker's
- * closed count are the Effort section's, the created pages the Created
- * section's. Drawn once any of it is known.
+ * closed count are the Effort section's, the pull requests and issues the
+ * Links section's. Drawn once any of it is known.
  */
 export const sessionSection: Section = ({ ui, status, columns, show, copy }) => {
   const { Box, Text } = ui

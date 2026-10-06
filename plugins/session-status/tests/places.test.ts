@@ -5,7 +5,7 @@ import type { Engine } from 'claude-code/testing'
 
 import { commandTargets } from '../hooks/places'
 import { CAP, PLACES_KEPT, emptyStatus, withinBounds } from '../hooks/status'
-import { SESSION_ID, SURFACES, mountPane, sectionText, start, subagentToolCall, world } from './world'
+import { SESSION_ID, SURFACES, mountPane, prMark, sectionText, start, subagentToolCall, world } from './world'
 import type { World } from './world'
 
 const OWN = '/home/dev/claude-mods'
@@ -57,7 +57,7 @@ test('files edited or written in another repository count once each; reads and t
   })
 })
 
-test('commands that change something count where they ran; the pages made there are in Created', async ($, on) => {
+test('commands that change something count where they ran; the pages made there are in Links', async ($, on) => {
   const w = twoRepos(on)
   w.answer('Bash', e =>
     (e as unknown as { command: string }).command.startsWith('gh pr create')
@@ -76,7 +76,7 @@ test('commands that change something count where they ran; the pages made there 
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'places')).toBe('skills  4 commands')
-    expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88')
+    expect(await sectionText($, surface, 'links')).toBe(`Links${prMark(surface)} skills#88`)
     const ui = await mountPane($, surface)
     const links = (await ui.findAll({ type: 'Link' })).map(link => [link.text, link.props.href])
     await ui.unmount()
@@ -147,7 +147,7 @@ test('the status keeps the places that changed last, and each place the files to
   expect(kept[0]?.files[0]).toBe('/r/0/1')
 })
 
-test('a repository where the session only made a pull request is in Created, not in Places', async ($, on) => {
+test('a repository where the session only made a pull request is in Links, not in Places', async ($, on) => {
   const w = twoRepos(on)
   w.answer('Bash', () => ({ stdout: `${SKILLS_URL}/pull/88\n`, stderr: '' }))
   await start($)
@@ -157,6 +157,6 @@ test('a repository where the session only made a pull request is in Created, not
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'places')).toBeUndefined()
-    expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88')
+    expect(await sectionText($, surface, 'links')).toBe(`Links${prMark(surface)} skills#88`)
   }
 })

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import type { CreatedLink, SessionStatus, StatusItem } from '../types'
+import type { SessionLink, SessionStatus, StatusItem } from '../types'
 import { emptyStatus } from '../hooks/status'
 import { SESSION_ID, START, blockedDecision, callStatusTool, mountPane, start, world } from './world'
 
@@ -64,7 +64,7 @@ test('a status is saved under the session it belongs to', async ($, on) => {
 })
 
 test('a status keeps the newest 200 finished subagents, links and closed items of each kind, and every open item', async ($, on) => {
-  const link = (n: number): CreatedLink => ({
+  const link = (n: number): SessionLink => ({
     kind: 'pr',
     repo: 'octo/repo',
     number: n,
