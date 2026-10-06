@@ -63,7 +63,7 @@ test('the status tool describes the ticket action and its fields', async ($, on)
   expect(tool?.description).toMatch(/never for a delegate/i)
 })
 
-test('the Session section counts the landed tickets of all the tracker counted, apart from the closed issues', async ($, on) => {
+test('the Session section counts the tickets landed or closed, of all the tracker counted', async ($, on) => {
   const w = world(on, { issues: runIssues() })
   await start($)
 

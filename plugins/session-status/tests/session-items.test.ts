@@ -166,6 +166,39 @@ test('a QA ticket the orchestrator reports does not count in the session', () =>
   expect(sessionProgress(status)).toMatchObject({ done: 1, total: 1, building: [] })
 })
 
+test('the tickets the tracker counted closed are done, QA ones left out', () => {
+  const list = [
+    { number: 2, title: 'Ticket 2', isClosed: true },
+    { number: 3, title: 'Ticket 3', isClosed: true },
+    { number: 4, title: 'Ticket 4', isClosed: false },
+    { number: 5, title: 'QA: Check it by hand', isClosed: true },
+  ]
+  const status = {
+    ...emptyStatus(SESSION_ID),
+    effort: { name: EFFORT },
+    tickets: { effort: EFFORT, done: 3, total: 4, builds: 3, list, at: 0 },
+    ticketReports: [{ number: 2, title: 'Ticket 2', state: 'landed' as const, at: 0, effort: EFFORT }],
+  }
+
+  expect(sessionProgress(status)).toMatchObject({ done: 2, total: 3 })
+  // A count for another effort closes nothing in this one.
+  expect(sessionProgress({ ...status, effort: { name: 'other' } })).toBeNull()
+})
+
+test('the tickets reported landed stay done while the tracker counts fewer closed', () => {
+  const status = {
+    ...emptyStatus(SESSION_ID),
+    effort: { name: EFFORT },
+    tickets: { effort: EFFORT, done: 0, total: 3, builds: 3, at: 0 },
+    ticketReports: [
+      { number: 2, title: 'Ticket 2', state: 'landed' as const, at: 0, effort: EFFORT },
+      { number: 3, title: 'Ticket 3', state: 'landed' as const, at: 0, effort: EFFORT },
+    ],
+  }
+
+  expect(sessionProgress(status)).toMatchObject({ done: 2, total: 3 })
+})
+
 test('the task list keeps a line of its own beside the items', async ($, on) => {
   world(on, { isNarrow: true })
   await start($)

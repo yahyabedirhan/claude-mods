@@ -5,11 +5,12 @@
 // reopen a page change its state.
 
 import type { LinkState, SessionLink, SessionStatus } from '../types'
+import { simpleCommands } from './shell'
 
 /** The `gh` commands that create a page, and the URL path each one prints. */
 const CREATES = [
-  { kind: 'pr', command: /\bgh\s+pr\s+create\b/, path: 'pull' },
-  { kind: 'issue', command: /\bgh\s+issue\s+create\b/, path: 'issues' },
+  { kind: 'pr', command: /^gh\s+pr\s+create\b/, path: 'pull' },
+  { kind: 'issue', command: /^gh\s+issue\s+create\b/, path: 'issues' },
 ] as const
 
 const PAGE_URL = /https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)(?![\w/])/g
@@ -34,13 +35,15 @@ export type FoundLink = Pick<SessionLink, 'kind' | 'repo' | 'number' | 'url'>
 
 /**
  * The pages a shell command created: each URL of its kind in the output of a
- * command that runs `gh pr create` or `gh issue create`. Nothing for any
- * other command, so a URL a command only printed is never taken.
+ * command that runs `gh pr create` or `gh issue create` as one of its simple
+ * commands. Nothing for any other command, or for the text of a heredoc or
+ * an argument, so a URL a command only printed is never taken.
  */
 export function findCreatedLinks(command: string, output: string): FoundLink[] {
+  const parts = simpleCommands(command)
   const found: FoundLink[] = []
   for (const create of CREATES) {
-    if (!create.command.test(command)) {
+    if (!parts.some(part => create.command.test(part))) {
       continue
     }
     for (const match of output.matchAll(PAGE_URL)) {
@@ -83,13 +86,10 @@ export type StateChange = { kind: SessionLink['kind']; repo: string | null; numb
  * and changes nothing now.
  */
 export function findStateChanges(command: string, output: string): StateChange[] {
-  const parts = command
-    .split(/&&|\|\||;|\||\n/)
-    .map(part => part.trim())
-    .flatMap(part => {
-      const known = STATE_COMMANDS.find(entry => entry.command.test(part))
-      return known === undefined || (known.state === 'merged' && /\s--auto\b/.test(part)) ? [] : [{ part, known }]
-    })
+  const parts = simpleCommands(command).flatMap(part => {
+    const known = STATE_COMMANDS.find(entry => entry.command.test(part))
+    return known === undefined || (known.state === 'merged' && /\s--auto\b/.test(part)) ? [] : [{ part, known }]
+  })
   const changes: StateChange[] = []
   for (const { part, known } of parts) {
     const page = namedPage(part) ?? (parts.length === 1 ? printedPage(output) : null)
