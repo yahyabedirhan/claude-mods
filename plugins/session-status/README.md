@@ -127,7 +127,7 @@ Without items or effort tickets the session figure is the tasks'
 
 ## Opening it
 
-- `/session-status` opens or closes the pane.
+- `/session-status` opens or closes the pane; `/session-status reset` clears the session progress (see below).
 - The pane opens by itself, once per session, when a subagent starts, a task
   list is made, an effort is found, a ticket or a session item is reported,
   or a decision or surprise is recorded.
