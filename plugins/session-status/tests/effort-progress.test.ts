@@ -121,7 +121,7 @@ test('the effort count shows only for the effort it was counted for, and only wi
   expect(effortProgress(base)).toBeNull()
 })
 
-test("during an effort the Effort section counts the effort's closed tickets, apart from the session's tasks", async ($, on) => {
+test("during an effort the Effort section counts the effort's closed tickets, apart from the Task section", async ($, on) => {
   const w = world(on, {
     issues: [
       ghIssue(1, 'Spec: session status'),
@@ -139,11 +139,12 @@ test("during an effort the Effort section counts the effort's closed tickets, ap
   expect(w.saved[SESSION_ID]).toMatchObject({ tickets: { effort: 'session-status', done: 2, total: 3 } })
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+session-status\s*Closed 2\/3 █+░+○ #4 Effort progress✓ #2 The pane\+1 more$/)
-    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/1')
+    expect(await sectionText($, surface, 'task')).toMatch(/^TaskDone 0\/1 /)
+    expect(await sectionText($, surface, 'session')).not.toContain('Progress')
   }
 })
 
-test('outside an effort progress comes from the task list and gh never runs', async ($, on) => {
+test('outside an effort only the Task section counts, and gh never runs', async ($, on) => {
   const w = world(on, { issues: [ghIssue(2, 'The pane', 'CLOSED')] })
   await start($)
   await runTask($, 't1', 'Write the parser')
@@ -155,7 +156,7 @@ test('outside an effort progress comes from the task list and gh never runs', as
 
   expect(ticketReads(w.runs)).toEqual([])
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toContain('Tasks 0/2')
+    expect(await sectionText($, surface, 'task')).toMatch(/^TaskDone 0\/2 /)
     expect(await sectionText($, surface, 'effort')).toBeUndefined()
   }
 })

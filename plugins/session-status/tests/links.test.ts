@@ -96,7 +96,7 @@ test('no link shows before the first created page', async ($, on) => {
   }
 })
 
-test('the Links section names the newest five pages, then how many more', async ($, on) => {
+test('the Links section names the newest five pages, then a "+N more" button', async ($, on) => {
   const w = world(on)
   const printed: Record<string, string> = {}
   for (let n = 1; n <= 7; n++) {
@@ -110,7 +110,7 @@ test('the Links section names the newest five pages, then how many more', async 
 
   for (const surface of SURFACES) {
     expect(await sectionText($, surface, 'links')).toBe(
-      'Links◎ widgets#7 · ◎ widgets#6 · ◎ widgets#5 · ◎ widgets#4 · ◎ widgets#3 · +2 more',
+      'Links◎ widgets#7 · ◎ widgets#6 · ◎ widgets#5 · ◎ widgets#4 · ◎ widgets#3+2 more',
     )
   }
 })

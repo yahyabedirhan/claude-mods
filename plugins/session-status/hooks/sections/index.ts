@@ -9,6 +9,7 @@ import { cronsSection } from './crons'
 import { decideSection } from './decide'
 import { doingNowSection } from './doing-now'
 import { effortSection } from './effort'
+import { taskSection } from './task'
 import { followUpSection } from './follow-up'
 import { historySection } from './history'
 import { lastUpdateSection } from './last-update'
@@ -26,6 +27,7 @@ export const SECTIONS: readonly Section[] = [
   blockersSection,
   sessionSection,
   effortSection,
+  taskSection,
   linksSection,
   placesSection,
   decideSection,
