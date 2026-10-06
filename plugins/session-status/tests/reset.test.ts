@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { SessionStatus, StatusItem } from '../types'
+import { INSTRUCTIONS } from '../hooks/instructions'
 import { listText, matchesFilter } from '../hooks/reset'
 import type { ListFilter, ListKind } from '../hooks/reset'
 import { emptyStatus } from '../hooks/status'
@@ -119,6 +120,9 @@ test('the status tool and the prompt describe list and reset', async ($, on) => 
   expect(tool?.inputSchema).toMatchObject({ properties: { action: { enum: expect.arrayContaining(['list', 'reset']) } } })
   expect(tool?.description).toMatch(/`reset`: only when the user explicitly asks/)
   expect(tool?.description).toMatch(/never because of `\/clear`/)
+  expect(tool?.description).toMatch(/Give `filter` to read only what the user asks for/)
+  expect(tool?.inputSchema).toMatchObject({ properties: { filter: { properties: { kind: {}, state: {}, id: {} } } } })
+  expect(INSTRUCTIONS.text).toMatch(/call `list` with a `filter`/)
 })
 
 /** A status with an entry of each kind, open and closed. */
