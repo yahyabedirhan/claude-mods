@@ -241,3 +241,18 @@ test('resolve and post_decide_list check the status of the session that runs now
   expect(listed.result).toBe('No open decisions before settling. No decide list was marked as posted.')
   expect(w.runs).toEqual([])
 })
+
+test('the decision reply adds a period after the default only when the default does not end a sentence', async ($, on) => {
+  world(on)
+  await start($)
+
+  const period = await callStatusTool($, decisionBeforeSettling({ default: 'Keep the view.' }))
+  const question = await callStatusTool($, decisionBeforeSettling({ urgency: 'after_settling', default: 'Ask again?' }))
+  const exclamation = await callStatusTool($, decisionBeforeSettling({ default: 'Ship it!' }))
+  const plain = await callStatusTool($, decisionBeforeSettling({ urgency: 'after_settling', default: '--fast' }))
+
+  expect(period.result).toBe('Recorded decision D1 (decide before settling). Default: Keep the view.')
+  expect(question.result).toBe('Recorded decision D2 (follow-up after settling). Default: Ask again?')
+  expect(exclamation.result).toBe('Recorded decision D3 (decide before settling). Default: Ship it!')
+  expect(plain.result).toBe('Recorded decision D4 (follow-up after settling). Default: --fast.')
+})

@@ -352,11 +352,12 @@ export function recordedText(item: StatusItem): string {
     return `Recorded blocker ${item.id}. The user was pinged.`
   }
 
+  const defaultText = /[.!?]$/.test(`${item.default}`) ? `${item.default}` : `${item.default}.`
   return item.urgency === 'blocked'
     ? `Recorded decision ${item.id} (blocked on the user).`
     : item.urgency === 'after_settling'
-      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${item.default}.`
-      : `Recorded decision ${item.id} (decide before settling). Default: ${item.default}.`
+      ? `Recorded decision ${item.id} (follow-up after settling). Default: ${defaultText}`
+      : `Recorded decision ${item.id} (decide before settling). Default: ${defaultText}`
 }
 
 /** What the model reads after it closed an item. */
