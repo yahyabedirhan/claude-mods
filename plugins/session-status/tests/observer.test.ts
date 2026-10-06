@@ -214,6 +214,49 @@ test("a check marks a user's shell command and a subagent's work apart from the 
   expect(prompt).toContain('agent tool Read {"file_path":"/parse.ts"} -> code')
 })
 
+test("a check marks a finished background task as the agent's work, not the user's", async ($, on) => {
+  const w = world(on)
+  w.messages.push(
+    {
+      role: 'assistant',
+      text: '',
+      toolUses: [{ tool_use_id: 'u1', tool: 'Bash', input: { command: 'npm test', run_in_background: true }, text: 'started' }],
+    },
+    {
+      role: 'user',
+      text: '<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command "npm test" completed (exit code 0)</summary>\n<result>12 passed</result>\n</task-notification>',
+      toolUses: [],
+    },
+    { role: 'user', text: '<system-reminder>The task list is empty.</system-reminder>', toolUses: [] },
+  )
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const request = w.modelCalls[0]
+  const prompt = request?.prompt ?? ''
+  expect(prompt).toContain('background task finished: Background command "npm test" completed (exit code 0) -> 12 passed')
+  expect(prompt).not.toContain('task-notification')
+  expect(prompt).not.toContain('The task list is empty')
+  expect(request?.system).toContain('"background task finished" marks a background task the agent started; it is the agent\'s work')
+})
+
+test("a user prompt that quotes a command tag mid-text stays the user's prompt", async ($, on) => {
+  const w = world(on)
+  w.messages.push(
+    { role: 'user', text: 'Why does the parser drop <bash-stdout> lines?', toolUses: [] },
+    { role: 'user', text: 'Explain what <command-name>/review</command-name> records.', toolUses: [] },
+  )
+  await start($)
+  await runCommand($)
+  await session($, w).stop('agent-1')
+
+  const prompt = w.modelCalls[0]?.prompt ?? ''
+  expect(prompt).toContain('user: Why does the parser drop <bash-stdout> lines?')
+  expect(prompt).toContain('user: Explain what <command-name>/review</command-name> records.')
+  expect(prompt).not.toContain('user ran')
+})
+
 test("the observer records no observation about the agent for a user's /reload-plugins", async ($, on) => {
   const w = world(on)
   // A model that reads only the plain transcript credits the reload to the agent;

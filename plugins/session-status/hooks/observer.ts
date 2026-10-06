@@ -88,12 +88,22 @@ function tagged(text: string, tag: string): string[] {
 }
 
 /**
+ * Whether a user message records what the person ran in Claude Code itself:
+ * its text starts with one of the tags Claude Code wraps such a command in.
+ * A prompt that only quotes such a tag further in is the person's prompt.
+ */
+const COMMAND_START = /^\s*<(command-message|command-name|bash-input|bash-stdout|bash-stderr|local-command-[a-z]+)>/
+
+/**
  * The lines for a user message that records what the person ran in Claude
  * Code itself, not a request to the agent: a slash command (`<command-name>`)
  * or a `!` shell command (`<bash-input>`), and their output. The caveat
  * Claude Code puts before them gives no line. Undefined for any other message.
  */
 function userCommandLines(text: string): string[] | undefined {
+  if (!COMMAND_START.test(text)) {
+    return undefined
+  }
   const lines: string[] = []
   for (const name of tagged(text, 'command-name')) {
     const args = tagged(text, 'command-args').join(' ').trim()
@@ -109,20 +119,51 @@ function userCommandLines(text: string): string[] | undefined {
   if (output !== '') {
     lines.push(`user's command output: ${clip(output)}`)
   }
-  const isCommand = lines.length > 0 || /<(local-command-[a-z]+|bash-[a-z]+)>/.test(text)
 
-  return isCommand ? lines : undefined
+  return lines
+}
+
+/**
+ * The lines for a user message that Claude Code adds when a background task
+ * the agent started finishes (a background agent or a background shell
+ * command): its summary and result. Undefined for any other message.
+ */
+function backgroundTaskLines(text: string): string[] | undefined {
+  if (!/^\s*<task-notification>/.test(text)) {
+    return undefined
+  }
+
+  return tagged(text, 'task-notification').map(notice => {
+    const summary = tagged(notice, 'summary').join(' ').trim()
+    const result = tagged(notice, 'result').join(' ').trim()
+    const what = summary === '' ? notice.replace(/<[^>]*>/g, ' ') : summary
+
+    return `background task finished: ${clip(what)}${result === '' ? '' : ` -> ${clip(result)}`}`
+  })
+}
+
+/**
+ * The lines for a user message Claude Code itself added rather than the
+ * person: a command the person ran, a finished background task, or only
+ * `<system-reminder>` context (no line). Undefined for the person's own prompt.
+ */
+function harnessLines(text: string): string[] | undefined {
+  if (text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim() === '') {
+    return []
+  }
+
+  return userCommandLines(text) ?? backgroundTaskLines(text)
 }
 
 /**
  * One transcript message as the lines a check reads, each naming who did
- * it: the user, the agent, or a subagent the agent started.
+ * it: the user, the agent, or a subagent or background task the agent started.
  */
 function stepLines(message: SessionMessage): string[] {
   if (message.text !== '' && message.role === 'user') {
-    const commandLines = userCommandLines(message.text)
-    if (commandLines !== undefined) {
-      return commandLines
+    const lines = harnessLines(message.text)
+    if (lines !== undefined) {
+      return lines
     }
   }
   const lines: string[] = []
@@ -161,6 +202,7 @@ The agent reports what it is stuck on by itself. Find only what it does not see:
 Each step starts with who did it: the user, the agent or a subagent.
 The user runs slash commands and shell commands in Claude Code itself; "user ran" marks them and their output.
 Never report the user's own actions as the agent's, and do not find fault with the agent for them.
+"background task finished" marks a background task the agent started; it is the agent's work, not the user's.
 Small details, style, single errors and errors the agent fixed are not findings.
 When you are not sure, give no findings.
 ${CONCISE_RULE}

@@ -55,6 +55,15 @@ test('a blocked ping names the question, the recommended answer and what unblock
   ])
 })
 
+test('a blocked ping adds no second period after a recommended answer that ends a sentence', () => {
+  const body = (answer: string) =>
+    blockedPing(SESSION, { id: 'D1', question: 'Which database?', default: answer, unblocks: 'Pick one' })[4]
+
+  expect(body('Use Postgres.')).toBe('Recommended: Use Postgres. To unblock: Pick one')
+  expect(body('Ask the user first!')).toBe('Recommended: Ask the user first! To unblock: Pick one')
+  expect(body('Keep both?')).toBe('Recommended: Keep both? To unblock: Pick one')
+})
+
 test('a long question is cut to a short title', () => {
   const argv = blockedPing(SESSION, { id: 'D1', question: 'x'.repeat(300), default: 'a', unblocks: 'b' })
 

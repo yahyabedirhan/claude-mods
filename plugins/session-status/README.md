@@ -385,8 +385,8 @@ main agent. What the agent knows it is stuck on is a blocker, under **You
 should know**.
 
 - It reads each step as the user's, the agent's or a subagent's. A command
-  you run yourself, such as `/reload-plugins` or `!git status`, is never
-  counted against the agent.
+  you run yourself, such as `/reload-plugins` or `!git status`, is marked as
+  yours, and the observer is told not to count it against the agent.
 - It checks every 5 main-loop turns and when a subagent finishes.
 - Each finding you dismiss doubles the turn interval, up to 40 turns. After
   a dismissal, a finished subagent also waits for that interval.
