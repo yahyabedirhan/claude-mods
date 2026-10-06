@@ -120,15 +120,15 @@ export type Progress = {
   current: string | null
 }
 
-/** A pull request or an issue the session, or one of its subagents, created. */
-export type CreatedLink = {
+/** A pull request or an issue attached to the session: created by it or one of its subagents, or linked with `link`. */
+export type SessionLink = {
   kind: 'pr' | 'issue'
   /** The repository as `<owner>/<repo>`. */
   repo: string
   number: number
-  /** The page on GitHub, as `gh` printed it. */
+  /** The page on GitHub, as `gh` printed it or `link` gave it. */
   url: string
-  /** The subagent's id when a subagent created it; absent on the main loop. */
+  /** The subagent's id when a subagent created or linked it; absent on the main loop. */
   agentId?: string
   /** When it was found, in `$.clock.now()` milliseconds. */
   at: number
@@ -323,7 +323,7 @@ export type SessionStatus = {
   /** How far the task list is; null before the first task. See `sessionProgress`. */
   progress: Progress | null
   /** The pull requests and issues created, oldest first. */
-  links: CreatedLink[]
+  links: SessionLink[]
   subagents: Subagents
   /**
    * When the agent last posted the decide list (the open decisions before settling, asked in the chat) of open before-settling

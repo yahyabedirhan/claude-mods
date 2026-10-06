@@ -76,9 +76,9 @@ export const STATUS_TOOL_SPEC = {
     '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
     'Use it to find an id you no longer have, for example after `/compact`. It changes nothing.',
     '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
-    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the created links, the reported tickets and the effort.',
+    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the links, the reported tickets and the effort.',
     '`link` with `url`: a GitHub pull request or issue this session works on but did not create, for example one from an earlier session.',
-    'The Created section lists it as it lists a page made with `gh pr create` or `gh issue create`; those are found by themselves.',
+    'The Links section lists it as it lists a page made with `gh pr create` or `gh issue create`; those are found by themselves.',
   ].join(' '),
   inputSchema: {
     type: 'object',

@@ -11,7 +11,7 @@ import { isSameRepo } from './place'
  * The commands that change something, in one place: the git and gh
  * subcommands that commit, publish or edit, and the shell's file moves.
  * `gh pr create` and `gh issue create` are left out: what they make shows in
- * the Created section.
+ * the Links section.
  */
 export const CHANGING_COMMANDS = {
   git: ['commit', 'push', 'merge', 'rebase', 'tag'],
@@ -187,7 +187,7 @@ export type ShownPlace = {
  * The other repositories the session changed, in the order it first changed
  * them: every place but the session's own repository, one per GitHub
  * repository, each with files or commands to count. The pages created
- * anywhere show in the Created section.
+ * anywhere show in the Links section.
  */
 export function shownPlaces(status: SessionStatus): ShownPlace[] {
   const own = status.place

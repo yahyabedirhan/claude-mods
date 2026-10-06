@@ -19,7 +19,7 @@ function shell(w: World, printed: Record<string, string>) {
 async function linksIn($: Engine, surface: (typeof SURFACES)[number]) {
   const ui = await mountPane($, surface)
   const links = await ui.findAll({ type: 'Link' })
-  const section = await ui.find({ key: 'created' })
+  const section = await ui.find({ key: 'links' })
   await ui.unmount()
 
   return { links, section }
@@ -96,7 +96,7 @@ test('no link shows before the first created page', async ($, on) => {
   }
 })
 
-test('the Created section names the newest five pages, then how many more', async ($, on) => {
+test('the Links section names the newest five pages, then how many more', async ($, on) => {
   const w = world(on)
   const printed: Record<string, string> = {}
   for (let n = 1; n <= 7; n++) {
@@ -109,8 +109,8 @@ test('the Created section names the newest five pages, then how many more', asyn
   }
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'created')).toBe(
-      'Createdissue widgets#7 · issue widgets#6 · issue widgets#5 · issue widgets#4 · issue widgets#3 · +2 more',
+    expect(await sectionText($, surface, 'links')).toBe(
+      'Linksissue widgets#7 · issue widgets#6 · issue widgets#5 · issue widgets#4 · issue widgets#3 · +2 more',
     )
   }
 })

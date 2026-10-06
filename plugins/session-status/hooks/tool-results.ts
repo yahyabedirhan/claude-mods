@@ -6,7 +6,7 @@
 import type { ToolCallInput, ToolCallResult } from 'claude-code'
 
 import type { SessionStatus } from '../types'
-import { findCreatedLinks, linksFound } from './links'
+import { findSessionLinks, linksFound } from './links'
 import { formatCron } from './cron-schedule'
 import { cronCreated, cronDeleted, cronListed } from './crons'
 import { taskCreated, taskUpdated, todosWritten } from './tasks'
@@ -95,7 +95,7 @@ export function toolResultChange(
       const output = [text(result?.stdout), text(answer.result), text(answer.text)]
         .filter(part => part !== undefined)
         .join('\n')
-      const found = findCreatedLinks(command, output)
+      const found = findSessionLinks(command, output)
       if (found.length === 0) {
         return null
       }

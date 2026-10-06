@@ -4,7 +4,7 @@
 import { blockedSection } from './blocked'
 import { blockersSection } from './blockers'
 import { countersSection } from './counters'
-import { createdSection } from './created'
+import { linksSection } from './links'
 import { cronsSection } from './crons'
 import { decideSection } from './decide'
 import { doingNowSection } from './doing-now'
@@ -26,7 +26,7 @@ export const SECTIONS: readonly Section[] = [
   blockersSection,
   sessionSection,
   effortSection,
-  createdSection,
+  linksSection,
   placesSection,
   decideSection,
   followUpSection,

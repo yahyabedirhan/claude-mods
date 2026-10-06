@@ -112,7 +112,7 @@ test('the pane draws its sections in the agreed order', async ($, on) => {
     'blocked',
     'blockers',
     'session',
-    'created',
+    'links',
     'decide',
     'follow-up',
     'surprises',

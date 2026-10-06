@@ -30,7 +30,7 @@ Effort           video-review-v1                  during an effort
                  ○ #4 Effort progress             2 tickets, open ones first, each a link
                  ○ #5 Observer agent
                  +11 more
-Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
+Links            PR claude-mods#14 · PR skills#88 · issue claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
 Decide before settling     the newest 5, asked ones first, then a pressable "+N more"
@@ -80,10 +80,12 @@ Answered (N) · Last update
    tickets, the open ones first (`○`), then the closed ones (`✓`), each in
    issue-number order; each number links to its issue. A pressable
    "+N more" lists every ticket of the effort.
-7. **Created**: the pull requests and issues the session made, in every
-   repository, newest 5 first, then "+N more". The agent adds one it works
-   on but did not make, such as a pull request from an earlier session, with
-   the status tool's `link` action and the page's URL.
+7. **Links**: the pull requests and issues attached to the session, in
+   every repository, newest 5 first, then "+N more". The session's
+   `gh pr create` and `gh issue create` add theirs by themselves; the agent
+   adds one it works on but did not make, such as a pull request from an
+   earlier session, with the status tool's `link` action and the page's URL.
+   Both look the same.
 8. **Places**: the other repositories the session changed (see
    [Places](#places)).
 9. **Decide before settling**: decisions the agent went on with a default
@@ -243,7 +245,7 @@ commands in. Each line counts:
   `rebase`, `tag`; `gh pr edit`, `merge`, `close`; `gh issue edit`, `close`,
   `comment`; `mv`, `rm`, `cp`.
 
-The pull requests and issues made there show in **Created**, so `gh pr
+The pull requests and issues made there show in **Links**, so `gh pr
 create` and `gh issue create` are not counted here. With one place its line
 shows alone; with two or more the heading `Places (N)` leads them.
 
@@ -264,7 +266,7 @@ out of the line.
 
 To start an unrelated task from nothing, type **`/session-status reset`**. It
 removes everything the status recorded: the session items, the decisions,
-surprises and blockers (open ones too), the created links, the reported
+surprises and blockers (open ones too), the links, the reported
 tickets, the effort and its ticket count. Ids start over at 1. What the session
 runs now stays: its tasks, crons, subagents and place. The model can do the
 same with the status tool's `reset` action, which it calls only when you

@@ -1,8 +1,9 @@
 // The pull requests and issues a session creates, found in what `gh pr
 // create` and `gh issue create` print: the new page's URL. The status tool's
-// `link` action adds a page the session did not create, by its URL.
+// `link` action adds a page the session did not create, by its URL. The
+// Links section shows them all alike.
 
-import type { CreatedLink, SessionStatus } from '../types'
+import type { SessionLink, SessionStatus } from '../types'
 
 /** The `gh` commands that create a page, and the URL path each one prints. */
 const CREATES = [
@@ -15,15 +16,15 @@ const PAGE_URL = /https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)(
 /** One page's URL and nothing else, for the `link` action. */
 const ONE_PAGE_URL = /^https:\/\/[^\s/]+\/([\w.-]+)\/([\w.-]+)\/(pull|issues)\/(\d+)\/?$/
 
-/** A created page as the pane names it: `<repo>#<number>`. */
-export type FoundLink = Pick<CreatedLink, 'kind' | 'repo' | 'number' | 'url'>
+/** A page as the pane names it: `<repo>#<number>`. */
+export type FoundLink = Pick<SessionLink, 'kind' | 'repo' | 'number' | 'url'>
 
 /**
  * The pages a shell command created: each URL of its kind in the output of a
  * command that runs `gh pr create` or `gh issue create`. Nothing for any
  * other command, so a URL a command only printed is never taken.
  */
-export function findCreatedLinks(command: string, output: string): FoundLink[] {
+export function findSessionLinks(command: string, output: string): FoundLink[] {
   const found: FoundLink[] = []
   for (const create of CREATES) {
     if (!create.command.test(command)) {
@@ -53,7 +54,7 @@ export function readPageUrl(url: string): FoundLink | null {
 }
 
 /** The `<repo>#<number>` a link shows: the repository's name without its owner. */
-export function linkLabel(link: Pick<CreatedLink, 'repo' | 'number'>): string {
+export function linkLabel(link: Pick<SessionLink, 'repo' | 'number'>): string {
   return `${link.repo.split('/').pop() ?? link.repo}#${link.number}`
 }
 
@@ -61,7 +62,7 @@ export function linkLabel(link: Pick<CreatedLink, 'repo' | 'number'>): string {
 export function linkedText(link: FoundLink, isAdded: boolean): string {
   const name = `${link.kind === 'pr' ? 'Pull request' : 'Issue'} ${linkLabel(link)}`
 
-  return isAdded ? `${name} is now listed under Created.` : `${name} is listed under Created already. Nothing changed.`
+  return isAdded ? `${name} is now listed under Links.` : `${name} is listed under Links already. Nothing changed.`
 }
 
 /** The status with the found links added, each page once. */
@@ -70,12 +71,12 @@ export function linksFound(
   found: readonly FoundLink[],
   stamp: { agentId?: string; at: number },
 ): SessionStatus {
-  const added: CreatedLink[] = []
+  const added: SessionLink[] = []
   for (const link of found) {
     if ([...status.links, ...added].some(known => known.url === link.url)) {
       continue
     }
-    const created: CreatedLink = { ...link, at: stamp.at }
+    const created: SessionLink = { ...link, at: stamp.at }
     if (stamp.agentId !== undefined) {
       created.agentId = stamp.agentId
     }

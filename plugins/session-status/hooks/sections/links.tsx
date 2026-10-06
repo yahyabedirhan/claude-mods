@@ -3,24 +3,25 @@ import { newest } from '../lists'
 import type { Section } from './section'
 
 /** How many pages the section names; the older ones show as "+N more". */
-const CREATED_SHOWN = 5
+const LINKS_SHOWN = 5
 
 /**
- * The pull requests and issues the session created, in every repository,
- * newest first: `PR claude-mods#14 · PR skills#88 · issue workstation#7`.
+ * The pull requests and issues attached to the session, in every
+ * repository, newest first: `PR claude-mods#14 · PR skills#88 · issue
+ * workstation#7`. The session created them, or the agent linked them.
  * Each is a link to its page; its `<repo>#<n>` says where it is. Drawn only
  * when there is one.
  */
-export const createdSection: Section = ({ ui, status }) => {
+export const linksSection: Section = ({ ui, status }) => {
   const { Box, Link, Text } = ui
-  const { shown, more } = newest(status?.links ?? [], CREATED_SHOWN)
+  const { shown, more } = newest(status?.links ?? [], LINKS_SHOWN)
   if (shown.length === 0) {
     return null
   }
 
   return (
-    <Box key="created" flexDirection="column">
-      <Text bold>Created</Text>
+    <Box key="links" flexDirection="column">
+      <Text bold>Links</Text>
       <Text>
         {shown.map((link, index) => (
           <Text key={link.url}>

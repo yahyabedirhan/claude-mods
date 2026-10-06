@@ -1,5 +1,5 @@
 // The status tool's `link` action: a pull request or issue the session did
-// not create joins the Created section by its URL.
+// not create joins the Links section by its URL.
 
 import { expect, test } from 'claude-code/testing'
 
@@ -9,15 +9,15 @@ import { SESSION_ID, STATUS_TOOL, SURFACES, callStatusTool, sectionText, start, 
 const PR_URL = 'https://github.com/octo/widgets/pull/27'
 const ISSUE_URL = 'https://github.com/octo/widgets/issues/28'
 
-test('link adds a pull request and an issue to the Created section, as created pages show', async ($, on) => {
+test('link adds a pull request and an issue to the Links section, as created pages show', async ($, on) => {
   const w = world(on)
   await start($)
 
   expect((await callStatusTool($, { action: 'link', url: PR_URL })).result).toBe(
-    'Pull request widgets#27 is now listed under Created.',
+    'Pull request widgets#27 is now listed under Links.',
   )
   expect((await callStatusTool($, { action: 'link', url: `${ISSUE_URL}/` })).result).toBe(
-    'Issue widgets#28 is now listed under Created.',
+    'Issue widgets#28 is now listed under Links.',
   )
 
   expect(w.saved[SESSION_ID]).toMatchObject({
@@ -27,7 +27,7 @@ test('link adds a pull request and an issue to the Created section, as created p
     ],
   })
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'created')).toBe('Createdissue widgets#28 · PR widgets#27')
+    expect(await sectionText($, surface, 'links')).toBe('Linksissue widgets#28 · PR widgets#27')
   }
 })
 
@@ -37,7 +37,7 @@ test('linking a page twice lists it once and says nothing changed', async ($, on
   await callStatusTool($, { action: 'link', url: PR_URL })
 
   expect((await callStatusTool($, { action: 'link', url: PR_URL })).result).toBe(
-    'Pull request widgets#27 is listed under Created already. Nothing changed.',
+    'Pull request widgets#27 is listed under Links already. Nothing changed.',
   )
   expect((w.saved[SESSION_ID] as { links: unknown[] }).links).toHaveLength(1)
 })
