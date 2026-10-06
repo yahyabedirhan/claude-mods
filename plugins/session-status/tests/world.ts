@@ -402,11 +402,6 @@ export async function internalAgent($: Engine, agentId: string) {
   await subagentStop($, agentId)
 }
 
-/** Ends the session `sessionId` as a `/clear` or an exit does. */
-export function endSession($: Engine, sessionId: string, reason: 'clear' | 'prompt_input_exit' = 'clear') {
-  return $.session.end({ reason, sessionId, resume: { id: sessionId } })
-}
-
 /** A subagent finishing, as the classic SubagentStop event says it. */
 export function subagentStop($: Engine, agentId: string) {
   return $.classic.SubagentStop({
@@ -430,11 +425,11 @@ export function subagentToolCall($: Engine, agentId: string, input: ToolCallArgs
   return $.tool.call({ ...input, agentId } as never)
 }
 
-/** Runs `/session-status` as the person typing it does. */
-export function runCommand($: Engine) {
+/** Runs `/session-status`, with `args` after it, as the person typing it does. */
+export function runCommand($: Engine, args = '') {
   return $.command.run({
     command: PLUGIN,
-    args: '',
+    args,
     origin: { kind: 'composer' },
     presentation: { isFullscreen: true, columns: 160 },
   })

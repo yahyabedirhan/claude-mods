@@ -17,14 +17,19 @@ Sections, top to bottom. An empty section is not drawn.
 Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
 You should know  every open blocker: what failed and what unblocks it
-Session          Branch    pane-width
+Session          ID        cb8cbec3-754b-4b30-80d5-014a9daf1042
+                 Branch    pane-width           press the ID, branch or worktree to copy it
                  Worktree  claude-mods-8ec7ac/1
                  Progress 7/19 ███████░░░░░       the session's items and effort tickets
-                 ○ I8 Open the pull request       the open items, the first 4
+                 ○ I8 Open the pull request       2 items, open ones first, then "+N more"
+                 ✓ I7 Run the tests
                  Building: #3, #5
                  Tasks 2/5 ████████░░░░░          while a task list exists
 Effort           video-review-v1                  during an effort
                  Closed 1/13 █░░░░░░░░░░░         once the tracker counted it
+                 ○ #4 Effort progress             2 tickets, open ones first, each a link
+                 ○ #5 Observer agent
+                 +11 more
 Created          PR claude-mods#14 · PR skills#88 · issue claude-mods#15
 Places (2)       skills  3 files · 2 commands
                  docs  1 command
@@ -56,19 +61,25 @@ Answered (N) · Last update
    restart Claude Code, allow an action), pings you, and stays until the
    agent resolves it.
 5. **Session**: this session's own work, in every session.
-   - **Branch** and **Worktree** (the two folders above the repository
+   - **ID**, **Branch** and **Worktree** (the two folders above the repository
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
-     The full path stays in the status.
+     Press a value to copy it to the clipboard: the full session ID, the
+     branch name, or the worktree's full path.
    - **Progress**: how close the session is to settling, as done of all (see
      [Session progress](#session-progress)). The total grows as the session
      takes on more work.
-   - The open items, each with its id: the first 4, then "+N more".
+   - The items, each with its id: two of them, the open ones first (`○`,
+     oldest first), then the done ones (`✓`, newest first), then a pressable
+     "+N more" for every item behind Progress. Dropped items are left out.
    - **Building**: the tickets the orchestrator builds now.
    - **Tasks**: the task list's tasks done, on a line of its own. It never
      mixes into Progress.
 6. **Effort**, during an effort: its name, then the tracker's count once it
    has one: closed tickets of all the effort's issues, `QA:` tickets
-   included. It never mixes in the orchestrator's reports.
+   included. It never mixes in the orchestrator's reports. Below it, two
+   tickets, the open ones first (`○`), then the closed ones (`✓`), each in
+   issue-number order; each number links to its issue. A pressable
+   "+N more" lists every ticket of the effort.
 7. **Created**: the pull requests and issues the session made, in every
    repository, newest 5 first, then "+N more".
 8. **Places**: the other repositories the session changed (see
@@ -97,9 +108,10 @@ Answered (N) · Last update
     dismissed.
 16. **Last update**: its time and age.
 
-**"+N more"** under Decide before settling, Follow-up after settling,
-Surprises and Observations is a button:
-pressing it turns the pane into that whole list, newest first, with a
+**"+N more"** under the session items, the effort's tickets, Decide before settling, Follow-up
+after settling, Surprises and Observations is a button:
+pressing it turns the pane into that whole list, newest first (the items:
+and the tickets: open ones first), with a
 **← Back** button (or the `b` key) to return. Closing the pane returns it to
 every section.
 
@@ -127,7 +139,7 @@ Without items or effort tickets the session figure is the tasks'
 
 ## Opening it
 
-- `/session-status` opens or closes the pane.
+- `/session-status` opens or closes the pane; `/session-status reset` clears the whole session status (see below).
 - The pane opens by itself, once per session, when a subagent starts, a task
   list is made, an effort is found, a ticket or a session item is reported,
   or a decision or surprise is recorded.
@@ -243,11 +255,20 @@ out of the line.
 
 - **Resume** restores the session's saved status. A session with no saved
   status starts empty.
-- **`/clear`** starts a new status and carries the open decisions (same ids),
-  the effort, the reported tickets and the session items over to it. The
-  item count goes on, and so do the tickets while the effort stays the same;
-  a report for a different effort starts the tickets from zero.
+- **`/clear`** starts a new, empty status, because it starts a new session
+  id: nothing carries over, and ids start over at 1. The old session keeps
+  its saved status, which `/resume` of that session restores.
 - **`/compact`** keeps the status as it is.
+
+To start an unrelated task from nothing, type **`/session-status reset`**. It
+removes everything the status recorded: the session items, the decisions,
+surprises and blockers (open ones too), the created links, the reported
+tickets, the effort and its ticket count. Ids start over at 1. What the session
+runs now stays: its tasks, crons, subagents and place. The model can do the
+same with the status tool's `reset` action, which it calls only when you
+explicitly ask for a reset, never on its own or because of `/clear`. Its
+`list` action names every open item, decision, blocker and surprise with its
+id, so the model can close them after `/compact` took the ids out of its context.
 
 ## Optional tools
 

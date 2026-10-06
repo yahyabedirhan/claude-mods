@@ -4,7 +4,7 @@
 // writes. Keep feature logic in those modules; keep only I/O here.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
 import type { Blocker, Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
@@ -22,6 +22,8 @@ import { blockedPing, blockerPing, endListPing, pingId, withdrawPing } from './p
 import { changesBranch, githubRepo, repoOf, withPlace } from './place'
 import { commandTargets, editedFile, folderOf, withChange } from './places'
 import type { ChangedRepo } from './places'
+import { listText, resetProgress, resetText } from './reset'
+import type { ResetRemoved } from './reset'
 import { reportItem } from './session-items'
 import { sessionProgress } from './session-progress'
 import {
@@ -35,23 +37,18 @@ import {
   ticketText,
 } from './status-tool'
 import {
-  CARRY_KEY,
   KEPT_SESSIONS,
   applyChange,
-  clearCarry,
   closeItem,
   emptyStatus,
   keysToPrune,
   onEndList,
   openToDecide,
-  readCarry,
   recordItem,
   savedStatus,
   statusForSession,
-  withCarry,
   withDefaults,
 } from './status'
-import type { ClearCarry } from './status'
 import { isRunningSubagent, subagentStarted, subagentStopped } from './subagents'
 import { taskCreated, taskUpdated } from './tasks'
 import { reportTicket } from './ticket-reports'
@@ -87,47 +84,24 @@ const observerTurnsAtom = atom({ plugin: 'session-status', key: 'observerTurns' 
 // `$.store` with the session id as the key.
 
 /**
- * The session a `/clear` in this module load ended, until the new session's
- * SessionStart: a change that comes first still takes the `/clear`'s carry.
- * Any other session id change (a resume, a fork) starts empty.
- */
-let clearedFrom: string | null = null
-
-/**
  * Makes `$.state` hold the status of `sessionId` when it holds another
- * session's or none: the saved one on a resume; else, on a `/clear`
- * (`clear` given), the open decisions carried over from the one held, saved
- * at once; else none. A new session also drops the oldest saved sessions
+ * session's or none: the saved one on a resume; else none, so a `/clear` or
+ * a fork starts empty. A new session also drops the oldest saved sessions
  * beyond KEPT_SESSIONS.
- *
- * `clear.carry` is what the session a `/clear` ended left in the store: its
- * open decisions join the status even when `$.state` came through the
- * `/clear` empty, or an earlier event already started the new session's status.
  */
-async function holdSession(
-  $: EngineInterface,
-  sessionId: string,
-  clear: { carry: ClearCarry | null } | null = null,
-): Promise<void> {
-  const carry = clear?.carry ?? null
+async function holdSession($: EngineInterface, sessionId: string): Promise<void> {
   const held = await read($, statusAtom)
-  if (held?.sessionId === sessionId && carry === null) {
+  if (held?.sessionId === sessionId) {
     return
   }
   const saved = savedStatus(await $.store.get(sessionId), sessionId)
-  const now = await $.clock.now()
-  const status = await update($, statusAtom, current => {
-    const kept = statusForSession(withDefaults(current), sessionId, saved, now, clear !== null)
-
-    return carry === null ? kept : withCarry(kept ?? { ...emptyStatus(sessionId), updatedAt: now }, carry)
-  })
-  // A restored status is saved as it was; a carried one is saved for the first time.
+  const status = await update($, statusAtom, current => statusForSession(withDefaults(current), sessionId, saved))
   if (status !== null) {
     await saveStatus($, status)
   }
   await pruneStore($, sessionId)
-  // A restored or carried status that meets a trigger opens the pane, unless
-  // the person closed it.
+  // A restored status that meets a trigger opens the pane, unless the person
+  // closed it.
   if (status !== null && meetsAutoOpenTrigger(status)) {
     await autoOpenPane($)
   }
@@ -150,20 +124,11 @@ async function pruneStore($: EngineInterface, current: string): Promise<void> {
 
 /**
  * Makes `$.state` hold the status of the session that runs now (see
- * holdSession) and resolves to its id. A change under a new id after a
- * `/clear` in this load takes that `/clear`'s carry.
+ * holdSession) and resolves to its id.
  */
 async function holdCurrentSession($: EngineInterface): Promise<string> {
   const sessionId = await $.session.id()
-  if ((await read($, statusAtom))?.sessionId === sessionId) {
-    return sessionId
-  }
-  if (clearedFrom === null || clearedFrom === sessionId) {
-    await holdSession($, sessionId)
-  } else {
-    const carry = readCarry(await $.store.get(CARRY_KEY), sessionId, await $.clock.now())
-    await holdSession($, sessionId, { carry: carry?.from === clearedFrom ? carry : null })
-  }
+  await holdSession($, sessionId)
 
   return sessionId
 }
@@ -326,6 +291,25 @@ function startObserver($: EngineInterface, trigger: Trigger): void {
 /** This module load's age timer; a reload starts the module, and this, over. */
 let ageTicker: Timer | undefined
 
+/** Copies a value the person pressed in the pane, and says so in a toast. */
+async function copyValue($: EngineInterface, text: string, surface: RenderSurface): Promise<void> {
+  const copied = await $.ui.copy({ text, surface })
+  $.ui.toast(copied.isCopied ? `Copied ${text}` : `Could not copy ${text}`)
+}
+
+/** Resets the session progress (see `resetProgress`), saved at once; resolves to the reply. */
+async function reset($: EngineInterface): Promise<string> {
+  let removed: ResetRemoved | undefined
+  await changeStatus($, status => {
+    const outcome = resetProgress(status)
+    removed = outcome.removed
+
+    return outcome.status
+  })
+
+  return resetText(removed ?? { items: 0, entries: 0, links: 0, tickets: 0, effort: null })
+}
+
 /**
  * Draws the pane again every AGE_TICK_MS while it is open, so "last update"
  * ages without a status change. A reload drops the timer, and the
@@ -351,10 +335,9 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: COMMAND,
-      description: 'Open or close the session status pane',
+      description: 'Open or close the session status pane; `reset` clears the whole session status',
     })
     await $.tool.register(STATUS_TOOL_SPEC)
-    clearedFrom = null
     startAgeTicker($)
     // An open pane stays open for the session: a reload that dropped it
     // opens it again.
@@ -367,38 +350,13 @@ export const register: Register = on => {
   })
 
   // Resume, /clear and fork move the process to another session id; the
-  // status follows it (see holdSession). /compact keeps the session and its
-  // status, so `compact` changes nothing, and no hook here touches the
-  // status on PreCompact or PostCompact.
-  //
-  // A /clear can empty `$.state`, so the session it ends saves what it carries
-  // over to the store, and the new session's SessionStart (source `clear`)
-  // takes it once. Only that SessionStart, or a change that comes before it
-  // (see holdCurrentSession), takes it, and only within CARRY_WINDOW_MS: a
-  // startup, a resume or another process never does.
-  on('session.end', async ($, e, next) => {
-    if (e.reason === 'clear') {
-      clearedFrom = e.sessionId
-      const ended = savedStatus(await $.store.get(e.sessionId), e.sessionId)
-      const carry = ended === null ? null : clearCarry(ended, await $.clock.now())
-      // No carry leaves no older one behind for this /clear's new session.
-      await (carry === null ? $.store.delete(CARRY_KEY) : $.store.set(CARRY_KEY, carry))
-    }
-
-    return next(e)
-  })
-
+  // status follows it (see holdSession): a status belongs to one session id,
+  // so a /clear starts empty and a resume restores what that id saved.
+  // /compact keeps the session and its status, so `compact` changes nothing,
+  // and no hook here touches the status on PreCompact or PostCompact.
   on('classic.SessionStart', async ($, e, next) => {
-    if (e.source === 'clear') {
-      const carry = readCarry(await $.store.get(CARRY_KEY), e.session_id, await $.clock.now())
-      await $.store.delete(CARRY_KEY)
-      clearedFrom = null
-      await holdSession($, e.session_id, { carry })
-    } else if (e.source !== 'compact') {
-      clearedFrom = null
-      await holdSession($, e.session_id)
-    }
     if (e.source !== 'compact') {
+      await holdSession($, e.session_id)
       readPlace($)
     }
 
@@ -411,7 +369,16 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
+  // `/session-status` opens or closes the pane; `/session-status reset`
+  // clears the session progress a `/clear` carried over.
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'reset') {
+      return { text: await reset($) }
+    }
+    if (arg !== '') {
+      return { text: `Unknown argument "${e.args.trim()}". Use /${COMMAND} to open or close the pane, or /${COMMAND} reset to clear the whole session status.` }
+    }
     const done = await togglePane($)
 
     return { text: `Session status pane ${done}.` }
@@ -462,6 +429,14 @@ export const register: Register = on => {
       sendPing($, endListPing(posted.sessionId, listed.map(item => item.id)))
 
       return { result: endListText(listed) }
+    }
+
+    if ('list' in input) {
+      return { result: listText(await currentStatus($)) }
+    }
+
+    if ('reset' in input) {
+      return { result: await reset($) }
     }
 
     if ('ticket' in input) {
@@ -659,6 +634,7 @@ export const register: Register = on => {
       columns: e.props.bodyColumns,
       view: await read($, viewAtom),
       show: view => update($, viewAtom, () => view),
+      copy: (text, surface) => copyValue($, text, surface),
     })
   })
 }

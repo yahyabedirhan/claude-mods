@@ -22,7 +22,7 @@ export const STATUS_TOOL_NAME = 'status'
 /** The tool's full name, as the model calls it and `tool.call` names it. */
 export const STATUS_TOOL = `mcp__session-status__${STATUS_TOOL_NAME}`
 
-const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item'] as const
+const ACTIONS = ['record_decision', 'record_surprise', 'record_blocker', 'resolve', 'dismiss', 'post_decide_list', 'ticket', 'item', 'list', 'reset'] as const
 const TICKET_STATES: readonly TicketState[] = ['started', 'landed', 'stopped']
 const ITEM_STATES: readonly ItemState[] = ['added', 'done', 'dropped']
 const URGENCIES: readonly DecisionUrgency[] = ['blocked', 'before_settling', 'after_settling']
@@ -71,6 +71,10 @@ export const STATUS_TOOL_SPEC = {
     'The result names the item\'s id (I1, I2, ...). State `done` with `id`: the work is finished and verified.',
     'State `dropped` with `id`: the item is no longer needed, or a later item replaced it.',
     'Do not add an item for an effort ticket: the tickets count by themselves.',
+    '`list`: names every open session item, decision, blocker and surprise with its id, the effort and the reported tickets.',
+    'Use it to find an id you no longer have, for example after `/compact`. It changes nothing.',
+    '`reset`: only when the user explicitly asks to reset, clear or start the session status over; never on your own, and never because of `/clear`.',
+    'It removes everything the status recorded: the session items, the decisions, surprises and blockers, the created links, the reported tickets and the effort.',
   ].join(' '),
   inputSchema: {
     type: 'object',
@@ -79,7 +83,7 @@ export const STATUS_TOOL_SPEC = {
         type: 'string',
         enum: [...ACTIONS],
         description:
-          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, or report a ticket\'s or a session item\'s state.',
+          'What to do: record a decision, a surprise or a blocker, close one (`resolve`, `dismiss`), mark the decide list posted, report a ticket\'s or a session item\'s state, list the open ids (`list`), or reset the session progress when the user asks (`reset`).',
       },
       id: {
         type: 'string',
@@ -155,6 +159,10 @@ export type StatusToolRequest =
   | { ticket: TicketRequest }
   /** Report a session item's state. */
   | { item: ItemRequest }
+  /** Name every open id. */
+  | { list: true }
+  /** Reset the session progress. */
+  | { reset: true }
 
 /**
  * Reads one call's input into what it asks for, or says what is wrong with
@@ -292,6 +300,12 @@ export function readStatusToolInput(
 
       return { item: { state: state as 'done' | 'dropped', id } }
     }
+    case 'list':
+      return { list: true }
+    case 'reset':
+      return typeof input.agentId === 'string'
+        ? { error: 'Only the main session resets the progress, and only when the user asks.' }
+        : { reset: true }
     default:
       return { error: `Unknown action. Use one of: ${ACTIONS.join(', ')}.` }
   }

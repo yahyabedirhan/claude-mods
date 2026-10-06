@@ -2,7 +2,7 @@
 // to null when it has nothing to show. Sections never call `$`: whatever a
 // section draws from is in the context register.tsx builds.
 
-import type { ElementTable, RenderNode } from 'claude-code'
+import type { ElementTable, RenderNode, RenderSurface } from 'claude-code'
 
 import type { PaneView, SessionStatus } from '../../types'
 
@@ -21,6 +21,8 @@ export type SectionContext = {
   view: PaneView
   /** Switches the pane to another view: a "+N more" opens its list, Back returns to `main`. */
   show: (view: PaneView) => void
+  /** Puts `text` on the clipboard of the surface a press came from. */
+  copy: (text: string, surface: RenderSurface) => void
 }
 
 /**

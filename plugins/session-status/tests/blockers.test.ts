@@ -9,15 +9,12 @@ import {
   SURFACES,
   bandText,
   callStatusTool,
-  endSession,
   mountPane,
   sectionText,
   start,
   surprise,
   world,
 } from './world'
-
-const NEW_SESSION = 'session-b'
 
 /** A blocker's input, as the agent records it when a step fails and it cannot finish alone. */
 function blocker(fields: Record<string, unknown> = {}) {
@@ -96,22 +93,6 @@ test('the status tool refuses a blocker without what failed or what unblocks it'
   expect((await callStatusTool($, blocker({ needs: undefined }))).deny).toContain('`needs`')
   await callStatusTool($, blocker())
   expect((await callStatusTool($, { action: 'dismiss', id: 'B1' })).deny).toContain('use `resolve`')
-})
-
-test('/clear carries an open blocker over with its ping id', async ($, on) => {
-  const w = world(on)
-  await start($)
-  await callStatusTool($, blocker())
-
-  await endSession($, SESSION_ID)
-  w.forgetState()
-  w.switchSession(NEW_SESSION)
-  await $.classic.SessionStart({ source: 'clear', session_id: NEW_SESSION } as never)
-
-  expect(w.saved[NEW_SESSION]).toMatchObject({ items: [{ id: 'B1', kind: 'blocker', pingId: pingId(SESSION_ID, 'B1') }] })
-  await callStatusTool($, { action: 'resolve', id: 'B1' })
-  await settle(w)
-  expect(pingRuns(w.runs).at(-1)).toEqual(withdrawPing(pingId(SESSION_ID, 'B1')))
 })
 
 /** Mounts the pane, presses the element keyed `key`, and returns the pane's text after it. */
