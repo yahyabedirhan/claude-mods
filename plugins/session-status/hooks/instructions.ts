@@ -38,6 +38,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
   - Only the orchestrator reports tickets. A delegate that builds one ticket does not.
 - When you work on a pull request or issue that this session did not create, such as one from an earlier session, call the tool with action \`link\` and its \`url\`. The pane then lists it under Links, with the pages this session created. Pages made with \`gh pr create\` or \`gh issue create\` are found by themselves.
 - When you need an id that is no longer in your context, for example after \`/compact\`, call the tool with action \`list\`. It names every open id.
+- When the user asks about only part of the status, such as the observations or the answered decisions, call \`list\` with a \`filter\` that reads only that: \`kind\`, \`state\` (\`open\`, \`closed\` or \`all\`) and \`id\`.
 - Only when the user explicitly asks you to reset, clear or start the session status over, call the tool with action \`reset\`. It removes everything the status recorded, open decisions and blockers too. Never reset on your own or because of \`/clear\`.
 - If you are a subagent and cannot call the status tool, put your decisions and surprises in your final report, with the same fields. The orchestrator records them with the status tool.`
 
