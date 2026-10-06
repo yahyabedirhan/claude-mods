@@ -87,7 +87,7 @@ plugins/session-status/
 │   ├── tasks.ts              # Task bar: the task list mirrored from TaskCreate/TaskUpdate/TodoWrite/events
 │   ├── links.ts              # links: created by gh pr/issue create, added by `link`, state from gh commands
 │   ├── link-states.ts        # each link's state read from GitHub (one gh api graphql call)
-│   ├── reset.ts              # `reset` and `list` as data
+│   ├── reset.ts              # `reset` and `list` as data; `matchesFilter` keeps what a `list` filter asks for
 │   ├── observer.ts           # the observer agent: when it checks, what it asks, what it keeps
 │   ├── activity.ts, auto-open.ts, place.ts, places.ts, crons.ts, cron-schedule.ts,
 │   │   subagents.ts, pings.ts, describe-tool-call.ts, time.ts, lists.ts, palette.ts
@@ -163,7 +163,8 @@ ui.render Pane
 | The maintainer merges; GitHub closes #4; next read | 5/5 | Closed 4/9 |
 
 **Rejections:** an `item` call from a subagent, a `done` for an unknown
-id, a `link` with no pull request or issue URL: each returns an error text
+id, a `link` with no pull request or issue URL, a `list` filter with an
+unknown kind or state: each returns an error text
 for the model and changes nothing.
 
 ## Extensibility
@@ -172,6 +173,6 @@ for the model and changes nothing.
 |---|---|
 | A new section | `sections/<name>.tsx`, one line in `SECTIONS`; a "+N more" adds a `PaneView` and a `FULL_LISTS` entry |
 | A new status tool action | `status-tool.ts` (schema, reading), one branch in `register.tsx`, `instructions.ts` |
-| Filter `list` by kind, state, id (#32) | `reset.ts` (`matchesFilter`, `listText`), `status-tool.ts` |
+| A new `list` filter key | `reset.ts` (`ListFilter`, `matchesFilter`, a field on `ListEntry`), `status-tool.ts` (`filter` schema, `readListFilter`) |
 | Another tracker than GitHub | `effort-progress.ts` and `link-states.ts` (their argv and parsers) |
 | Another kind of progress | a pure module for its count, a section beside Effort and Task |

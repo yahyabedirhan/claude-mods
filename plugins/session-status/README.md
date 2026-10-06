@@ -296,8 +296,26 @@ tickets, the effort and its ticket count. Ids start over at 1. What the session
 runs now stays: its tasks, crons, subagents and place. The model can do the
 same with the status tool's `reset` action, which it calls only when you
 explicitly ask for a reset, never on its own or because of `/clear`. Its
-`list` action names every open item, decision, blocker and surprise with its
-id, so the model can close them after `/compact` took the ids out of its context.
+`list` action names every open item, decision, blocker, surprise and
+observation with its id, so the model can close them after `/compact` took the
+ids out of its context.
+
+`list` takes an optional `filter`, so the model reads only what you ask
+about. Different keys must all match; the values of one key match if one of
+them matches.
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `kind` | `item`, `decision`, `blocker`, `surprise`, `observation`, `ticket`, `effort` | all kinds |
+| `state` | `open`; `closed` (resolved, dismissed, done, dropped or landed); `all` | `open` |
+| `id` | ids such as `D1`, `S2`, `I16`, or a ticket as `#3` (any case) | all ids |
+
+An observation is a surprise the observer found; `surprise` leaves it out.
+The effort has no state, so it shows with any `state`. For example, "read
+the observations" is `{ "kind": ["observation"] }`, and "which decisions did
+I answer" is `{ "kind": ["decision"], "state": "closed" }`. Without a filter,
+`list` also names the done items and every reported ticket. An unknown kind
+or state returns an error that names the allowed values.
 
 ## Optional tools
 
