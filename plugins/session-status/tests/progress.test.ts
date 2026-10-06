@@ -68,13 +68,13 @@ test('the bar fills as tasks finish', async ($, on) => {
   }
 })
 
-test('the Session section stays out of the pane before the first task', async ($, on) => {
+test('before the first task the Session section shows only the session id', async ($, on) => {
   world(on)
   await start($)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
 
   for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toBeUndefined()
+    expect(await sectionText($, surface, 'session')).toMatch(/^Session\s*ID\s+session-a$/)
   }
 })
 

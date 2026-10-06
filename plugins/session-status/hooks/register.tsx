@@ -4,7 +4,7 @@
 // writes. Keep feature logic in those modules; keep only I/O here.
 
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
 import type { Blocker, Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
@@ -290,6 +290,12 @@ function startObserver($: EngineInterface, trigger: Trigger): void {
 
 /** This module load's age timer; a reload starts the module, and this, over. */
 let ageTicker: Timer | undefined
+
+/** Copies a value the person pressed in the pane, and says so in a toast. */
+async function copyValue($: EngineInterface, text: string, surface: RenderSurface): Promise<void> {
+  const copied = await $.ui.copy({ text, surface })
+  $.ui.toast(copied.isCopied ? `Copied ${text}` : `Could not copy ${text}`)
+}
 
 /** Resets the session progress (see `resetProgress`), saved at once; resolves to the reply. */
 async function reset($: EngineInterface): Promise<string> {
@@ -628,6 +634,7 @@ export const register: Register = on => {
       columns: e.props.bodyColumns,
       view: await read($, viewAtom),
       show: view => update($, viewAtom, () => view),
+      copy: (text, surface) => copyValue($, text, surface),
     })
   })
 }

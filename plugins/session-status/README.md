@@ -17,7 +17,8 @@ Sections, top to bottom. An empty section is not drawn.
 Now              the current task, else the last tool call
 Blocked on you   every open blocked decision
 You should know  every open blocker: what failed and what unblocks it
-Session          Branch    pane-width
+Session          ID        cb8cbec3-754b-4b30-80d5-014a9daf1042
+                 Branch    pane-width           press the ID, branch or worktree to copy it
                  Worktree  claude-mods-8ec7ac/1
                  Progress 7/19 ███████░░░░░       the session's items and effort tickets
                  ○ I8 Open the pull request       2 items, open ones first, then "+N more"
@@ -60,9 +61,10 @@ Answered (N) · Last update
    restart Claude Code, allow an action), pings you, and stays until the
    agent resolves it.
 5. **Session**: this session's own work, in every session.
-   - **Branch** and **Worktree** (the two folders above the repository
+   - **ID**, **Branch** and **Worktree** (the two folders above the repository
      folder, or `worktrees/<name>` for a worktree in a `worktrees` folder).
-     The full path stays in the status.
+     Press a value to copy it to the clipboard: the full session ID, the
+     branch name, or the worktree's full path.
    - **Progress**: how close the session is to settling, as done of all (see
      [Session progress](#session-progress)). The total grows as the session
      takes on more work.

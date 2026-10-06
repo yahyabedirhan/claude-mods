@@ -1,9 +1,9 @@
-import type { RenderNode } from 'claude-code'
+import type { RenderNode, RenderSurface } from 'claude-code'
 
 import type { TicketReport } from '../../types'
 import { first } from '../lists'
 import { COLOR } from '../palette'
-import { branchUrl, issueUrl, worktreeLabel } from '../place'
+import { issueUrl, worktreeLabel } from '../place'
 import { listedItems } from '../session-items'
 import { sessionProgress, taskProgress } from '../session-progress'
 import { ticketShortName } from '../ticket-reports'
@@ -21,14 +21,15 @@ const ITEMS_SHOWN = 2
 const LABEL_CELLS = 9
 
 /**
- * This session's own work, in every session: the branch and the worktree;
+ * This session's own work, in every session: the session id, the branch and
+ * the worktree, each copied when pressed;
  * the items done of all, the effort's tickets among them, then the first
  * two items (open ones first) and the tickets the orchestrator builds now; and the task list's
  * tasks done, on a line of its own. The effort's name and the tracker's
  * closed count are the Effort section's, the created pages the Created
  * section's. Drawn once any of it is known.
  */
-export const sessionSection: Section = ({ ui, status, columns, show }) => {
+export const sessionSection: Section = ({ ui, status, columns, show, copy }) => {
   const { Box, Text } = ui
   if (status === null) {
     return null
@@ -37,12 +38,12 @@ export const sessionSection: Section = ({ ui, status, columns, show }) => {
   const repo = place?.repo ?? null
   const progress = sessionProgress(status)
   const tasks = taskProgress(status)
-  const lines: RenderNode[] = []
+  const lines: RenderNode[] = [copyable(ui, 'ID', status.sessionId, status.sessionId, copy)]
   if (place !== null && place.branch !== null) {
-    lines.push(labelled(ui, 'Branch', place.branch, repo === null ? null : branchUrl(repo, place.branch)))
+    lines.push(copyable(ui, 'Branch', place.branch, place.branch, copy))
   }
   if (place !== null && worktreeLabel(place.root) !== '') {
-    lines.push(labelled(ui, 'Worktree', worktreeLabel(place.root), null))
+    lines.push(copyable(ui, 'Worktree', worktreeLabel(place.root), place.root, copy))
   }
   if (progress !== null) {
     lines.push(bar(ui, 'Progress', progress.done, progress.total, columns))
@@ -82,15 +83,25 @@ function bar(ui: Ui, label: string, done: number, total: number, columns: number
   )
 }
 
-/** One `Label    value` line; the value is a link when it has a page. */
-function labelled(ui: Ui, label: string, value: string, href: string | null): RenderNode {
-  const { Link, Text } = ui
+/**
+ * One `Label    value` line: pressing the value copies `text` (the worktree
+ * shows its short name and copies its full path).
+ */
+function copyable(
+  ui: Ui,
+  label: string,
+  value: string,
+  text: string,
+  copy: (text: string, surface: RenderSurface) => void,
+): RenderNode {
+  const { Box, Button, Text } = ui
+  const key = `session-${label.toLowerCase()}`
 
   return (
-    <Text key={`session-${label.toLowerCase()}`}>
+    <Box key={key} flexDirection="row">
       <Text dimColor>{label.padEnd(LABEL_CELLS)}</Text>
-      {href === null ? value : <Link href={href} label={value} />}
-    </Text>
+      <Button key={`${key}-copy`} label={value} plain onPress={press => copy(text, press.surface)} />
+    </Box>
   )
 }
 

@@ -43,11 +43,37 @@ test('outside an effort the Session section shows the branch and the worktree, w
   })
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toMatch(/Branch\s+pane-width/)
+    expect(text).toMatch(/ID\s+session-a\s*Branch\s+pane-width/)
     expect(text).toMatch(/Worktree\s+claude-mods-8ec7ac\/1/)
     expect(text).not.toContain('Effort')
     expect(text).not.toContain('/home/dev')
-    expect(await paneLinks($, surface)).toEqual([['pane-width', `${REPO_URL}/tree/pane-width`]])
+    expect(await paneLinks($, surface)).toEqual([])
+  }
+})
+
+test('pressing the session id, the branch or the worktree copies it, the worktree as its full path', async ($, on) => {
+  const w = inWorktree(on)
+  const copied: [string, string | undefined][] = []
+  on('ui.copy', (_$, e) => {
+    copied.push([e.text, e.surface])
+
+    return { value: { isCopied: true } } as never
+  })
+  await start($)
+  await settle(w)
+
+  for (const surface of SURFACES) {
+    copied.length = 0
+    const ui = await mountPane($, surface)
+    for (const key of ['session-id-copy', 'session-branch-copy', 'session-worktree-copy']) {
+      await ui.press({ key })
+    }
+    await ui.unmount()
+    expect(copied).toEqual([
+      [SESSION_ID, surface],
+      ['pane-width', surface],
+      [ROOT, surface],
+    ])
   }
 })
 
@@ -59,11 +85,10 @@ test('during an effort the Effort section links the effort and Session the ticke
 
   for (const surface of SURFACES) {
     const text = (await sectionText($, surface, 'session')) ?? ''
-    expect(text).toMatch(/^Session\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Progress 0\/1/)
+    expect(text).toMatch(/^Session\s*ID\s+session-a\s*Branch\s+pane-width\s*Worktree\s+claude-mods-8ec7ac\/1\s*Progress 0\/1/)
     expect(await sectionText($, surface, 'effort')).toMatch(/^Effort\s+video-review-v1$/)
     expect(text).toContain('Building: #3')
     expect(await paneLinks($, surface)).toEqual([
-      ['pane-width', `${REPO_URL}/tree/pane-width`],
       ['#3', `${REPO_URL}/issues/3`],
       ['video-review-v1', `${REPO_URL}/issues?q=label%3Aeffort%3Avideo-review-v1`],
     ])
@@ -128,17 +153,6 @@ test('the Created section lists the pages made in every repository, newest first
     expect(await sectionText($, surface, 'created')).toBe('CreatedPR skills#88 · issue claude-mods#15 · PR claude-mods#14')
     expect(await sectionText($, surface, 'session')).not.toContain('#14')
     expect(await paneLinks($, surface)).toContainEqual(['claude-mods#14', `${REPO_URL}/pull/14`])
-  }
-})
-
-test('without a GitHub remote the branch shows as plain text', async ($, on) => {
-  const w = inWorktree(on, { repos: [{ root: ROOT, remote: 'git@gitlab.com:octo/claude-mods.git' }] })
-  await start($)
-  await settle(w)
-
-  for (const surface of SURFACES) {
-    expect(await sectionText($, surface, 'session')).toMatch(/Branch\s+pane-width/)
-    expect(await paneLinks($, surface)).toEqual([])
   }
 })
 

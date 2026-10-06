@@ -54,11 +54,6 @@ export function effortUrl(repo: GitHubRepo, effort: string): string {
   return `${repo.url}/issues?q=${encodeURIComponent(`label:effort:${effort}`)}`
 }
 
-/** The branch's page on GitHub. */
-export function branchUrl(repo: GitHubRepo, branch: string): string {
-  return `${repo.url}/tree/${branch.split('/').map(encodeURIComponent).join('/')}`
-}
-
 /** An issue's page on GitHub. */
 export function issueUrl(repo: GitHubRepo, number: number): string {
   return `${repo.url}/issues/${number}`
