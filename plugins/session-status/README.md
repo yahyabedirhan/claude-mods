@@ -375,7 +375,8 @@ All are skipped silently when they are missing.
 
 ## The observer
 
-While the pane is open, a small model (Haiku) checks the recent work for
+While the pane is open, a small model (Haiku 5.5, through Claude Code's
+`haiku` alias) checks the recent work for
 what the agent does not see itself: the same failing step tried three or
 more times, many turns spent on a side issue, and steps that contradict the
 effort, the task list or the session items. Small details and single errors

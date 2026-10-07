@@ -43,7 +43,7 @@ follow-up    decisions that can wait until after settling
 more         a pressable "+N more" turns the pane into the whole list, with a Back button
 stuck        what the agent tried that failed and you can unblock, under "You should know", with a ping
 pings        a shipyard ping for each blocked decision or blocker, withdrawn once it's resolved (optional)
-observer     a Haiku check every few turns for loops and time sinks the agent misses, kept apart as Observations
+observer     a Haiku 5.5 check every few turns for loops and time sinks the agent misses, kept apart as Observations
 survives     resume, /clear (open decisions, blockers and items carry over) and /compact
 ```
 
