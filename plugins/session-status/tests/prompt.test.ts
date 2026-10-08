@@ -97,7 +97,18 @@ test('the section tells the agent to resolve answered decisions and dismiss surp
   expect(text).toMatch(/`resolve`/)
   expect(text).toMatch(/answers? .*in the chat/i)
   expect(text).toMatch(/`dismiss`/)
-  expect(text).toMatch(/read-only/i)
+  expect(text).toMatch(/buttons under each decision/i)
+})
+
+test('the section tells the agent to keep options short and how pane answers and Discuss read', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toContain('Write each option in a few words')
+  expect(text).toMatch(/`<id>: <option>`.*do not call `resolve`/s)
+  expect(text).toContain("Let's discuss <id>: <question>")
 })
 
 /** The concise-item rule, as the prompt, the tool and the observer each say it. */

@@ -1,7 +1,7 @@
 {
   "name": "session-status",
-  "version": "0.10.1",
-  "description": "A read-only pane that shows the session's live status: doing now, decisions, progress, surprises and the last update.",
+  "version": "0.11.0",
+  "description": "A pane that shows the session's live status: doing now, decisions with quick-reply buttons, progress, surprises and the last update.",
   "author": { "name": "yahyabedirhan" },
   "types": "./types/index.d.ts"
 }

@@ -36,9 +36,11 @@ the next change.
    holding a tool call.
 6. **Keep a status per session id**: a resume restores it, `/clear` and a
    fork start empty, `/compact` keeps it.
-7. **Error handling**: a refused status call says what is wrong for the
+7. **Answer a decision from the pane**: a button for each short option and
+   a Discuss button send the answer as the person's own prompt.
+8. **Error handling**: a refused status call says what is wrong for the
    model to fix; a failed `gh` or `git` read keeps the last good value.
-8. **Out of scope**: the engine's own UI, storing anything outside
+9. **Out of scope**: the engine's own UI, storing anything outside
    `$.state` and `$.store`, sharing state between sessions.
 
 ## Entities and relationships
@@ -107,7 +109,7 @@ plugins/session-status/
 │       ├── effort.tsx        # Effort name; Closed n/m bar; tickets; +N more
 │       ├── task.tsx          # Task: Done n/m bar; tasks; +N more
 │       ├── links.tsx         # Links: a mark per kind and state, each label a link
-│       ├── entries.tsx       # shared entry lines and the full lists "+N more" opens
+│       ├── entries.tsx       # shared entry lines, decision reply buttons and the full lists "+N more" opens
 │       ├── list-view.tsx     # one list in full, with Back
 │       └── …                 # state, doing-now, blocked, blockers, places, decide, follow-up,
 │                             # surprises, observations, counters, crons, history, last-update
@@ -162,6 +164,22 @@ ui.render Pane
   drawPane(context)                         pane.tsx → each of SECTIONS
 ```
 
+**A quick reply, from press to prompt:**
+
+```text
+ui.press option (sections/entries.tsx replyButtons → context.replies.answer)
+  answerDecision                            register.tsx
+    closeStatusItem                         closeItem inside changeStatus; ping withdrawn
+    $.prompt.submit("D4: Postgres", asUser)  runs once the session is idle
+ui.press Discuss (context.replies.discuss)
+  discussDecision                           register.tsx
+    changeStatus(markDiscussing)            status.ts: the decision stays open, marked
+    $.prompt.submit("Let's discuss D4: …", asUser)
+```
+
+The check that closes or marks the decision runs inside the change, so two
+quick presses send one prompt, and a decision closed meanwhile sends none.
+
 **Trace, an effort session:**
 
 | Step | Session | Effort |
@@ -182,7 +200,7 @@ each fixed field). `status-tool.ts` checks a call against it;
 `createEntry`, `updateEntry`, `deleteEntry` and `readEntries` change or read
 the status. Each shortcut calls the same function as its generic action:
 `record_*` → `readDraft` and `recordDraft`, `resolve` and `dismiss` →
-`closeItem`, `item` → `reportItem` and `movedItem`, `ticket` →
+`closeStatusItem` (`closeItem`, then its ping withdrawn), `item` → `reportItem` and `movedItem`, `ticket` →
 `reportTicket`, `link` → `linkPage`, `list` → `listText`.
 
 **Manual and automatic values.** `set-by.ts` decides when an automatic

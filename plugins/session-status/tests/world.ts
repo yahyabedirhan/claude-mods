@@ -6,6 +6,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 import type {
   ModelCompleteRequest,
   On,
+  PromptSubmitInput,
   SessionMessage,
   ToolCallArgs,
   ToolCallInput,
@@ -60,6 +61,8 @@ export type World = {
   messages: SessionMessage[]
   /** Every `$.model.complete` request the mod made, oldest first. */
   modelCalls: ModelCompleteRequest[]
+  /** Every prompt the mod submitted with `$.prompt.submit`, oldest first. */
+  prompts: PromptSubmitInput[]
   /**
    * Makes the fake model reply to each request with the text `reply` gives,
    * or with none when it gives undefined. The default reply is no findings.
@@ -183,6 +186,7 @@ export function world(
   const runs: string[][] = []
   const messages: SessionMessage[] = []
   const modelCalls: ModelCompleteRequest[] = []
+  const prompts: PromptSubmitInput[] = []
   let reply: ModelReply = () => '{"findings":[]}'
   let issues = options.issues
   let pageStates: Record<string, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
@@ -222,6 +226,11 @@ export function world(
     return { value: { tool } }
   })
   on('prompt.compose', () => ({ sections: BASE_SECTIONS }))
+  on('prompt.submit', (_$, e) => {
+    prompts.push(e)
+
+    return { text: e.text, origin: e.origin }
+  })
   on('ui.open', (_$, e) => {
     opens.push({ id: e.id, title: e.title, columns: e.columns })
     const isPlaced = options.isNarrow !== true
@@ -334,6 +343,7 @@ export function world(
     },
     messages,
     modelCalls,
+    prompts,
     model: next => {
       reply = next
     },

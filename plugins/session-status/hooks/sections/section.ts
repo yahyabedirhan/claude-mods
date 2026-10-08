@@ -4,10 +4,18 @@
 
 import type { ElementTable, RenderNode, RenderSurface } from 'claude-code'
 
-import type { PaneView, SessionStatus } from '../../types'
+import type { Decision, PaneView, SessionStatus } from '../../types'
 
 /** The elements every surface draws: a section uses no others. */
 export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Link' | 'Button' | 'Code' | 'Markdown'>
+
+/** What a press on a decision's quick-reply buttons does. */
+export type Replies = {
+  /** Resolves the decision and sends `<id>: <option>` as the user's own words. */
+  answer: (decision: Decision, option: string) => Promise<void>
+  /** Marks the decision as in discussion and asks the agent in the chat to discuss it. */
+  discuss: (decision: Decision) => Promise<void>
+}
 
 export type SectionContext = {
   ui: Ui
@@ -25,6 +33,8 @@ export type SectionContext = {
   surface: RenderSurface
   /** Puts `text` on the clipboard of the surface a press came from. */
   copy: (text: string, surface: RenderSurface) => void
+  /** Answers or discusses a decision from its buttons. */
+  replies: Replies
 }
 
 /**

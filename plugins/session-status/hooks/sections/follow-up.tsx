@@ -11,7 +11,7 @@ const LIMIT = 3
  * session settles, each with the default the agent went on with. The newest
  * three, then a "+N more" that opens them all. Drawn only when there is one.
  */
-export const followUpSection: Section = ({ ui, status, show }) => {
+export const followUpSection: Section = ({ ui, status, show, replies }) => {
   const { Box, Text } = ui
   const followUps = status === null ? [] : openFollowUps(status)
   if (followUps.length === 0) {
@@ -22,7 +22,7 @@ export const followUpSection: Section = ({ ui, status, show }) => {
   return (
     <Box key="follow-up" flexDirection="column">
       <Text bold>Follow-up after settling ({followUps.length})</Text>
-      {shown.map(decision => decisionEntry(ui, decision, 'follow-up'))}
+      {shown.map(decision => decisionEntry(ui, decision, 'follow-up', replies))}
       {more > 0 ? moreButton(ui, 'follow-up', more, () => show('follow-up')) : null}
     </Box>
   )
