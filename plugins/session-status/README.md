@@ -255,7 +255,7 @@ D4 · Use SQLite or Postgres for the cache?
   words.
 - Discuss sends `Let's discuss D4: <question>`. The agent explains the
   context and each option's trade-off in the chat and waits for you. The
-  decision stays open with a `(discussing)` mark, and its option buttons stay,
+  decision stays open with a `(discussing)` mark, and its buttons stay,
   until you answer or the agent resolves it.
 - A plugin's prompt runs once the session is idle, so a press during a turn
   reaches the agent when that turn ends.

@@ -308,33 +308,75 @@ async function copyValue($: EngineInterface, text: string, surface: RenderSurfac
  * decision already closed (a second press) sends nothing.
  */
 async function answerDecision($: EngineInterface, decision: Decision, option: string): Promise<void> {
-  const now = await $.clock.now()
-  const current = await currentStatus($)
-  const target = { kind: 'decision' as const, id: decision.id }
-  const checked = closeItem(current, target, now)
-  if ('error' in checked) {
+  const closed = await closeStatusItem($, { kind: 'decision', id: decision.id }, await $.clock.now())
+  if ('error' in closed) {
     return
-  }
-  await changeStatus($, status => {
-    const closed = closeItem(status, target, now)
-
-    return 'error' in closed ? status : closed.status
-  })
-  if (pings(checked.item)) {
-    // An item carried over a /clear keeps the ping id its own session sent.
-    sendPing($, withdrawPing(checked.item.pingId ?? pingId(current.sessionId, checked.item.id)))
   }
   await $.prompt.submit({ text: `${decision.id}: ${option}`, asUser: true })
 }
 
 /**
  * Discusses a decision from its Discuss button: marks it, keeps it open, and
- * asks the agent in the person's own words to discuss it in the chat.
+ * asks the agent in the person's own words to discuss it in the chat. A
+ * decision closed meanwhile sends nothing.
  */
 async function discussDecision($: EngineInterface, decision: Decision): Promise<void> {
   const now = await $.clock.now()
-  await changeStatus($, status => markDiscussing(status, decision.id, now))
+  if (!isOpenDecision(await currentStatus($), decision.id)) {
+    return
+  }
+  let isMarked = false
+  await changeStatus($, status => {
+    isMarked = isOpenDecision(status, decision.id)
+
+    return markDiscussing(status, decision.id, now)
+  })
+  if (!isMarked) {
+    return
+  }
   await $.prompt.submit({ text: `Let's discuss ${decision.id}: ${decision.question}`, asUser: true })
+}
+
+/** Whether the status holds an open decision with the id. */
+function isOpenDecision(status: SessionStatus, id: string): boolean {
+  return status.items.some(item => item.kind === 'decision' && item.id === id && isOpen(item))
+}
+
+/**
+ * Closes one open item at `now`, saved, and withdraws its ping when it
+ * pinged: the status tool's `resolve` and `dismiss` and a pane answer share
+ * it. Says what is wrong when no open item of that kind has the id.
+ */
+async function closeStatusItem(
+  $: EngineInterface,
+  target: { kind: StatusItem['kind']; id: string },
+  now: number,
+): Promise<{ item: StatusItem } | { error: string }> {
+  const checked = closeItem(await currentStatus($), target, now)
+  if ('error' in checked) {
+    return checked
+  }
+  // Closed inside the change, so of two quick presses only one closes it.
+  let outcome: ReturnType<typeof closeItem> = checked
+  const after = await changeStatus($, status => {
+    outcome = closeItem(status, target, now)
+
+    return 'error' in outcome ? status : outcome.status
+  })
+  if ('error' in outcome) {
+    return outcome
+  }
+  if (pings(outcome.item)) {
+    withdrawItemPing($, after.sessionId, outcome.item)
+  }
+
+  return { item: outcome.item }
+}
+
+/** Withdraws the ping sent for a decision or blocker. */
+function withdrawItemPing($: EngineInterface, sessionId: string, item: StatusItem): void {
+  // An item carried over a /clear keeps the ping id its own session sent.
+  sendPing($, withdrawPing(('pingId' in item ? item.pingId : undefined) ?? pingId(sessionId, item.id)))
 }
 
 /** Resets the session progress (see `resetProgress`), saved at once; resolves to the reply. */
@@ -441,22 +483,9 @@ export const register: Register = on => {
     const now = await $.clock.now()
 
     if ('close' in input) {
-      const current = await currentStatus($)
-      const checked = closeItem(current, input.close, now)
-      if ('error' in checked) {
-        return { deny: checked.error }
-      }
-      await changeStatus($, status => {
-        const closed = closeItem(status, input.close, now)
+      const closed = await closeStatusItem($, input.close, now)
 
-        return 'error' in closed ? status : closed.status
-      })
-      if (pings(checked.item)) {
-        // An item carried over a /clear keeps the ping id its own session sent.
-        sendPing($, withdrawPing(checked.item.pingId ?? pingId(current.sessionId, checked.item.id)))
-      }
-
-      return { result: closedText(checked.item) }
+      return 'error' in closed ? { deny: closed.error } : { result: closedText(closed.item) }
     }
 
     if ('postEndList' in input) {
@@ -736,8 +765,7 @@ function pingChange($: EngineInterface, sessionId: string, before: StatusItem | 
   if (!wasPinging && isPinging) {
     sendPing($, after.kind === 'blocker' ? blockerPing(sessionId, after) : blockedPing(sessionId, after))
   } else if (wasPinging && !isPinging) {
-    // An item carried over a /clear keeps the ping id its own session sent.
-    sendPing($, withdrawPing(before.pingId ?? pingId(sessionId, before.id)))
+    withdrawItemPing($, sessionId, before)
   }
 }
 

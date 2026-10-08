@@ -100,6 +100,17 @@ test('the section tells the agent to resolve answered decisions and dismiss surp
   expect(text).toMatch(/buttons under each decision/i)
 })
 
+test('the section tells the agent to keep options short and how pane answers and Discuss read', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toContain('Write each option in a few words')
+  expect(text).toMatch(/`<id>: <option>`.*do not call `resolve`/s)
+  expect(text).toContain("Let's discuss <id>: <question>")
+})
+
 /** The concise-item rule, as the prompt, the tool and the observer each say it. */
 const CONCISE = /one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is
 

@@ -8,12 +8,12 @@ import type { SectionContext } from './section'
  * the list's heading, then every open entry, newest first.
  */
 export function drawListView(context: SectionContext): RenderNode | null {
-  const { ui, status, view, show, surface, now, replies } = context
+  const { ui, view, show } = context
   const { Box, Button, Text } = ui
   if (view === 'main') {
     return null
   }
-  const { title, entries } = FULL_LISTS[view](ui, status, surface, now, replies)
+  const { title, entries } = FULL_LISTS[view](context)
 
   return (
     <Box key="list-view" flexDirection="column" gap={1}>

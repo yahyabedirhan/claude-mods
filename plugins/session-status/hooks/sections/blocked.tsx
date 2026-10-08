@@ -1,7 +1,7 @@
 import type { Decision } from '../../types'
 import { COLOR } from '../palette'
 import { isOpen } from '../status'
-import { replyButtons } from './entries'
+import { decisionHeading, replyButtons } from './entries'
 import type { Section } from './section'
 
 /**
@@ -25,11 +25,7 @@ export const blockedSection: Section = ({ ui, status, replies }) => {
       </Text>
       {blocked.map(decision => (
         <Box key={`blocked-${decision.id}`} flexDirection="column">
-          <Text>
-            <Text color={COLOR.attention}>{decision.id}</Text>
-            {decision.discussingAt === undefined ? null : <Text dimColor> (discussing)</Text>}
-            {` · ${decision.question}`}
-          </Text>
+          {decisionHeading(ui, decision, COLOR.attention)}
           <Box flexDirection="column" paddingLeft={2}>
             <Text>
               <Text dimColor>Unblocks: </Text>

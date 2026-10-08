@@ -22,7 +22,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - When a blocker works again, call the tool with action \`resolve\` and the blocker's id.
 - ${CONCISE_RULE} The user reads the pane at a glance.
 - The user answers decisions in the chat, or with the buttons under each decision in the pane. When you read the user's answer to a decision in the chat, call the tool with action \`resolve\` and the decision's id.
-- A prompt \`<id>: <option>\`, such as \`D2: Yes\`, is the user's answer from a pane button. The pane resolved the decision already, so do not call \`resolve\`.
+- A prompt \`<id>: <option>\`, such as \`D2: Yes\`, is the user's answer from a pane button. The pane resolved the decision already, so do not call \`resolve\`. If \`resolve\` says a decision is already resolved, the user answered it in the pane: read the answer and go on.
 - A prompt \`Let's discuss <id>: <question>\` asks you to discuss that decision in the chat. Explain its context and the trade-off of each option, then wait for the user's answer. The decision stays open until you call \`resolve\`.
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
 - Collect before-settling decisions while you work. Do not ask about them in the middle of the work.

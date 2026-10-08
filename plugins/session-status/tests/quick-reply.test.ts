@@ -3,7 +3,6 @@
 
 import { expect, test } from 'claude-code/testing'
 
-import { INSTRUCTIONS } from '../hooks/instructions'
 import { pingId, withdrawPing } from '../hooks/pings'
 import {
   SESSION_ID,
@@ -82,20 +81,69 @@ test('pressing Discuss keeps the decision open, marked, with its options, and as
 
   const ui = await mountPane($, 'terminal')
   await ui.press({ key: 'decide-D1-discuss' })
-  expect((await ui.find({ key: 'decide-D1' }))?.text).toContain('discussing')
-  expect(await ui.find({ key: 'decide-D1-discuss' })).toBeUndefined()
+  expect((await ui.find({ key: 'decide-D1' }))?.text).toContain('(discussing)')
+  expect((await ui.find({ key: 'decide-D1-discuss' }))?.text).toBe('Discuss')
   expect((await ui.find({ key: 'decide-D1-option-1' }))?.text).toBe('--fast ✓')
   await ui.unmount()
 
   expect(w.prompts.map(prompt => prompt.text)).toEqual(["Let's discuss D1: Which name does the flag get?"])
 
-  // After the talk the agent resolves it, or a button still answers it.
+  // The agent resolves it after the talk.
   const result = await callStatusTool($, { action: 'resolve', id: 'D1' })
   expect(result).toMatchObject({ result: expect.stringContaining('Resolved decision D1') })
 })
 
-test('the prompt section tells the agent how the pane answers and asks to discuss', async ($, on) => {
+test('after Discuss an option button still answers the decision', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, decisionBeforeSettling())
+
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'decide-D1-discuss' })
+  await ui.press({ key: 'decide-D1-option-1' })
+  expect(await ui.find({ key: 'decide' })).toBeUndefined()
+  await ui.unmount()
+
+  expect(w.prompts.map(prompt => prompt.text)).toEqual(["Let's discuss D1: Which name does the flag get?", 'D1: --fast'])
+})
+
+test('two quick presses send one answer', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, decisionBeforeSettling())
+
+  const ui = await mountPane($, 'terminal')
+  await Promise.all([ui.press({ key: 'decide-D1-option-1' }), ui.press({ key: 'decide-D1-option-2' })])
+  await ui.unmount()
+
+  expect(w.prompts).toHaveLength(1)
+})
+
+test('an option of 30 characters is a button, one of 31 is not', async ($, on) => {
   world(on)
-  expect(INSTRUCTIONS.text).toContain('Write each option in a few words')
-  expect(INSTRUCTIONS.text).toContain("Let's discuss")
+  await start($)
+  await callStatusTool($, decisionBeforeSettling({ options: ['a'.repeat(30), 'b'], default: 'b' }))
+  await callStatusTool($, decisionBeforeSettling({ options: ['a'.repeat(31), 'b'], default: 'b' }))
+
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'decide-D1-option-1' }))?.text).toBe('a'.repeat(30))
+  expect(await ui.find({ key: 'decide-D2-option-1' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('follow-ups and the full list answer from their buttons too', async ($, on) => {
+  const w = world(on)
+  await start($)
+  await callStatusTool($, decisionBeforeSettling({ urgency: 'after_settling' }))
+  for (let n = 0; n < 6; n++) {
+    await callStatusTool($, decisionBeforeSettling({ question: `Name ${n}?` }))
+  }
+
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'follow-up-D1-option-1' }))?.text).toBe('--fast ✓')
+  await ui.press({ key: 'decide-more' })
+  await ui.press({ key: 'all-D2-option-2' })
+  await ui.unmount()
+
+  expect(w.prompts.map(prompt => prompt.text)).toEqual(['D2: --quick'])
 })
