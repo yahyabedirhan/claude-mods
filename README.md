@@ -24,7 +24,7 @@ For example `session-status@claude-mods`. The first command also takes a local p
 
 | Mod | What it does | Install |
 |---|---|---|
-| [session-status](plugins/session-status/README.md) | A pane that shows what a long session is doing, the decisions it needs from you (answered with one click), its progress and its surprises. | `claude plugin install session-status@claude-mods` |
+| [session-status](plugins/session-status/README.md) | A pane that shows what a long session is doing, the decisions it needs from you and its surprises (each acted on with one click), and its progress. | `claude plugin install session-status@claude-mods` |
 
 ## How the mods work
 

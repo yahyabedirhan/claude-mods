@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
-import type { Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
+import type { Decision, GitHubRepo, SessionStatus, StatusItem, Surprise } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
 import { cronFired } from './crons'
 import { meetsAutoOpenTrigger } from './auto-open'
@@ -316,50 +316,68 @@ async function answerDecision($: EngineInterface, decision: Decision, option: st
 }
 
 /**
- * Discusses a decision from its Discuss button: marks it, keeps it open, and
- * asks the agent in the person's own words to discuss it in the chat. A
- * decision closed meanwhile sends nothing.
+ * Discusses a decision or a surprise from its Discuss button: marks it,
+ * keeps it open, and asks the agent in the person's own words to discuss it
+ * in the chat. An item closed meanwhile sends nothing.
  */
-async function discussDecision($: EngineInterface, decision: Decision): Promise<void> {
+async function discussItem($: EngineInterface, item: Decision | Surprise): Promise<void> {
   const now = await $.clock.now()
-  if (!isOpenDecision(await currentStatus($), decision.id)) {
+  const target = { kind: item.kind, id: item.id }
+  if (!isOpenItem(await currentStatus($), target)) {
     return
   }
   let isMarked = false
   await changeStatus($, status => {
-    isMarked = isOpenDecision(status, decision.id)
+    isMarked = isOpenItem(status, target)
 
-    return markDiscussing(status, decision.id, now)
+    return markDiscussing(status, target, now)
   })
   if (!isMarked) {
     return
   }
-  await $.prompt.submit({ text: `Let's discuss ${decision.id}: ${decision.question}`, asUser: true })
+  const subject = item.kind === 'decision' ? item.question : item.occurred
+  await $.prompt.submit({ text: `Let's discuss ${item.id}: ${subject}`, asUser: true })
 }
 
-/** Whether the status holds an open decision with the id. */
-function isOpenDecision(status: SessionStatus, id: string): boolean {
-  return status.items.some(item => item.kind === 'decision' && item.id === id && isOpen(item))
+/** Whether the status holds an open item of the kind with the id. */
+function isOpenItem(status: SessionStatus, target: { kind: StatusItem['kind']; id: string }): boolean {
+  return status.items.some(item => item.kind === target.kind && item.id === target.id && isOpen(item))
+}
+
+/**
+ * Closes a surprise from one of its buttons. Dismiss (no `prompt`) sends
+ * nothing; File issue and the suggested action mark it acted on and send
+ * `prompt` as the person's own words. A surprise already closed (a second
+ * press) sends nothing.
+ */
+async function closeSurprise($: EngineInterface, surprise: Surprise, prompt?: string): Promise<void> {
+  const target = { kind: 'surprise', id: surprise.id } as const
+  const closed = await closeStatusItem($, target, await $.clock.now(), { acted: prompt !== undefined })
+  if ('error' in closed || prompt === undefined) {
+    return
+  }
+  await $.prompt.submit({ text: prompt, asUser: true })
 }
 
 /**
  * Closes one open item at `now`, saved, and withdraws its ping when it
- * pinged: the status tool's `resolve` and `dismiss` and a pane answer share
- * it. Says what is wrong when no open item of that kind has the id.
+ * pinged: the status tool's `resolve` and `dismiss` and the pane's buttons
+ * share it. Says what is wrong when no open item of that kind has the id.
  */
 async function closeStatusItem(
   $: EngineInterface,
   target: { kind: StatusItem['kind']; id: string },
   now: number,
+  options: { acted?: boolean } = {},
 ): Promise<{ item: StatusItem } | { error: string }> {
-  const checked = closeItem(await currentStatus($), target, now)
+  const checked = closeItem(await currentStatus($), target, now, options)
   if ('error' in checked) {
     return checked
   }
   // Closed inside the change, so of two quick presses only one closes it.
   let outcome: ReturnType<typeof closeItem> = checked
   const after = await changeStatus($, status => {
-    outcome = closeItem(status, target, now)
+    outcome = closeItem(status, target, now, options)
 
     return 'error' in outcome ? status : outcome.status
   })
@@ -748,7 +766,10 @@ export const register: Register = on => {
       copy: (text, surface) => copyValue($, text, surface),
       replies: {
         answer: (decision, option) => answerDecision($, decision, option),
-        discuss: decision => discussDecision($, decision),
+        discuss: item => discussItem($, item),
+        dismiss: surprise => closeSurprise($, surprise),
+        fileIssue: surprise => closeSurprise($, surprise, `File an issue for ${surprise.id}: ${surprise.occurred}`),
+        act: (surprise, action) => closeSurprise($, surprise, `${surprise.id}: ${action}`),
       },
     })
   })

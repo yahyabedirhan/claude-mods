@@ -90,13 +90,15 @@ export function openBlockers(status: SessionStatus): Blocker[] {
 
 /**
  * The status with one open item closed at `now`: a decision or a blocker
- * resolved, or a surprise dismissed. Says what is wrong when no open item of that kind has
- * the id, for the model to fix and call again.
+ * resolved, or a surprise dismissed. A surprise the user `acted` on from the
+ * pane is marked acted on too. Says what is wrong when no open item of that
+ * kind has the id, for the model to fix and call again.
  */
 export function closeItem(
   status: SessionStatus,
   target: { kind: StatusItem['kind']; id: string },
   now: number,
+  { acted = false }: { acted?: boolean } = {},
 ): { status: SessionStatus; item: StatusItem } | { error: string } {
   const id = target.id.trim().toUpperCase()
   const item = status.items.find(candidate => candidate.id === id)
@@ -112,7 +114,7 @@ export function closeItem(
   if (!isOpen(item)) {
     return { error: `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${item.id} is already ${CLOSING[item.kind].closed}.` }
   }
-  const done = { ...item, resolvedAt: now }
+  const done: StatusItem = item.kind === 'surprise' && acted ? { ...item, resolvedAt: now, actedAt: now } : { ...item, resolvedAt: now }
 
   return {
     status: { ...status, items: status.items.map(candidate => (candidate === item ? done : candidate)) },
@@ -121,14 +123,18 @@ export function closeItem(
 }
 
 /**
- * The status with an open decision marked as in discussion at `now`; the
- * status as it was when no open decision has the id.
+ * The status with an open decision or surprise marked as in discussion at
+ * `now`; the status as it was when no open item of that kind has the id.
  */
-export function markDiscussing(status: SessionStatus, id: string, now: number): SessionStatus {
+export function markDiscussing(
+  status: SessionStatus,
+  target: { kind: 'decision' | 'surprise'; id: string },
+  now: number,
+): SessionStatus {
   return {
     ...status,
     items: status.items.map(item =>
-      item.kind === 'decision' && item.id === id && isOpen(item) ? { ...item, discussingAt: now } : item,
+      item.kind === target.kind && item.id === target.id && isOpen(item) ? { ...item, discussingAt: now } : item,
     ),
   }
 }

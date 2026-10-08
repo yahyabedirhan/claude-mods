@@ -53,7 +53,7 @@ export const STATUS_TOOL_SPEC = {
   // Subagents get this tool but not the prompt section, so the description
   // carries the core of the instructions too, in short.
   description: [
-    'Keeps the session status pane the user watches current. The user answers in the chat, or with the buttons under each decision in the pane.',
+    'Keeps the session status pane the user watches current. The user answers in the chat, or with the buttons under each decision, surprise and observation in the pane.',
     '`record_decision`: a choice the user must make. Give the question, two to four options of a few words each (the pane shows them as buttons),',
     'your default (the answer you recommend) and what unblocks it.',
     'Choose a safe default and continue: use urgency `before_settling` when the user must decide before the session settles,',
@@ -61,6 +61,7 @@ export const STATUS_TOOL_SPEC = {
     'Stop only when no safe default exists: use urgency `blocked`.',
     '`record_surprise`: something unexpected that changed the work or the plan.',
     'Give what occurred and what it changed. Do not record ordinary errors you fixed yourself.',
+    'Give `suggested_action` only when one clear next step exists, in a few words: the pane shows it as a button.',
     '`record_blocker`: you tried something, it failed, and you cannot finish it yourself:',
     'a denied action, a check or test that cannot run, a tool that refuses to start.',
     'Give what failed and what the user can do to unblock you (run a command, restart Claude Code, allow an action).',
@@ -69,6 +70,9 @@ export const STATUS_TOOL_SPEC = {
     '`resolve` with `id`: the user answered that decision in the chat, or that blocker works now.',
     'A `<id>: <option>` prompt is an answer from a pane button: the pane resolved it already.',
     'A `Let\'s discuss <id>: <question>` prompt asks you to explain that decision in the chat and wait for the answer.',
+    'For a surprise, a `<id>: <action>` prompt asks for that action and a `File an issue for <id>: <occurred>` prompt',
+    'asks for an issue about it, filed as the project\'s issue tracker says: the pane dismissed it already.',
+    'A `Let\'s discuss <id>: <occurred>` prompt asks for its context and next steps in the chat; then `dismiss` it or do what the user picks.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
     '`post_decide_list`: call it when, at the end of your work, you post one numbered list',
     'of the open before-settling decisions, each with its default and options.',
@@ -155,6 +159,11 @@ export const STATUS_TOOL_SPEC = {
       changed: {
         type: 'string',
         description: 'record_surprise: what it changed in the work or the plan, in one short sentence.',
+      },
+      suggested_action: {
+        type: 'string',
+        description:
+          'record_surprise: the one clear next step, in a few words, such as `Pin Node 22`; only when there is one. The pane shows it as a button.',
       },
       state: {
         type: 'string',

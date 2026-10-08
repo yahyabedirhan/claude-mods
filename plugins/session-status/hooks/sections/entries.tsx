@@ -43,19 +43,17 @@ export function openObservations(status: SessionStatus | null): Surprise[] {
   )
 }
 
-/** One surprise or observation: its id and what occurred, then what it changed. */
-export function surpriseEntry(ui: Ui, surprise: Surprise, prefix: string): RenderNode {
+/** One surprise or observation: its id and what occurred, what it changed, then its action buttons. */
+export function surpriseEntry(ui: Ui, surprise: Surprise, prefix: string, replies: Replies): RenderNode {
   const { Box, Text } = ui
 
   return (
     <Box key={`${prefix}-${surprise.id}`} flexDirection="column">
-      <Text>
-        <Text color={COLOR.accent}>{surprise.id}</Text>
-        {` · ${surprise.occurred}`}
-      </Text>
+      {itemHeading(ui, surprise, COLOR.accent)}
       <Box paddingLeft={2}>
         <Text dimColor>Changed: {surprise.changed}</Text>
       </Box>
+      {surpriseButtons(ui, surprise, prefix, replies)}
     </Box>
   )
 }
@@ -72,7 +70,7 @@ export function decisionEntry(
 
   return (
     <Box key={`${prefix}-${decision.id}`} flexDirection="column">
-      {decisionHeading(ui, decision, color)}
+      {itemHeading(ui, decision, color)}
       <Box paddingLeft={2}>
         <Text dimColor>Default: {decision.default}</Text>
       </Box>
@@ -81,20 +79,26 @@ export function decisionEntry(
   )
 }
 
-/** A decision's first line: its id, `(discussing)` after Discuss was pressed, and its question. */
-export function decisionHeading(ui: Ui, decision: Decision, color: string): RenderNode {
+/**
+ * A decision's or a surprise's first line: its id, `(discussing)` after
+ * Discuss was pressed, and its question or what occurred.
+ */
+export function itemHeading(ui: Ui, item: Decision | Surprise, color: string): RenderNode {
   const { Text } = ui
 
   return (
     <Text>
-      <Text color={color}>{decision.id}</Text>
-      {decision.discussingAt === undefined ? null : <Text dimColor> (discussing)</Text>}
-      {` · ${decision.question}`}
+      <Text color={color}>{item.id}</Text>
+      {item.discussingAt === undefined ? null : <Text dimColor> (discussing)</Text>}
+      {` · ${item.kind === 'decision' ? item.question : item.occurred}`}
     </Text>
   )
 }
 
-/** The longest option the pane draws as a button; a longer one leaves only Discuss. */
+/**
+ * The longest decision option or surprise action the pane draws as a
+ * button; a longer option leaves only Discuss, a longer action no button.
+ */
 export const OPTION_BUTTON_LIMIT = 30
 
 /**
@@ -120,6 +124,31 @@ export function replyButtons(ui: Ui, decision: Decision, prefix: string, replies
   return (
     <Box key={`replies-${key}`} paddingLeft={2} gap={1} flexWrap="wrap">
       {[...options, discuss]}
+    </Box>
+  )
+}
+
+/**
+ * A surprise's action row: its suggested action when it fits a button, then
+ * File issue, Discuss and Dismiss, always. Keyed `<prefix>-<id>-action`,
+ * `-file-issue`, `-discuss` and `-dismiss`.
+ */
+export function surpriseButtons(ui: Ui, surprise: Surprise, prefix: string, replies: Replies): RenderNode {
+  const { Box, Button } = ui
+  const key = `${prefix}-${surprise.id}`
+  const action = surprise.action
+  const buttons = [
+    ...(action !== undefined && action.length <= OPTION_BUTTON_LIMIT
+      ? [<Button key={`${key}-action`} label={action} onPress={() => replies.act(surprise, action)} />]
+      : []),
+    <Button key={`${key}-file-issue`} label="File issue" onPress={() => replies.fileIssue(surprise)} />,
+    <Button key={`${key}-discuss`} label="Discuss" dimColor onPress={() => replies.discuss(surprise)} />,
+    <Button key={`${key}-dismiss`} label="Dismiss" dimColor onPress={() => replies.dismiss(surprise)} />,
+  ]
+
+  return (
+    <Box key={`replies-${key}`} paddingLeft={2} gap={1} flexWrap="wrap">
+      {buttons}
     </Box>
   )
 }
@@ -260,15 +289,18 @@ export const FULL_LISTS: Record<
 
     return { title: `Building (${all.length})`, entries: all.map(ticket => buildingEntry(ui, ticket, status?.place?.repo ?? null)) }
   },
-  surprises: ({ ui, status }) => {
+  surprises: ({ ui, status, replies }) => {
     const all = openSurprises(status)
 
-    return { title: `Surprises (${all.length})`, entries: [...all].reverse().map(s => surpriseEntry(ui, s, 'all')) }
+    return { title: `Surprises (${all.length})`, entries: [...all].reverse().map(s => surpriseEntry(ui, s, 'all', replies)) }
   },
-  observations: ({ ui, status }) => {
+  observations: ({ ui, status, replies }) => {
     const all = openObservations(status)
 
-    return { title: `Observations (${all.length})`, entries: [...all].reverse().map(s => surpriseEntry(ui, s, 'all')) }
+    return {
+      title: `Observations (${all.length})`,
+      entries: [...all].reverse().map(s => surpriseEntry(ui, s, 'all', replies)),
+    }
   },
   decide: ({ ui, status, replies }) => {
     const all = status === null ? [] : openToDecide(status)
