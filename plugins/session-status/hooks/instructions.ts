@@ -44,7 +44,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
   - Call it with state \`landed\` when the ticket's commit is on the effort branch. Do not wait for the issue to close: a ticket that waits for QA or for the merge has landed.
   - Call it with state \`stopped\` when a started ticket is no longer being built.
   - Only the orchestrator reports tickets. A delegate that builds one ticket does not.
-- When you work on a pull request or issue that this session did not create, such as one from an earlier session, call the tool with action \`link\` and its \`url\`. The pane then lists it under Links, with the pages this session created. Pages made with \`gh pr create\` or \`gh issue create\` are found by themselves.
+- When you work on a pull request or issue that this session did not create, such as one from an earlier session, call the tool with action \`link\` and its \`url\`. The pane then lists it under Links, with the pages this session created. Pages made with \`gh pr create\` or \`gh issue create\`, and pages merged, closed or reopened with \`gh\`, are found by themselves.
 - When you need an id that is no longer in your context, for example after \`/compact\`, call the tool with action \`list\`. It names every open id.
 - When the user asks about only part of the status, such as the observations or the answered decisions, call \`list\` with a \`filter\` that reads only that: \`kind\`, \`state\` (\`open\`, \`closed\` or \`all\`) and \`id\`.
 - To change any entry, use the generic actions \`create\`, \`read\`, \`update\` and \`delete\`. Give \`kind\` (item, decision, surprise, blocker, ticket, link, effort, task, cron or place), \`id\` for an update or a delete, and \`fields\` for a create or an update.

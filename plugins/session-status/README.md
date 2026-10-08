@@ -88,10 +88,13 @@ Answered (N) · Last update
    "+N more" that lists them all.
 7. **Links**: the pull requests and issues attached to the session, in
    every repository, newest 5 first, then "+N more". The session's
-   `gh pr create` and `gh issue create` add theirs by themselves; the agent
-   adds one it works on but did not make, such as a pull request from an
-   earlier session, with the status tool's `link` action and the page's URL.
-   Both look the same. A mark before each gives its kind and state:
+   `gh pr create` and `gh issue create` add theirs by themselves, and so do
+   its `gh pr merge` (auto-merge too), `gh pr close`, `gh pr reopen`,
+   `gh issue close` and `gh issue reopen`, though another session made the
+   page. A page named by number alone joins only when the session works in
+   a GitHub repository. The agent adds any other page it works on, such as
+   a pull request it reviews, with the status tool's `link` action and the
+   page's URL. All look the same. A mark before each gives its kind and state:
 
    | Page | Open | Done |
    |---|---|---|
@@ -208,7 +211,7 @@ such as a false link or a false effort.
 | `surprise` | `S2` | `occurred`, `changed`, `state` | the observer |
 | `blocker` | `B1` | `failed`, `needs`, `state` | none |
 | `ticket` | `#4` | `title`, `state` | `ticket` reports |
-| `link` | `claude-mods#27` | `state` (`open`, `merged`, `closed`) | `gh pr create`, `gh issue create`, `gh` merge and close commands, the GitHub read |
+| `link` | `claude-mods#27` | `state` (`open`, `merged`, `closed`) | `gh pr create`, `gh issue create`, `gh` merge, close and reopen commands, the GitHub read |
 | `effort` | its name | `name` | effort skills, `effort:` labels in `gh` commands |
 | `task` | the task id | `subject`, `status` | the task tools and Task events |
 | `cron` | the job id | `state` | the Cron tools |
