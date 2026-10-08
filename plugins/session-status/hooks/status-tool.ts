@@ -53,8 +53,8 @@ export const STATUS_TOOL_SPEC = {
   // Subagents get this tool but not the prompt section, so the description
   // carries the core of the instructions too, in short.
   description: [
-    'Keeps the session status pane the user watches current. The pane is read-only: the user answers in the chat.',
-    '`record_decision`: a choice the user must make. Give the question, two to four options,',
+    'Keeps the session status pane the user watches current. The user answers in the chat, or with the buttons under each decision in the pane.',
+    '`record_decision`: a choice the user must make. Give the question, two to four options of a few words each (the pane shows them as buttons),',
     'your default (the answer you recommend) and what unblocks it.',
     'Choose a safe default and continue: use urgency `before_settling` when the user must decide before the session settles,',
     'or `after_settling` when it can wait until after the session settles as a follow-up.',
@@ -67,6 +67,8 @@ export const STATUS_TOOL_SPEC = {
     'The user gets a ping. Call `resolve` with its id once it works.',
     CONCISE_RULE,
     '`resolve` with `id`: the user answered that decision in the chat, or that blocker works now.',
+    'A `<id>: <option>` prompt is an answer from a pane button: the pane resolved it already.',
+    'A `Let\'s discuss <id>: <question>` prompt asks you to explain that decision in the chat and wait for the answer.',
     '`dismiss` with `id`: the user asked in the chat to dismiss that surprise.',
     '`post_decide_list`: call it when, at the end of your work, you post one numbered list',
     'of the open before-settling decisions, each with its default and options.',
@@ -134,7 +136,7 @@ export const STATUS_TOOL_SPEC = {
         items: { type: 'string' },
         minItems: MIN_OPTIONS,
         maxItems: MAX_OPTIONS,
-        description: 'record_decision: two to four answers the user can give.',
+        description: 'record_decision: two to four answers the user can give, a few words each: the pane shows each as a button.',
       },
       default: {
         type: 'string',

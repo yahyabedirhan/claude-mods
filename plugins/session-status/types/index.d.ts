@@ -42,6 +42,11 @@ export type Decision = {
   /** When the agent marked it resolved; absent while the decision is open. */
   resolvedAt?: number
   /**
+   * When the user pressed Discuss in the pane; absent until then. The
+   * decision stays open, marked, until the agent or an option resolves it.
+   */
+  discussingAt?: number
+  /**
    * The shipyard id of the ping sent for it, set when it is recorded blocked.
    * A `/clear` carries the decision to a new session id; the ping keeps this one.
    */

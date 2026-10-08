@@ -1,13 +1,15 @@
 import type { Decision } from '../../types'
 import { COLOR } from '../palette'
 import { isOpen } from '../status'
+import { replyButtons } from './entries'
 import type { Section } from './section'
 
 /**
  * Every decision that blocks the agent, oldest first, each with what
- * unblocks it and the recommended answer. Drawn only when there is one.
+ * unblocks it, the recommended answer and its quick-reply buttons. Drawn
+ * only when there is one.
  */
-export const blockedSection: Section = ({ ui, status }) => {
+export const blockedSection: Section = ({ ui, status, replies }) => {
   const { Box, Text } = ui
   const blocked = (status?.items ?? []).filter(
     (item): item is Decision => item.kind === 'decision' && item.urgency === 'blocked' && isOpen(item),
@@ -25,6 +27,7 @@ export const blockedSection: Section = ({ ui, status }) => {
         <Box key={`blocked-${decision.id}`} flexDirection="column">
           <Text>
             <Text color={COLOR.attention}>{decision.id}</Text>
+            {decision.discussingAt === undefined ? null : <Text dimColor> (discussing)</Text>}
             {` · ${decision.question}`}
           </Text>
           <Box flexDirection="column" paddingLeft={2}>
@@ -38,6 +41,7 @@ export const blockedSection: Section = ({ ui, status }) => {
             </Text>
             <Text dimColor>Options: {decision.options.join(' / ')}</Text>
           </Box>
+          {replyButtons(ui, decision, 'blocked', replies)}
         </Box>
       ))}
     </Box>

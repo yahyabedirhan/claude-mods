@@ -3,8 +3,8 @@ import type { Section } from './section'
 
 /**
  * The answered history, collapsed to one line: how many decisions the agent
- * resolved and surprises the user dismissed. The pane is read-only, so the
- * items stay in the status and out of the pane. Drawn only when there is one.
+ * or the user answered and surprises the user dismissed. Closed items stay
+ * in the status and out of the pane. Drawn only when there is one.
  */
 export const historySection: Section = ({ ui, status }) => {
   const { Box, Text } = ui

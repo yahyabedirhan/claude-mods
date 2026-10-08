@@ -120,6 +120,19 @@ export function closeItem(
   }
 }
 
+/**
+ * The status with an open decision marked as in discussion at `now`; the
+ * status as it was when no open decision has the id.
+ */
+export function markDiscussing(status: SessionStatus, id: string, now: number): SessionStatus {
+  return {
+    ...status,
+    items: status.items.map(item =>
+      item.kind === 'decision' && item.id === id && isOpen(item) ? { ...item, discussingAt: now } : item,
+    ),
+  }
+}
+
 /** A status with nothing in it yet, for one session. */
 export function emptyStatus(sessionId: string): SessionStatus {
   return {

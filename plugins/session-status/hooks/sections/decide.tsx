@@ -15,7 +15,7 @@ export const DECIDE_LIMIT = 5
  * of the rest, up to five in all, then a "+N more" that opens them all.
  * Drawn only when there is one.
  */
-export const decideSection: Section = ({ ui, status, show }) => {
+export const decideSection: Section = ({ ui, status, show, replies }) => {
   const { Box, Text } = ui
   if (status === null) {
     return null
@@ -31,8 +31,8 @@ export const decideSection: Section = ({ ui, status, show }) => {
   return (
     <Box key="decide" flexDirection="column">
       <Text bold>Decide before settling ({decisions.length})</Text>
-      {asked.map(decision => decisionEntry(ui, decision, 'decide-asked', COLOR.attention))}
-      {shown.map(decision => decisionEntry(ui, decision, 'decide'))}
+      {asked.map(decision => decisionEntry(ui, decision, 'decide-asked', replies, COLOR.attention))}
+      {shown.map(decision => decisionEntry(ui, decision, 'decide', replies))}
       {more > 0 ? moreButton(ui, 'decide', more, () => show('decide')) : null}
     </Box>
   )

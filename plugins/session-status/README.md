@@ -1,8 +1,8 @@
 # session-status
 
-A read-only pane that shows what the session is doing, what it needs from
-you and what surprised it. The agent keeps it current with a status tool; you
-answer in the chat.
+A pane that shows what the session is doing, what it needs from you and what
+surprised it. The agent keeps it current with a status tool; you answer in
+the chat, or with the buttons under each decision.
 
 ```sh
 claude plugin install session-status@claude-mods
@@ -182,7 +182,7 @@ prompt section that tells the agent how to use it. Actions:
 | `record_decision` | Records a decision: question, two to four options, a default, what unblocks it, and urgency `blocked`, `before_settling` or `after_settling`. |
 | `record_surprise` | Records a surprise: what occurred and what it changed. |
 | `record_blocker` | Records a blocker: what failed (`failed`) and what you can do to unblock it (`needs`). It pings you. |
-| `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat, or a blocker (`B1`, ...) resolved once it works. |
+| `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat, or a blocker (`B1`, ...) resolved once it works. A button answer resolves the decision itself. |
 | `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. |
 | `post_decide_list` | Marks the decide list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
@@ -237,6 +237,28 @@ no lists and no filler. There is no character limit.
 works. When the work is done, it posts one numbered list of the open ones in
 the chat and calls `post_decide_list`. The pane highlights each asked
 decision until it is resolved. Follow-ups are never on the list.
+
+**Quick reply.** Each open decision in Blocked on you, Decide before settling
+and Follow-up after settling has a row of buttons under it:
+
+```
+D4 · Use SQLite or Postgres for the cache?
+  Default: SQLite
+  [ SQLite ✓ ]  [ Postgres ]  [ Discuss ]
+```
+
+- An option button resolves the decision, withdraws its ping when it is
+  blocked, and sends `D4: Postgres` as your own words. The default's button
+  has a `✓`.
+- Option buttons show only when every option has 30 characters or fewer;
+  otherwise only Discuss shows. The agent is told to write options in a few
+  words.
+- Discuss sends `Let's discuss D4: <question>`. The agent explains the
+  context and each option's trade-off in the chat and waits for you. The
+  decision stays open with a `(discussing)` mark, and its option buttons stay,
+  until you answer or the agent resolves it.
+- A plugin's prompt runs once the session is idle, so a press during a turn
+  reaches the agent when that turn ends.
 
 ## Session progress
 

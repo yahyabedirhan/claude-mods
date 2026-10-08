@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface, Timer } from 'claude-code'
 
-import type { GitHubRepo, SessionStatus, StatusItem } from '../types'
+import type { Decision, GitHubRepo, SessionStatus, StatusItem } from '../types'
 import { afterTurn, settles, settlesByPrompt } from './activity'
 import { cronFired } from './crons'
 import { meetsAutoOpenTrigger } from './auto-open'
@@ -46,6 +46,7 @@ import {
   closeItem,
   emptyStatus,
   keysToPrune,
+  markDiscussing,
   onEndList,
   isOpen,
   openToDecide,
@@ -299,6 +300,41 @@ let ageTicker: Timer | undefined
 async function copyValue($: EngineInterface, text: string, surface: RenderSurface): Promise<void> {
   const copied = await $.ui.copy({ text, surface })
   $.ui.toast(copied.isCopied ? `Copied ${text}` : `Could not copy ${text}`)
+}
+
+/**
+ * Answers a decision from its option button: resolves it, withdraws its ping
+ * when it pinged, and sends `<id>: <option>` as the person's own words. A
+ * decision already closed (a second press) sends nothing.
+ */
+async function answerDecision($: EngineInterface, decision: Decision, option: string): Promise<void> {
+  const now = await $.clock.now()
+  const current = await currentStatus($)
+  const target = { kind: 'decision' as const, id: decision.id }
+  const checked = closeItem(current, target, now)
+  if ('error' in checked) {
+    return
+  }
+  await changeStatus($, status => {
+    const closed = closeItem(status, target, now)
+
+    return 'error' in closed ? status : closed.status
+  })
+  if (pings(checked.item)) {
+    // An item carried over a /clear keeps the ping id its own session sent.
+    sendPing($, withdrawPing(checked.item.pingId ?? pingId(current.sessionId, checked.item.id)))
+  }
+  await $.prompt.submit({ text: `${decision.id}: ${option}`, asUser: true })
+}
+
+/**
+ * Discusses a decision from its Discuss button: marks it, keeps it open, and
+ * asks the agent in the person's own words to discuss it in the chat.
+ */
+async function discussDecision($: EngineInterface, decision: Decision): Promise<void> {
+  const now = await $.clock.now()
+  await changeStatus($, status => markDiscussing(status, decision.id, now))
+  await $.prompt.submit({ text: `Let's discuss ${decision.id}: ${decision.question}`, asUser: true })
 }
 
 /** Resets the session progress (see `resetProgress`), saved at once; resolves to the reply. */
@@ -681,6 +717,10 @@ export const register: Register = on => {
       view: await read($, viewAtom),
       show: view => update($, viewAtom, () => view),
       copy: (text, surface) => copyValue($, text, surface),
+      replies: {
+        answer: (decision, option) => answerDecision($, decision, option),
+        discuss: decision => discussDecision($, decision),
+      },
     })
   })
 }

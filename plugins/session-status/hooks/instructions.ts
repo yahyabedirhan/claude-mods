@@ -14,13 +14,16 @@ const TEXT = `# Session status
 The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool to keep it current.
 
 - When the work needs a choice from the user, record a decision: the question, two to four options, your default (the answer you recommend) and what unblocks it.
+- Write each option in a few words, so the pane can show it as a button.
 - Choose a safe default and continue. Do not stop the work for it. Record that decision with urgency \`before_settling\` when the user must decide before the session settles. Use \`after_settling\` when it can wait until after the session settles, as a follow-up.
 - Stop only when no safe default exists. Then record the decision with urgency \`blocked\`. Recommend one option, and say in \`unblocks\` the one thing the user must say or do.
 - When something unexpected changes the work or the plan, record a surprise: what occurred and what it changed. Do not record ordinary errors that you fixed yourself.
 - When you try something and it fails, and you cannot finish it yourself, record a blocker with action \`record_blocker\`. Give what failed and what the user can do to unblock you, such as run a command, restart Claude Code or allow an action. Examples: a denied action that has no other way, a test or check that cannot run, a tool that refuses to start. The user gets a ping. Do not record it as a surprise.
 - When a blocker works again, call the tool with action \`resolve\` and the blocker's id.
 - ${CONCISE_RULE} The user reads the pane at a glance.
-- The pane is read-only. The user answers decisions in the chat. When you read the user's answer to a decision in the chat, call the tool with action \`resolve\` and the decision's id.
+- The user answers decisions in the chat, or with the buttons under each decision in the pane. When you read the user's answer to a decision in the chat, call the tool with action \`resolve\` and the decision's id.
+- A prompt \`<id>: <option>\`, such as \`D2: Yes\`, is the user's answer from a pane button. The pane resolved the decision already, so do not call \`resolve\`.
+- A prompt \`Let's discuss <id>: <question>\` asks you to discuss that decision in the chat. Explain its context and the trade-off of each option, then wait for the user's answer. The decision stays open until you call \`resolve\`.
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
 - Collect before-settling decisions while you work. Do not ask about them in the middle of the work.
 - At the end of your work, if before-settling decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_decide_list\`.
