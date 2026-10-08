@@ -2,7 +2,7 @@
 // create` and `gh issue create` print: the new page's URL. The status tool's
 // `link` action adds a page the session did not create, by its URL. The
 // Links section shows them all alike. The `gh` commands that merge, close or
-// reopen a page change its state.
+// reopen a page, or turn on its auto-merge, add it too and change its state.
 
 import type { LinkState, SessionLink, SessionStatus } from '../types'
 import { autoSet, isDeleted } from './set-by'
@@ -75,27 +75,38 @@ export function linkLabel(link: Pick<SessionLink, 'repo' | 'number'>): string {
   return `${link.repo.split('/').pop() ?? link.repo}#${link.number}`
 }
 
-/** A page a command merged, closed or reopened; `repo` null when the command named only its number. */
-export type StateChange = { kind: SessionLink['kind']; repo: string | null; number: number; state: LinkState }
+/**
+ * A page a command merged, closed or reopened; `repo` null when the command
+ * named only its number, `url` set when it named the page by URL. `state`
+ * null for an auto-merge: it links the page and merges it later.
+ */
+export type StateChange = {
+  kind: SessionLink['kind']
+  repo: string | null
+  number: number
+  state: LinkState | null
+  url?: string
+}
 
 /**
  * The state changes in a shell command: each `gh pr merge`, `close` or
  * `reopen` and `gh issue close` or `reopen` in it, with the page it names by
  * number, `#<n>` or URL (and `--repo`). A command that names no page acts on
  * the current branch's pull request: its page is read from what `gh` printed,
- * when the command holds one change alone. `gh pr merge --auto` merges later
- * and changes nothing now.
+ * when the command holds one change alone. `gh pr merge --auto` merges later:
+ * its change has no state.
  */
 export function findStateChanges(command: string, output: string): StateChange[] {
   const parts = simpleCommands(command).flatMap(part => {
     const known = STATE_COMMANDS.find(entry => entry.command.test(part))
-    return known === undefined || (known.state === 'merged' && /\s--auto\b/.test(part)) ? [] : [{ part, known }]
+    return known === undefined ? [] : [{ part, known }]
   })
   const changes: StateChange[] = []
   for (const { part, known } of parts) {
     const page = namedPage(part) ?? (parts.length === 1 ? printedPage(output) : null)
     if (page !== null) {
-      changes.push({ kind: known.kind, state: known.state, ...page })
+      const isAuto = known.state === 'merged' && /\s--auto\b/.test(part)
+      changes.push({ kind: known.kind, state: isAuto ? null : known.state, ...page })
     }
   }
 
@@ -103,7 +114,7 @@ export function findStateChanges(command: string, output: string): StateChange[]
 }
 
 /** The page a `gh` command's arguments name, or null when they name none. */
-function namedPage(part: string): { repo: string | null; number: number } | null {
+function namedPage(part: string): { repo: string | null; number: number; url?: string } | null {
   const words = part.split(/\s+/).slice(3)
   const repoAt = words.findIndex(word => word === '--repo' || word === '-R')
   const repoFlag = words.find(word => word.startsWith('--repo='))?.slice('--repo='.length)
@@ -111,7 +122,7 @@ function namedPage(part: string): { repo: string | null; number: number } | null
   for (const word of words) {
     const url = readPageUrl(word)
     if (url !== null) {
-      return { repo: url.repo, number: url.number }
+      return { repo: url.repo, number: url.number, url: url.url }
     }
     const number = /^#?(\d+)$/.exec(word)?.[1]
     if (number !== undefined) {
@@ -130,22 +141,47 @@ function printedPage(output: string): { repo: string; number: number } | null {
 }
 
 /**
+ * The pages the changes act on that are not linked yet, to add as links: a
+ * change in no known repository (only a number, outside a GitHub repository)
+ * gives none. A page named by URL keeps it; any other is a github.com page.
+ */
+export function changedPages(status: SessionStatus, changes: readonly StateChange[]): FoundLink[] {
+  return changes.flatMap(change => {
+    const repo = change.repo ?? status.place?.repo?.slug ?? null
+    if (repo === null || status.links.some(link => isChangedPage(link, change, repo))) {
+      return []
+    }
+    const url = change.url ?? `https://github.com/${repo}/${change.kind === 'pr' ? 'pull' : 'issues'}/${change.number}`
+
+    return [{ kind: change.kind, repo, number: change.number, url }]
+  })
+}
+
+function isChangedPage(link: SessionLink, change: StateChange, repo: string | null): boolean {
+  return link.kind === change.kind && link.number === change.number && (repo === null || link.repo === repo)
+}
+
+/**
  * The status with each changed page's state set. A change matches a link of
  * its kind and number, in its repository, or, when it names none, in the
- * session's own repository. A page that is not linked stays out. A command
- * is a new change, so it overwrites a state the agent set with `update`.
+ * session's own repository. A page that is not linked stays out: add it with
+ * `changedPages` first. A command is a new change, so it overwrites a state
+ * the agent set with `update`.
  */
 export function linkStatesChanged(status: SessionStatus, changes: readonly StateChange[]): SessionStatus {
   let isChanged = false
   let links = status.links
   for (const change of changes) {
     const repo = change.repo ?? status.place?.repo?.slug ?? null
+    const state = change.state
+    if (state === null) {
+      continue
+    }
     links = links.map(link => {
-      const isPage = link.kind === change.kind && link.number === change.number && (repo === null || link.repo === repo)
-      if (!isPage) {
+      if (!isChangedPage(link, change, repo)) {
         return link
       }
-      const changed = autoSet({ ...link, state: link.state ?? 'open' }, 'state', change.state, 'event')
+      const changed = autoSet({ ...link, state: link.state ?? 'open' }, 'state', state, 'event')
       if ((link.state ?? 'open') === changed.state && changed.fieldsSetBy === link.fieldsSetBy) {
         return link
       }

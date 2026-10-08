@@ -172,9 +172,9 @@ export type LinkState = 'open' | 'merged' | 'closed'
 export type SessionLink = {
   kind: 'pr' | 'issue'
   /**
-   * Where the page stands, as this session last changed it with `gh pr
-   * merge`, `close` or `reopen` or `gh issue close` or `reopen`; absent: open.
-   * A change made elsewhere is not seen.
+   * Where the page stands, as this session's `gh pr merge`, `close` or
+   * `reopen` or `gh issue close` or `reopen` left it, or as the GitHub read
+   * last found it; absent: open.
    */
   state?: LinkState
   /** The repository as `<owner>/<repo>`. */
@@ -186,7 +186,7 @@ export type SessionLink = {
   agentId?: string
   /** When it was found, in `$.clock.now()` milliseconds. */
   at: number
-  /** `manual` when the agent created it with `create` or `link`; absent when a `gh` command did. */
+  /** `manual` when the agent created it with `create` or `link`; absent when a `gh` command added it. */
   setBy?: SetBy
   /** The fields the agent set with `update`. */
   fieldsSetBy?: FieldsSetBy<'state'>

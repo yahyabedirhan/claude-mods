@@ -1,13 +1,13 @@
 // What a finished tool call changes in the status: the task tools' results
 // change the task list, the Cron tools the cron jobs, and `gh pr create` /
-// `gh issue create` add links, and `gh` merges, closes and reopens change
-// their state.
+// `gh issue create` add links, and `gh` merges, closes and reopens add the
+// page too and change its state.
 // A subagent's calls count as the main loop's do.
 
 import type { ToolCallInput, ToolCallResult } from 'claude-code'
 
 import type { SessionStatus } from '../types'
-import { findCreatedLinks, findStateChanges, linkStatesChanged, linksFound } from './links'
+import { changedPages, findCreatedLinks, findStateChanges, linkStatesChanged, linksFound } from './links'
 import { formatCron } from './cron-schedule'
 import { cronCreated, cronDeleted, cronListed } from './crons'
 import { taskCreated, taskUpdated, todosWritten } from './tasks'
@@ -102,7 +102,11 @@ export function toolResultChange(
         return null
       }
 
-      return status => linkStatesChanged(linksFound(status, found, { agentId: call.agentId, at }), changes)
+      return status => {
+        const linked = linksFound(status, found, { agentId: call.agentId, at })
+
+        return linkStatesChanged(linksFound(linked, changedPages(linked, changes), { agentId: call.agentId, at }), changes)
+      }
     }
     default:
       return null

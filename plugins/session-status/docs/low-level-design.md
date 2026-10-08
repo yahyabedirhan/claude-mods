@@ -99,7 +99,7 @@ plugins/session-status/
 │   ├── effort-progress.ts    # Effort bar: the tracker's count (gh issue list), closed of all, Spec: left out
 │   ├── ticket-reports.ts     # ticket reports: started/landed/stopped; the "Building" line
 │   ├── tasks.ts              # Task bar: the task list mirrored from TaskCreate/TaskUpdate/TodoWrite/events
-│   ├── links.ts              # links: created by gh pr/issue create, added by `link`, state from gh commands
+│   ├── links.ts              # links: added by gh pr/issue create, merge, close and reopen, or `link`; state from gh commands
 │   ├── link-states.ts        # each link's state read from GitHub (one gh api graphql call)
 │   ├── reset.ts              # `reset` and `list` as data; `matchesFilter` keeps what a `list` filter asks for
 │   ├── observer.ts           # the observer agent: when it checks, what it asks, what it keeps
