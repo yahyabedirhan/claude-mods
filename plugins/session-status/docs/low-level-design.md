@@ -38,17 +38,21 @@ the next change.
    fork start empty, `/compact` keeps it.
 7. **Answer a decision from the pane**: a button for each short option and
    a Discuss button send the answer as the person's own prompt.
-8. **Error handling**: a refused status call says what is wrong for the
+8. **Act on a surprise from the pane**: its suggested action, File issue
+   and Discuss send the person's own prompt; Dismiss closes it silently.
+9. **Error handling**: a refused status call says what is wrong for the
    model to fix; a failed `gh` or `git` read keeps the last good value.
-9. **Out of scope**: the engine's own UI, storing anything outside
-   `$.state` and `$.store`, sharing state between sessions.
+10. **Out of scope**: the engine's own UI, storing anything outside
+    `$.state` and `$.store`, sharing state between sessions.
 
 ## Entities and relationships
 
 - **Status** (`SessionStatus`): everything the pane shows. The one entity
   with durable state.
 - **Status items**: decisions, surprises (an observation is a surprise with
-  `source: 'observer'`) and blockers, each with an id (D1, S1, B1).
+  `source: 'observer'`) and blockers, each with an id (D1, S1, B1). A
+  surprise may carry a suggested `action`; `discussingAt` and `actedAt`
+  record the pane's Discuss and acting presses.
 - **Session items** (I1, I2 …): the work this session takes on.
 - **Effort**: the effort the session works on, and the tracker's count of
   its tickets (`TicketCount`, with each ticket's number, title, closed).
@@ -109,7 +113,7 @@ plugins/session-status/
 │       ├── effort.tsx        # Effort name; Closed n/m bar; tickets; +N more
 │       ├── task.tsx          # Task: Done n/m bar; tasks; +N more
 │       ├── links.tsx         # Links: a mark per kind and state, each label a link
-│       ├── entries.tsx       # shared entry lines, decision reply buttons and the full lists "+N more" opens
+│       ├── entries.tsx       # shared entry lines, decision and surprise buttons, the full lists "+N more" opens
 │       ├── list-view.tsx     # one list in full, with Back
 │       └── …                 # state, doing-now, blocked, blockers, places, decide, follow-up,
 │                             # surprises, observations, counters, crons, history, last-update
@@ -172,13 +176,27 @@ ui.press option (sections/entries.tsx replyButtons → context.replies.answer)
     closeStatusItem                         closeItem inside changeStatus; ping withdrawn
     $.prompt.submit("D4: Postgres", asUser)  runs once the session is idle
 ui.press Discuss (context.replies.discuss)
-  discussDecision                           register.tsx
+  discussItem                               register.tsx
     changeStatus(markDiscussing)            status.ts: the decision stays open, marked
     $.prompt.submit("Let's discuss D4: …", asUser)
 ```
 
-The check that closes or marks the decision runs inside the change, so two
-quick presses send one prompt, and a decision closed meanwhile sends none.
+**A surprise action, from press to prompt** (`surpriseButtons`, the same
+`replies`):
+
+```text
+ui.press action / File issue / Dismiss (context.replies.act / fileIssue / dismiss)
+  closeSurprise                             register.tsx
+    closeStatusItem(acted)                  closeItem sets actedAt, except for Dismiss
+    $.prompt.submit("S2: Pin Node 22", asUser)   none for Dismiss
+ui.press Discuss (context.replies.discuss)
+  discussItem                               register.tsx: as for a decision
+```
+
+The check that closes or marks the item runs inside the change, so two
+quick presses send one prompt, and an item closed meanwhile sends none. The
+observer's back-off (`observer.ts`) counts a finding closed without
+`actedAt` as dismissed.
 
 **Trace, an effort session:**
 

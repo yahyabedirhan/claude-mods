@@ -68,8 +68,21 @@ export type Surprise = {
   agentId?: string
   /** `observer` when the observer agent found it; absent when the agent recorded it. */
   source?: 'observer'
+  /** The one clear next step, in a few words, when there is one: the pane shows it as a button. */
+  action?: string
   /** When the user dismissed it; absent while the surprise is open. */
   resolvedAt?: number
+  /**
+   * When the user pressed Discuss in the pane; absent until then. The
+   * surprise stays open, marked, until the agent or another button closes it.
+   */
+  discussingAt?: number
+  /**
+   * When the user acted on it from the pane (`File issue` or its action),
+   * which closed it too; absent otherwise. The observer's back-off does not
+   * count such a finding as dismissed.
+   */
+  actedAt?: number
 }
 
 /**

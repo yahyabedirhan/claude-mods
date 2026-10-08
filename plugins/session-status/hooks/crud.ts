@@ -166,8 +166,10 @@ export function readDraft(kind: StatusItem['kind'], fields: Fields): ItemDraft |
       if (changed === null) {
         return { error: 'A surprise needs `changed`: what it changed in the work or the plan.' }
       }
+      // `suggested_action`: the input's `action` names the tool's own action.
+      const action = text(fields.suggested_action)
 
-      return { kind, occurred, changed }
+      return { kind, occurred, changed, ...(action === null ? {} : { action }) }
     }
     case 'blocker': {
       const failed = text(fields.failed)
@@ -448,7 +450,9 @@ function changedItem(item: StatusItem, fields: Fields): { item: StatusItem } | C
   for (const [field, value] of Object.entries(fields)) {
     if (field === 'state') {
       if (value === 'open') {
+        // Open again, so no longer acted on from the pane either.
         delete next.resolvedAt
+        delete next.actedAt
       }
       continue
     }

@@ -18,6 +18,7 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - Choose a safe default and continue. Do not stop the work for it. Record that decision with urgency \`before_settling\` when the user must decide before the session settles. Use \`after_settling\` when it can wait until after the session settles, as a follow-up.
 - Stop only when no safe default exists. Then record the decision with urgency \`blocked\`. Recommend one option, and say in \`unblocks\` the one thing the user must say or do.
 - When something unexpected changes the work or the plan, record a surprise: what occurred and what it changed. Do not record ordinary errors that you fixed yourself.
+- Give \`suggested_action\` on \`record_surprise\` only when one clear next step exists. Write it in a few words, such as \`Pin Node 22\`. The pane shows it as a button.
 - When you try something and it fails, and you cannot finish it yourself, record a blocker with action \`record_blocker\`. Give what failed and what the user can do to unblock you, such as run a command, restart Claude Code or allow an action. Examples: a denied action that has no other way, a test or check that cannot run, a tool that refuses to start. The user gets a ping. Do not record it as a surprise.
 - When a blocker works again, call the tool with action \`resolve\` and the blocker's id.
 - ${CONCISE_RULE} The user reads the pane at a glance.
@@ -25,6 +26,10 @@ The user watches a status pane for this session. Use the \`${STATUS_TOOL}\` tool
 - A prompt \`<id>: <option>\`, such as \`D2: Yes\`, is the user's answer from a pane button. The pane resolved the decision already, so do not call \`resolve\`. If \`resolve\` says a decision is already resolved, the user answered it in the pane: read the answer and go on.
 - A prompt \`Let's discuss <id>: <question>\` asks you to discuss that decision in the chat. Explain its context and the trade-off of each option, then wait for the user's answer. The decision stays open until you call \`resolve\`.
 - When the user asks in the chat to dismiss a surprise, call the tool with action \`dismiss\` and the surprise's id.
+- Each surprise and observation in the pane has buttons too: its action, \`File issue\`, \`Discuss\` and \`Dismiss\`. \`Dismiss\` sends you nothing.
+- A prompt \`<id>: <action>\` for a surprise, such as \`S2: Pin Node 22\`, asks for that action. The pane dismissed the surprise already, so do not call \`dismiss\`.
+- A prompt \`File an issue for <id>: <occurred>\` asks for an issue about that surprise. File it as the project's issue tracker says. The pane dismissed the surprise already.
+- A prompt \`Let's discuss <id>: <occurred>\` for a surprise asks for its context and the possible next steps in the chat. Wait for the user's answer. Then call \`dismiss\`, or do the action the user picks.
 - Collect before-settling decisions while you work. Do not ask about them in the middle of the work.
 - At the end of your work, if before-settling decisions are still open, post one numbered list of them in the chat. Give each item its id, its question, its default and its options. Then call the tool with action \`post_decide_list\`.
 - Report the work this session must do before it settles with action \`item\`. The pane counts the items done of all.

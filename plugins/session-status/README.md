@@ -2,7 +2,7 @@
 
 A pane that shows what the session is doing, what it needs from you and what
 surprised it. The agent keeps it current with a status tool; you answer in
-the chat, or with the buttons under each decision.
+the chat, or with the buttons under each decision, surprise and observation.
 
 ```sh
 claude plugin install session-status@claude-mods
@@ -116,9 +116,12 @@ Answered (N) · Last update
 10. **Follow-up after settling**: decisions that can wait until after the
     session settles, each with the default the agent went on with. They never
     hold up settling.
-11. **Surprises**: unexpected things the agent recorded and what they changed.
+11. **Surprises**: unexpected things the agent recorded and what they
+    changed, each with its action buttons (see Surprise actions under
+    [The status tool](#the-status-tool)).
 12. **Observations**: the observer's findings (see [The observer](#the-observer)),
-    kept apart from what the agent itself knows, under a dim heading.
+    kept apart from what the agent itself knows, under a dim heading, each
+    with its action buttons.
 13. **Subagents**: running and finished.
 14. **Cron jobs**: the jobs the session scheduled with `CronCreate`, counted
     as active, fired, expired or cancelled, then each active job's schedule
@@ -180,10 +183,10 @@ prompt section that tells the agent how to use it. Actions:
 | Action | What it does |
 | --- | --- |
 | `record_decision` | Records a decision: question, two to four options, a default, what unblocks it, and urgency `blocked`, `before_settling` or `after_settling`. |
-| `record_surprise` | Records a surprise: what occurred and what it changed. |
+| `record_surprise` | Records a surprise: what occurred, what it changed and, when one clear next step exists, `suggested_action` in a few words. |
 | `record_blocker` | Records a blocker: what failed (`failed`) and what you can do to unblock it (`needs`). It pings you. |
 | `resolve` | Marks a decision (`D1`, ...) resolved after you answer it in the chat, or a blocker (`B1`, ...) resolved once it works. A button answer resolves the decision itself. |
-| `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. |
+| `dismiss` | Dismisses a surprise (`S1`, ...) when you ask. A button press dismisses the surprise itself. |
 | `post_decide_list` | Marks the decide list posted. |
 | `ticket` | Reports a ticket's state during an effort: `number`, `title`, `state` (`started`, `landed` or `stopped`) and, on the first call, `effort`. |
 | `item` | Reports a session item: `state` `added` with a `title` (the reply names its id, `I1`, ...), or `done` or `dropped` with its `id`. |
@@ -259,6 +262,28 @@ D4 · Use SQLite or Postgres for the cache?
   until you answer or the agent resolves it.
 - A plugin's prompt runs once the session is idle, so a press during a turn
   reaches the agent when that turn ends.
+
+**Surprise actions.** Each open surprise and observation, in its section
+and in its full list, has a row of buttons under it:
+
+```
+S2 · CI runs Node 18, but the code needs Node 22
+  Changed: The build fails on CI only
+  [ Pin Node 22 ]  [ File issue ]  [ Discuss ]  [ Dismiss ]
+```
+
+- The first button is the suggested action, when the surprise has one of 30
+  characters or fewer. It dismisses the surprise and sends `S2: Pin Node 22`
+  as your own words. The agent gives it with `record_surprise`, the observer
+  with its finding, each only when one clear next step exists.
+- File issue dismisses the surprise and sends `File an issue for S2:
+  <occurred>`. The agent files it as the project's issue tracker says.
+- Discuss sends `Let's discuss S2: <occurred>`. The agent gives the context
+  and the possible next steps in the chat and waits for you. The surprise
+  stays open with a `(discussing)` mark, and its buttons stay.
+- Dismiss dismisses the surprise and sends nothing.
+- Two quick presses send one prompt. A press during a turn reaches the
+  agent when that turn ends.
 
 ## Session progress
 
@@ -412,7 +437,9 @@ should know**.
   yours, and the observer is told not to count it against the agent.
 - It checks every 5 main-loop turns and when a subagent finishes.
 - Each finding you dismiss doubles the turn interval, up to 40 turns. After
-  a dismissal, a finished subagent also waits for that interval.
+  a dismissal, a finished subagent also waits for that interval. A finding
+  you act on with File issue or its suggested action was useful, so it does
+  not count.
 - At most 20 checks per session. Each check is one short request, so the
   cost is small.
 

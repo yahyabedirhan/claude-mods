@@ -29,6 +29,8 @@ export const STEPS_LIMIT = 12_000
 export const FINDING_LIMIT = 1
 /** How many finding keys the status keeps; the oldest drop first. */
 export const SEEN_LIMIT = 200
+/** How much of a finding's action the status keeps; the pane shows one of 30 characters or fewer. */
+const ACTION_LIMIT = 80
 /** The reply's token cap: a few short findings in JSON. */
 const REPLY_TOKENS = 600
 /** How long one check may take before it is abandoned. */
@@ -37,8 +39,11 @@ const TIMEOUT_MS = 60_000
 /** What starts a check: a main-loop turn ending, or a subagent finishing. */
 export type Trigger = 'turn' | 'subagent'
 
-/** One finding as the model gives it: what it saw and what it costs or changes. */
-export type Finding = { occurred: string; changed: string }
+/**
+ * One finding as the model gives it: what it saw, what it costs or changes,
+ * and the one clear next step when there is one.
+ */
+export type Finding = { occurred: string; changed: string; action?: string }
 
 function observerSurprises(status: SessionStatus): Surprise[] {
   return status.items.filter((item): item is Surprise => item.kind === 'surprise' && item.source === 'observer')
@@ -46,16 +51,20 @@ function observerSurprises(status: SessionStatus): Surprise[] {
 
 /**
  * Main-loop turns between checks: the base interval doubled for each
- * observer finding the person dismissed, up to the maximum. The back-off
- * idea of the built-in "You Should Know" plugin: ignored advice comes less often.
+ * observer finding the person dismissed without acting on it, up to the
+ * maximum. The back-off idea of the built-in "You Should Know" plugin:
+ * ignored advice comes less often.
  */
 export function turnInterval(status: SessionStatus): number {
   return Math.min(BASE_TURN_INTERVAL * 2 ** dismissedCount(status), MAX_TURN_INTERVAL)
 }
 
-/** How many observer findings the person dismissed. */
+/**
+ * How many observer findings the person dismissed. A finding acted on from
+ * the pane (File issue, its action) was useful, so it does not count.
+ */
 function dismissedCount(status: SessionStatus): number {
-  return observerSurprises(status).filter(item => item.resolvedAt !== undefined).length
+  return observerSurprises(status).filter(item => item.resolvedAt !== undefined && item.actedAt === undefined).length
 }
 
 /**
@@ -209,7 +218,8 @@ ${CONCISE_RULE}
 Do not repeat a finding that was already shown, even in other words.
 When you find nothing, give no findings. Most checks find nothing.
 Answer with strict JSON only, no other text, in this shape:
-{"findings":[{"occurred":"what you saw, one short sentence","changed":"what it costs or what to change, one short sentence"}]}
+{"findings":[{"occurred":"what you saw, one short sentence","changed":"what it costs or what to change, one short sentence","action":"the next step, a few words"}]}
+Give "action" only when one clear next step exists, such as "Pin Node 22"; leave it out otherwise.
 Give at most ${FINDING_LIMIT} findings.`
 
 /** The model request for one check: the recent steps, the tasks, the session items and the effort phase. */
@@ -263,7 +273,11 @@ export function parseFindings(text: string): Finding[] {
         f.changed.trim() !== '',
     )
     .slice(0, FINDING_LIMIT)
-    .map(f => ({ occurred: clip(f.occurred, 200), changed: clip(f.changed, 200) }))
+    .map(f => {
+      const action = typeof f.action === 'string' ? clip(f.action, ACTION_LIMIT) : ''
+
+      return { occurred: clip(f.occurred, 200), changed: clip(f.changed, 200), ...(action === '' ? {} : { action }) }
+    })
 }
 
 /** A finding's key: its words lowercased, numbers and punctuation dropped. */

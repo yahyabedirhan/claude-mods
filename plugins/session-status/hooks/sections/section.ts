@@ -4,17 +4,23 @@
 
 import type { ElementTable, RenderNode, RenderSurface } from 'claude-code'
 
-import type { Decision, PaneView, SessionStatus } from '../../types'
+import type { Decision, PaneView, SessionStatus, Surprise } from '../../types'
 
 /** The elements every surface draws: a section uses no others. */
 export type Ui = Pick<ElementTable, 'Box' | 'Text' | 'Link' | 'Button' | 'Code' | 'Markdown'>
 
-/** What a press on a decision's quick-reply buttons does. */
+/** What a press on a decision's quick-reply buttons or a surprise's action buttons does. */
 export type Replies = {
   /** Resolves the decision and sends `<id>: <option>` as the user's own words. */
   answer: (decision: Decision, option: string) => Promise<void>
-  /** Marks the decision as in discussion and asks the agent in the chat to discuss it. */
-  discuss: (decision: Decision) => Promise<void>
+  /** Marks the decision or surprise as in discussion and asks the agent in the chat to discuss it. */
+  discuss: (item: Decision | Surprise) => Promise<void>
+  /** Dismisses the surprise and sends nothing. */
+  dismiss: (surprise: Surprise) => Promise<void>
+  /** Dismisses the surprise, acted on, and sends `File an issue for <id>: <occurred>` as the user's own words. */
+  fileIssue: (surprise: Surprise) => Promise<void>
+  /** Dismisses the surprise, acted on, and sends `<id>: <action>` as the user's own words. */
+  act: (surprise: Surprise, action: string) => Promise<void>
 }
 
 export type SectionContext = {
@@ -33,7 +39,7 @@ export type SectionContext = {
   surface: RenderSurface
   /** Puts `text` on the clipboard of the surface a press came from. */
   copy: (text: string, surface: RenderSurface) => void
-  /** Answers or discusses a decision from its buttons. */
+  /** Answers, discusses or dismisses a decision or a surprise from its buttons. */
   replies: Replies
 }
 

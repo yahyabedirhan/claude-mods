@@ -111,6 +111,18 @@ test('the section tells the agent to keep options short and how pane answers and
   expect(text).toContain("Let's discuss <id>: <question>")
 })
 
+test('the section tells the agent when to give a surprise an action and how the pane buttons on surprises read', async ($, on) => {
+  world(on)
+  await start($)
+
+  const text = (await compose($)).section?.text ?? ''
+
+  expect(text).toMatch(/`suggested_action`.*only when one clear next step exists/)
+  expect(text).toMatch(/`<id>: <action>`.*do not call `dismiss`/s)
+  expect(text).toContain('File an issue for <id>')
+  expect(text).toContain("Let's discuss <id>: <occurred>")
+})
+
 /** The concise-item rule, as the prompt, the tool and the observer each say it. */
 const CONCISE = /one short, clear sentence.*active voice.*one idea per sentence.*no lists.*no filler/is
 
