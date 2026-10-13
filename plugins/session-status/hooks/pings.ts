@@ -29,9 +29,9 @@ function title(text: string): string {
   return line.length <= TITLE_MAX ? line : `${line.slice(0, TITLE_MAX - 1).trimEnd()}…`
 }
 
-/** `shipyard ping` with a title, body and id; clicking it focuses the session's Herdr pane. */
+/** `shipyard ping send` with a title, body and id; clicking it focuses the session's Herdr pane. */
 function ping(heading: string, body: string, id: string): string[] {
-  return ['shipyard', 'ping', title(heading), '--body', body, '--from', FROM, '--id', id, '--herdr']
+  return ['shipyard', 'ping', 'send', title(heading), '--body', body, '--from', FROM, '--id', id, '--herdr']
 }
 
 /** The ping for a blocked decision: its question, its recommended answer and what unblocks it. */

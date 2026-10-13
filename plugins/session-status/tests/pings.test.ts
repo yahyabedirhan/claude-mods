@@ -44,6 +44,7 @@ test('a blocked ping names the question, the recommended answer and what unblock
   expect(argv).toEqual([
     'shipyard',
     'ping',
+    'send',
     'Which database do we use?',
     '--body',
     'Recommended: Postgres. To unblock: Pick one database',
@@ -57,7 +58,7 @@ test('a blocked ping names the question, the recommended answer and what unblock
 
 test('a blocked ping adds no second period after a recommended answer that ends a sentence', () => {
   const body = (answer: string) =>
-    blockedPing(SESSION, { id: 'D1', question: 'Which database?', default: answer, unblocks: 'Pick one' })[4]
+    blockedPing(SESSION, { id: 'D1', question: 'Which database?', default: answer, unblocks: 'Pick one' })[5]
 
   expect(body('Use Postgres.')).toBe('Recommended: Use Postgres. To unblock: Pick one')
   expect(body('Ask the user first!')).toBe('Recommended: Ask the user first! To unblock: Pick one')
@@ -67,8 +68,8 @@ test('a blocked ping adds no second period after a recommended answer that ends 
 test('a long question is cut to a short title', () => {
   const argv = blockedPing(SESSION, { id: 'D1', question: 'x'.repeat(300), default: 'a', unblocks: 'b' })
 
-  expect(argv[2]?.length).toBeLessThanOrEqual(100)
-  expect(argv[2]?.endsWith('…')).toBe(true)
+  expect(argv[3]?.length).toBeLessThanOrEqual(100)
+  expect(argv[3]?.endsWith('…')).toBe(true)
 })
 
 test('the withdraw and decide-list commands', () => {
@@ -76,6 +77,7 @@ test('the withdraw and decide-list commands', () => {
   expect(endListPing(SESSION, ['D2', 'D3'])).toEqual([
     'shipyard',
     'ping',
+    'send',
     '2 decisions before settling',
     '--body',
     'To decide before the session settles: D2, D3',
@@ -85,7 +87,7 @@ test('the withdraw and decide-list commands', () => {
     'ss-3f2a9c1e-end',
     '--herdr',
   ])
-  expect(endListPing(SESSION, ['D1'])[2]).toBe('1 decision before settling')
+  expect(endListPing(SESSION, ['D1'])[3]).toBe('1 decision before settling')
 })
 
 test('a new blocking decision sends one ping with its id and --herdr', async ($, on) => {
@@ -99,6 +101,7 @@ test('a new blocking decision sends one ping with its id and --herdr', async ($,
     [
       'shipyard',
       'ping',
+      'send',
       'Which database do we use?',
       '--body',
       'Recommended: Postgres. To unblock: Pick one database',
@@ -163,6 +166,7 @@ test('the decide list sends one ping with the count of open decisions on it', as
     [
       'shipyard',
       'ping',
+      'send',
       '2 decisions before settling',
       '--body',
       'To decide before the session settles: D1, D3',
@@ -194,7 +198,7 @@ test('a failing shipyard leaves the status call answered', async ($, on) => {
   const resolved = await callStatusTool($, { action: 'resolve', id: 'D1' })
   await settle(clock)
 
-  expect(pingRuns(runs).map(argv => argv[2])).toEqual(['Which database do we use?', 'withdraw'])
+  expect(pingRuns(runs).map(argv => (argv[2] === 'send' ? argv[3] : argv[2]))).toEqual(['Which database do we use?', 'withdraw'])
   expect(recorded.deny).toBeUndefined()
   expect(recorded.result).toContain('D1')
   expect(resolved.deny).toBeUndefined()
